@@ -1,8 +1,3 @@
-# strike_calculator.py
-"""
-Strike price calculator for options
-"""
-
 from market_data import is_expiry_day
 from config import STRIKE_INTERVALS, SENSEX_NIFTY_RATIO
 

@@ -1,8 +1,3 @@
-# signal_manager.py
-"""
-Signal Manager - Persistent signal tracking
-"""
-
 import json
 import os
 from datetime import datetime

@@ -1,8 +1,3 @@
-# market_data.py
-"""
-Market data fetcher - NIFTY ONLY (NSE API)
-"""
-
 import requests
 import pandas as pd
 from datetime import datetime

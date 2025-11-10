@@ -1,9 +1,3 @@
-# config.py
-"""
-Configuration for NIFTY/SENSEX Manual Trading App
-All credentials loaded from Streamlit secrets
-"""
-
 import streamlit as st
 
 # ═══════════════════════════════════════════════════════════════════════

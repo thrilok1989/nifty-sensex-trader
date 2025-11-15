@@ -48,11 +48,6 @@ STOP_LOSS_OFFSET = 10  # Points
 SIGNALS_REQUIRED = 3
 VOB_TOUCH_TOLERANCE = 5  # Points
 
-STRIKE_SELECTION = {
-    "NORMAL_DAY": "ATM",
-    "EXPIRY_DAY": "ITM_PLUS_ONE"
-}
-
 # ═══════════════════════════════════════════════════════════════════════
 # UI SETTINGS
 # ═══════════════════════════════════════════════════════════════════════

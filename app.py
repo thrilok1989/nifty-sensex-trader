@@ -212,11 +212,7 @@ with col3:
     )
 
 with col4:
-    is_expiry = is_expiry_day(nifty_data['current_expiry'])
-    if is_expiry:
-        st.warning("⚠️ EXPIRY DAY")
-    else:
-        st.info("📅 Normal Day")
+    st.info("📅 Normal Day")
 
 st.divider()
 

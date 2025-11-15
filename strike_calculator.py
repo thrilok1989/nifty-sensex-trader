@@ -1,41 +1,28 @@
-from market_data import is_expiry_day
 from config import STRIKE_INTERVALS, SENSEX_NIFTY_RATIO
 
 def calculate_strike(index: str, nifty_price: float, direction: str, expiry_date: str):
-    """Calculate option strike"""
-    
+    """Calculate option strike - Always uses ATM"""
+
     interval = STRIKE_INTERVALS[index]
-    
+
     # Calculate spot price for selected index
     if index == "SENSEX":
         spot_price = nifty_price * SENSEX_NIFTY_RATIO
     else:
         spot_price = nifty_price
-    
+
     # Calculate ATM
     atm_strike = round(spot_price / interval) * interval
-    
-    # Check expiry day
-    is_expiry = is_expiry_day(expiry_date)
-    
-    if is_expiry:
-        # Expiry day: +1 ITM
-        if direction == "CALL":
-            strike = atm_strike - interval
-            strike_type = "ITM (+1)"
-        else:
-            strike = atm_strike + interval
-            strike_type = "ITM (+1)"
-    else:
-        strike = atm_strike
-        strike_type = "ATM"
-    
+
+    # Always use ATM strike
+    strike = atm_strike
+    strike_type = "ATM"
+
     return {
         'strike': strike,
         'strike_type': strike_type,
         'atm_strike': atm_strike,
         'spot_price': spot_price,
-        'is_expiry': is_expiry,
         'option_type': 'CE' if direction == 'CALL' else 'PE'
     }
 

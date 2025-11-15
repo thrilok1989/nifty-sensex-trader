@@ -12,6 +12,7 @@ from trade_executor import TradeExecutor
 from telegram_alerts import TelegramBot, send_test_message
 from dhan_api import check_dhan_connection
 from smart_trading_dashboard import SmartTradingDashboard
+from bias_analysis import BiasAnalysisPro
 
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE CONFIG
@@ -42,6 +43,12 @@ if 'smart_dashboard' not in st.session_state:
 
 if 'dashboard_results' not in st.session_state:
     st.session_state.dashboard_results = None
+
+if 'bias_analyzer' not in st.session_state:
+    st.session_state.bias_analyzer = BiasAnalysisPro()
+
+if 'bias_analysis_results' not in st.session_state:
+    st.session_state.bias_analysis_results = None
 
 # ═══════════════════════════════════════════════════════════════════════
 # AUTO REFRESH
@@ -155,7 +162,7 @@ st.divider()
 # TABS
 # ═══════════════════════════════════════════════════════════════════════
 
-tab1, tab2, tab3, tab4 = st.tabs(["🎯 Trade Setup", "📊 Active Signals", "📈 Positions", "📊 Smart Trading Dashboard"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🎯 Trade Setup", "📊 Active Signals", "📈 Positions", "📊 Smart Trading Dashboard", "🎯 Bias Analysis Pro"])
 
 # ═══════════════════════════════════════════════════════════════════════
 # TAB 1: TRADE SETUP
@@ -692,6 +699,388 @@ with tab4:
         2. Click "Analyze Market" button
         3. Review the comprehensive analysis and trading signals
         4. Use the signals to inform your trading decisions
+        """)
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 5: BIAS ANALYSIS PRO
+# ═══════════════════════════════════════════════════════════════════════
+
+with tab5:
+    st.header("🎯 Comprehensive Bias Analysis Pro")
+    st.caption("15+ Bias Indicators with Weighted Scoring System | Converted from Pine Script")
+
+    # Analysis controls
+    col1, col2, col3 = st.columns([2, 1, 1])
+
+    with col1:
+        bias_symbol = st.selectbox(
+            "Select Market for Bias Analysis",
+            ["^NSEI (NIFTY 50)", "^BSESN (SENSEX)", "^DJI (DOW JONES)"],
+            key="bias_analysis_symbol"
+        )
+        symbol_code = bias_symbol.split()[0]
+
+    with col2:
+        if st.button("🔍 Analyze All Bias", type="primary", use_container_width=True):
+            with st.spinner("Analyzing 15+ bias indicators... This may take a moment..."):
+                try:
+                    results = st.session_state.bias_analyzer.analyze_all_bias_indicators(symbol_code)
+                    st.session_state.bias_analysis_results = results
+                    if results['success']:
+                        st.success("✅ Bias analysis completed!")
+                    else:
+                        st.error(f"❌ Analysis failed: {results.get('error')}")
+                except Exception as e:
+                    st.error(f"❌ Analysis failed: {e}")
+
+    with col3:
+        if st.session_state.bias_analysis_results:
+            if st.button("🗑️ Clear Analysis", use_container_width=True):
+                st.session_state.bias_analysis_results = None
+                st.rerun()
+
+    st.divider()
+
+    # Display results if available
+    if st.session_state.bias_analysis_results and st.session_state.bias_analysis_results.get('success'):
+        results = st.session_state.bias_analysis_results
+
+        # =====================================================================
+        # OVERALL BIAS SUMMARY
+        # =====================================================================
+        st.subheader("📊 Overall Market Bias")
+
+        col1, col2, col3, col4, col5 = st.columns(5)
+
+        with col1:
+            st.metric(
+                "Current Price",
+                f"₹{results['current_price']:,.2f}"
+            )
+
+        with col2:
+            overall_bias = results['overall_bias']
+            bias_emoji = "🐂" if overall_bias == "BULLISH" else "🐻" if overall_bias == "BEARISH" else "⚖️"
+            bias_color = "green" if overall_bias == "BULLISH" else "red" if overall_bias == "BEARISH" else "gray"
+
+            st.markdown(f"<h3 style='color:{bias_color};'>{bias_emoji} {overall_bias}</h3>",
+                       unsafe_allow_html=True)
+            st.caption("Overall Market Bias")
+
+        with col3:
+            score = results['overall_score']
+            score_color = "green" if score > 0 else "red" if score < 0 else "gray"
+            st.markdown(f"<h3 style='color:{score_color};'>{score:.1f}</h3>",
+                       unsafe_allow_html=True)
+            st.caption("Overall Score")
+
+        with col4:
+            confidence = results['overall_confidence']
+            st.metric(
+                "Confidence",
+                f"{confidence:.1f}%"
+            )
+
+        with col5:
+            st.metric(
+                "Total Indicators",
+                results['total_indicators']
+            )
+
+        # Bias distribution
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("🐂 Bullish Signals", results['bullish_count'])
+
+        with col2:
+            st.metric("🐻 Bearish Signals", results['bearish_count'])
+
+        with col3:
+            st.metric("⚖️ Neutral Signals", results['neutral_count'])
+
+        st.divider()
+
+        # =====================================================================
+        # DETAILED BIAS BREAKDOWN TABLE
+        # =====================================================================
+        st.subheader("📋 Detailed Bias Breakdown")
+
+        # Convert bias results to DataFrame
+        bias_df = pd.DataFrame(results['bias_results'])
+
+        # Function to color code bias
+        def color_bias(val):
+            if 'BULLISH' in str(val):
+                return 'background-color: #26a69a; color: white;'
+            elif 'BEARISH' in str(val):
+                return 'background-color: #ef5350; color: white;'
+            else:
+                return 'background-color: #78909c; color: white;'
+
+        # Function to color code scores
+        def color_score(val):
+            try:
+                score = float(val)
+                if score > 50:
+                    return 'background-color: #1b5e20; color: white; font-weight: bold;'
+                elif score > 0:
+                    return 'background-color: #4caf50; color: white;'
+                elif score < -50:
+                    return 'background-color: #b71c1c; color: white; font-weight: bold;'
+                elif score < 0:
+                    return 'background-color: #f44336; color: white;'
+                else:
+                    return 'background-color: #616161; color: white;'
+            except:
+                return ''
+
+        # Create styled dataframe
+        styled_df = bias_df.style.applymap(color_bias, subset=['bias']) \
+                                 .applymap(color_score, subset=['score']) \
+                                 .format({'score': '{:.2f}', 'weight': '{:.1f}'})
+
+        st.dataframe(styled_df, use_container_width=True, hide_index=True, height=600)
+
+        st.divider()
+
+        # =====================================================================
+        # VISUAL SCORE REPRESENTATION
+        # =====================================================================
+        st.subheader("📊 Visual Bias Representation")
+
+        # Create a chart showing each indicator's contribution
+        chart_data = pd.DataFrame({
+            'Indicator': [b['indicator'] for b in results['bias_results']],
+            'Weighted Score': [b['score'] * b['weight'] for b in results['bias_results']]
+        })
+
+        # Sort by weighted score
+        chart_data = chart_data.sort_values('Weighted Score', ascending=True)
+
+        # Display bar chart
+        st.bar_chart(chart_data.set_index('Indicator'))
+
+        st.divider()
+
+        # =====================================================================
+        # BIAS CATEGORY BREAKDOWN
+        # =====================================================================
+        st.subheader("📈 Bias by Category")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**🔧 Technical Indicators**")
+            technical_bias = [b for b in results['bias_results'] if b['indicator'] in
+                             ['RSI', 'MFI (Money Flow)', 'DMI/ADX', 'VWAP', 'EMA Crossover (5/18)']]
+
+            tech_df = pd.DataFrame(technical_bias)
+            if not tech_df.empty:
+                tech_bull = len(tech_df[tech_df['bias'].str.contains('BULLISH', na=False)])
+                tech_bear = len(tech_df[tech_df['bias'].str.contains('BEARISH', na=False)])
+                tech_neutral = len(tech_df) - tech_bull - tech_bear
+
+                st.write(f"🐂 Bullish: {tech_bull} | 🐻 Bearish: {tech_bear} | ⚖️ Neutral: {tech_neutral}")
+                st.dataframe(tech_df[['indicator', 'bias', 'score']],
+                           use_container_width=True, hide_index=True)
+
+        with col2:
+            st.markdown("**📊 Volume Indicators**")
+            volume_bias = [b for b in results['bias_results'] if b['indicator'] in
+                          ['Volume ROC', 'OBV (On Balance Volume)', 'Force Index', 'Volume Trend']]
+
+            vol_df = pd.DataFrame(volume_bias)
+            if not vol_df.empty:
+                vol_bull = len(vol_df[vol_df['bias'].str.contains('BULLISH', na=False)])
+                vol_bear = len(vol_df[vol_df['bias'].str.contains('BEARISH', na=False)])
+                vol_neutral = len(vol_df) - vol_bull - vol_bear
+
+                st.write(f"🐂 Bullish: {vol_bull} | 🐻 Bearish: {vol_bear} | ⚖️ Neutral: {vol_neutral}")
+                st.dataframe(vol_df[['indicator', 'bias', 'score']],
+                           use_container_width=True, hide_index=True)
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**📉 Momentum Indicators**")
+            momentum_bias = [b for b in results['bias_results'] if b['indicator'] in
+                           ['Price Momentum (ROC)', 'RSI Divergence', 'Choppiness Index']]
+
+            mom_df = pd.DataFrame(momentum_bias)
+            if not mom_df.empty:
+                mom_bull = len(mom_df[mom_df['bias'].str.contains('BULLISH', na=False)])
+                mom_bear = len(mom_df[mom_df['bias'].str.contains('BEARISH', na=False)])
+                mom_neutral = len(mom_df) - mom_bull - mom_bear
+
+                st.write(f"🐂 Bullish: {mom_bull} | 🐻 Bearish: {mom_bear} | ⚖️ Neutral: {mom_neutral}")
+                st.dataframe(mom_df[['indicator', 'bias', 'score']],
+                           use_container_width=True, hide_index=True)
+
+        with col2:
+            st.markdown("**🌍 Market Wide Indicators**")
+            market_bias = [b for b in results['bias_results'] if b['indicator'] in
+                          ['Market Breadth', 'Volatility Ratio', 'ATR Trend']]
+
+            mkt_df = pd.DataFrame(market_bias)
+            if not mkt_df.empty:
+                mkt_bull = len(mkt_df[mkt_df['bias'].str.contains('BULLISH', na=False)])
+                mkt_bear = len(mkt_df[mkt_df['bias'].str.contains('BEARISH', na=False)])
+                mkt_neutral = len(mkt_df) - mkt_bull - mkt_bear
+
+                st.write(f"🐂 Bullish: {mkt_bull} | 🐻 Bearish: {mkt_bear} | ⚖️ Neutral: {mkt_neutral}")
+                st.dataframe(mkt_df[['indicator', 'bias', 'score']],
+                           use_container_width=True, hide_index=True)
+
+        st.divider()
+
+        # =====================================================================
+        # TOP STOCKS PERFORMANCE (from market breadth analysis)
+        # =====================================================================
+        if results.get('stock_data'):
+            st.subheader("📊 Top Stocks Performance")
+
+            stock_df = pd.DataFrame(results['stock_data'])
+            stock_df = stock_df.sort_values('change_pct', ascending=False)
+
+            # Add bias column
+            stock_df['bias'] = stock_df['change_pct'].apply(
+                lambda x: '🐂 BULLISH' if x > 0.5 else '🐻 BEARISH' if x < -0.5 else '⚖️ NEUTRAL'
+            )
+
+            # Format percentage
+            stock_df['change_pct'] = stock_df['change_pct'].apply(lambda x: f"{x:.2f}%")
+            stock_df['weight'] = stock_df['weight'].apply(lambda x: f"{x:.2f}%")
+
+            st.dataframe(stock_df, use_container_width=True, hide_index=True)
+
+        st.divider()
+
+        # =====================================================================
+        # TRADING RECOMMENDATION
+        # =====================================================================
+        st.subheader("💡 Trading Recommendation")
+
+        overall_bias = results['overall_bias']
+        overall_score = results['overall_score']
+        confidence = results['overall_confidence']
+
+        if overall_bias == "BULLISH" and confidence > 70:
+            st.success("### 🐂 STRONG BULLISH SIGNAL")
+            st.info("""
+            **Recommended Strategy:**
+            - ✅ Look for LONG entries on dips
+            - ✅ Wait for support levels or VOB support touch
+            - ✅ Set stop loss below recent swing low
+            - ✅ Target: Risk-Reward ratio 1:2 or higher
+            """)
+        elif overall_bias == "BULLISH" and confidence >= 50:
+            st.success("### 🐂 MODERATE BULLISH SIGNAL")
+            st.info("""
+            **Recommended Strategy:**
+            - ⚠️ Consider LONG entries with caution
+            - ⚠️ Use tighter stop losses
+            - ⚠️ Take partial profits at resistance levels
+            - ⚠️ Monitor for trend confirmation
+            """)
+        elif overall_bias == "BEARISH" and confidence > 70:
+            st.error("### 🐻 STRONG BEARISH SIGNAL")
+            st.info("""
+            **Recommended Strategy:**
+            - ✅ Look for SHORT entries on rallies
+            - ✅ Wait for resistance levels or VOB resistance touch
+            - ✅ Set stop loss above recent swing high
+            - ✅ Target: Risk-Reward ratio 1:2 or higher
+            """)
+        elif overall_bias == "BEARISH" and confidence >= 50:
+            st.error("### 🐻 MODERATE BEARISH SIGNAL")
+            st.info("""
+            **Recommended Strategy:**
+            - ⚠️ Consider SHORT entries with caution
+            - ⚠️ Use tighter stop losses
+            - ⚠️ Take partial profits at support levels
+            - ⚠️ Monitor for trend reversal
+            """)
+        else:
+            st.warning("### ⚖️ NEUTRAL / NO CLEAR SIGNAL")
+            st.info("""
+            **Recommended Strategy:**
+            - 🔄 Stay out of the market or use range trading
+            - 🔄 Wait for clearer bias formation
+            - 🔄 Monitor key support/resistance levels
+            - 🔄 Reduce position sizes if trading
+            """)
+
+        # Key levels for entry
+        st.divider()
+        st.subheader("🎯 Key Considerations")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.markdown("**Bullish Signals Count**")
+            st.markdown(f"<h2 style='color:green;'>{results['bullish_count']}/{results['total_indicators']}</h2>",
+                       unsafe_allow_html=True)
+
+        with col2:
+            st.markdown("**Bearish Signals Count**")
+            st.markdown(f"<h2 style='color:red;'>{results['bearish_count']}/{results['total_indicators']}</h2>",
+                       unsafe_allow_html=True)
+
+        with col3:
+            st.markdown("**Confidence Level**")
+            confidence_color = "green" if confidence > 70 else "orange" if confidence > 50 else "red"
+            st.markdown(f"<h2 style='color:{confidence_color};'>{confidence:.1f}%</h2>",
+                       unsafe_allow_html=True)
+
+        # Timestamp
+        st.caption(f"Analysis Time: {results['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
+
+    else:
+        st.info("👆 Click 'Analyze All Bias' button to start comprehensive bias analysis")
+
+        st.markdown("""
+        ### About Bias Analysis Pro
+
+        This comprehensive bias analyzer evaluates **15+ different bias indicators** to provide:
+
+        #### 📊 Technical Indicators
+        - **RSI** (Relative Strength Index)
+        - **MFI** (Money Flow Index)
+        - **DMI/ADX** (Directional Movement Index)
+        - **VWAP** (Volume Weighted Average Price)
+        - **EMA Crossover** (5/18 periods)
+
+        #### 📈 Volume Indicators
+        - **Volume ROC** (Rate of Change)
+        - **OBV** (On Balance Volume)
+        - **Force Index**
+        - **Volume Trend**
+
+        #### 📉 Momentum Indicators
+        - **Price ROC** (Momentum)
+        - **RSI Divergence** (Bullish/Bearish)
+        - **Choppiness Index**
+
+        #### 🌍 Market Wide Indicators
+        - **Market Breadth** (Top 9 NSE stocks analysis)
+        - **Volatility Ratio**
+        - **ATR Trend**
+
+        #### 🎯 Scoring System
+        - Each indicator has a **weight** based on reliability
+        - Scores range from **-100 (Strong Bearish)** to **+100 (Strong Bullish)**
+        - Overall bias is calculated using **weighted average** of all indicators
+        - Final recommendation considers both **bias direction** and **confidence level**
+
+        #### ✅ How to Use
+        1. Select the market (NIFTY, SENSEX, or DOW)
+        2. Click "Analyze All Bias" button
+        3. Review comprehensive bias breakdown
+        4. Check trading recommendation
+        5. Use signals to inform your trading decisions
+
+        **Note:** This tool is converted from the Pine Script "Smart Trading Dashboard - Enhanced Pro" indicator with 80% accuracy.
         """)
 
 # ═══════════════════════════════════════════════════════════════════════

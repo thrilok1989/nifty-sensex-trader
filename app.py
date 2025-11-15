@@ -1202,7 +1202,7 @@ if selected_tab == "📊 Option Chain Analysis":
 
 if selected_tab == "📈 Advanced Chart Analysis":
     st.header("📈 Advanced Chart Analysis")
-    st.caption("TradingView-style Chart with 4 Advanced Indicators: Volume Order Blocks, HTF Support/Resistance, Volume Footprint, Ultimate RSI")
+    st.caption("TradingView-style Chart with 4 Advanced Indicators: Volume Order Blocks, HTF Support/Resistance (3min, 5min, 10min, 15min levels), Volume Footprint (1D timeframe, 10 bins, Dynamic POC), Ultimate RSI")
 
     # Chart controls
     col1, col2, col3, col4 = st.columns([2, 1, 1, 1])

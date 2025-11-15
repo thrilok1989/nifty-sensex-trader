@@ -143,7 +143,11 @@ class HTFSupportResistance:
             'W': 'W',
             '1H': '1H',
             '4H': '4H',
-            '12H': '12H'
+            '12H': '12H',
+            '3T': '3T',   # 3 minutes
+            '5T': '5T',   # 5 minutes
+            '10T': '10T', # 10 minutes
+            '15T': '15T'  # 15 minutes
         }
 
         resample_freq = timeframe_map.get(timeframe, timeframe)

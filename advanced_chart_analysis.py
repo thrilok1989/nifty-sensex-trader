@@ -25,7 +25,7 @@ class AdvancedChartAnalysis:
         """Initialize Advanced Chart Analysis"""
         self.vob_indicator = VolumeOrderBlocks()
         self.htf_sr_indicator = HTFSupportResistance()
-        self.htf_footprint = HTFVolumeFootprint()
+        self.htf_footprint = HTFVolumeFootprint(bins=10, timeframe='D', dynamic_poc=True)
         self.ultimate_rsi = UltimateRSI()
 
     def fetch_intraday_data(self, symbol, period='1d', interval='1m'):
@@ -95,10 +95,10 @@ class AdvancedChartAnalysis:
         htf_levels = []
         if show_htf_sr:
             levels_config = [
-                {'timeframe': '4H', 'length': 4, 'style': 'Solid', 'color': '#26a69a'},
-                {'timeframe': '12H', 'length': 5, 'style': 'Solid', 'color': '#2196f3'},
-                {'timeframe': 'D', 'length': 5, 'style': 'Solid', 'color': '#9c27b0'},
-                {'timeframe': 'W', 'length': 5, 'style': 'Solid', 'color': '#ff9800'}
+                {'timeframe': '3T', 'length': 4, 'style': 'Solid', 'color': '#26a69a'},   # 3 min - Teal
+                {'timeframe': '5T', 'length': 5, 'style': 'Solid', 'color': '#2196f3'},   # 5 min - Blue
+                {'timeframe': '10T', 'length': 5, 'style': 'Solid', 'color': '#9c27b0'},  # 10 min - Purple
+                {'timeframe': '15T', 'length': 5, 'style': 'Solid', 'color': '#ff9800'}   # 15 min - Orange
             ]
             htf_levels = self.htf_sr_indicator.calculate_multi_timeframe(df, levels_config)
 
@@ -269,7 +269,21 @@ class AdvancedChartAnalysis:
         x_start = df.index[0]
         x_end = df.index[-1]
 
+        # Map timeframe codes to display names
+        timeframe_display = {
+            '3T': '3 min',
+            '5T': '5 min',
+            '10T': '10 min',
+            '15T': '15 min',
+            '4H': '4H',
+            '12H': '12H',
+            'D': 'Daily',
+            'W': 'Weekly'
+        }
+
         for level in htf_levels:
+            tf_display = timeframe_display.get(level['timeframe'], level['timeframe'])
+
             # Add pivot high
             if level['pivot_high'] is not None:
                 fig.add_trace(
@@ -277,7 +291,7 @@ class AdvancedChartAnalysis:
                         x=[x_start, x_end],
                         y=[level['pivot_high'], level['pivot_high']],
                         mode='lines',
-                        name=f"{level['timeframe']} Resistance",
+                        name=f"{tf_display} Resistance",
                         line=dict(color=level['color'], width=2, dash='dash'),
                         showlegend=True
                     ),
@@ -291,7 +305,7 @@ class AdvancedChartAnalysis:
                         x=[x_start, x_end],
                         y=[level['pivot_low'], level['pivot_low']],
                         mode='lines',
-                        name=f"{level['timeframe']} Support",
+                        name=f"{tf_display} Support",
                         line=dict(color=level['color'], width=2, dash='dash'),
                         showlegend=True
                     ),

@@ -50,6 +50,9 @@ if 'bias_analyzer' not in st.session_state:
 if 'bias_analysis_results' not in st.session_state:
     st.session_state.bias_analysis_results = None
 
+if 'active_tab' not in st.session_state:
+    st.session_state.active_tab = 0
+
 # ═══════════════════════════════════════════════════════════════════════
 # AUTO REFRESH
 # ═══════════════════════════════════════════════════════════════════════
@@ -159,16 +162,21 @@ with col4:
 st.divider()
 
 # ═══════════════════════════════════════════════════════════════════════
-# TABS
+# TABS WITH PERSISTENT STATE
 # ═══════════════════════════════════════════════════════════════════════
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🎯 Trade Setup", "📊 Active Signals", "📈 Positions", "📊 Smart Trading Dashboard", "🎯 Bias Analysis Pro"])
+# Tab selector that persists across reruns
+tab_options = ["🎯 Trade Setup", "📊 Active Signals", "📈 Positions", "📊 Smart Trading Dashboard", "🎯 Bias Analysis Pro"]
+selected_tab = st.radio("Select Tab", tab_options, index=st.session_state.active_tab, horizontal=True, key="tab_selector", label_visibility="collapsed")
+
+# Update active tab in session state
+st.session_state.active_tab = tab_options.index(selected_tab)
 
 # ═══════════════════════════════════════════════════════════════════════
 # TAB 1: TRADE SETUP
 # ═══════════════════════════════════════════════════════════════════════
 
-with tab1:
+if selected_tab == "🎯 Trade Setup":
     st.header("🎯 Create New Trade Setup")
     
     col1, col2 = st.columns(2)
@@ -270,7 +278,7 @@ with tab1:
 # TAB 2: ACTIVE SIGNALS
 # ═══════════════════════════════════════════════════════════════════════
 
-with tab2:
+if selected_tab == "📊 Active Signals":
     st.header("📊 Active Signal Setups")
     
     active_setups = st.session_state.signal_manager.get_active_setups()
@@ -374,7 +382,7 @@ with tab2:
 # TAB 3: POSITIONS
 # ═══════════════════════════════════════════════════════════════════════
 
-with tab3:
+if selected_tab == "📈 Positions":
     st.header("📈 Active Positions")
     
     if DEMO_MODE:
@@ -434,7 +442,7 @@ with tab3:
 # TAB 4: SMART TRADING DASHBOARD
 # ═══════════════════════════════════════════════════════════════════════
 
-with tab4:
+if selected_tab == "📊 Smart Trading Dashboard":
     st.header("📊 Smart Trading Dashboard")
     st.caption("Adaptive Market Analysis with Volume Order Blocks")
 
@@ -705,7 +713,7 @@ with tab4:
 # TAB 5: BIAS ANALYSIS PRO
 # ═══════════════════════════════════════════════════════════════════════
 
-with tab5:
+if selected_tab == "🎯 Bias Analysis Pro":
     st.header("🎯 Comprehensive Bias Analysis Pro")
     st.caption("15+ Bias Indicators with Weighted Scoring System | Converted from Pine Script")
 

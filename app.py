@@ -1202,7 +1202,7 @@ if selected_tab == "📊 Option Chain Analysis":
 
 if selected_tab == "📈 Advanced Chart Analysis":
     st.header("📈 Advanced Chart Analysis")
-    st.caption("TradingView-style Chart with 4 Advanced Indicators: Volume Order Blocks, HTF Support/Resistance (3min, 5min, 10min, 15min levels), Volume Footprint (1D timeframe, 10 bins, Dynamic POC), Ultimate RSI")
+    st.caption("TradingView-style Chart with 5 Advanced Indicators: Volume Order Blocks, HTF Support/Resistance (3min, 5min, 10min, 15min levels), Volume Footprint (1D timeframe, 10 bins, Dynamic POC), Ultimate RSI, OM Indicator (Order Flow & Momentum)")
 
     # Chart controls
     col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
@@ -1256,7 +1256,7 @@ if selected_tab == "📈 Advanced Chart Analysis":
     # Indicator toggles
     st.subheader("🔧 Indicator Settings")
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
 
     with col1:
         show_vob = st.checkbox("📦 Volume Order Blocks", value=True, key="show_vob")
@@ -1269,6 +1269,9 @@ if selected_tab == "📈 Advanced Chart Analysis":
 
     with col4:
         show_rsi = st.checkbox("📈 Ultimate RSI", value=True, key="show_rsi")
+
+    with col5:
+        show_om = st.checkbox("🎯 OM Indicator", value=False, key="show_om")
 
     st.divider()
 
@@ -1283,7 +1286,8 @@ if selected_tab == "📈 Advanced Chart Analysis":
                     show_vob=show_vob,
                     show_htf_sr=show_htf_sr,
                     show_footprint=show_footprint,
-                    show_rsi=show_rsi
+                    show_rsi=show_rsi,
+                    show_om=show_om
                 )
 
                 # Display chart
@@ -1400,7 +1404,7 @@ if selected_tab == "📈 Advanced Chart Analysis":
         st.markdown("""
         ### About Advanced Chart Analysis
 
-        This advanced charting module provides professional-grade technical analysis with 4 powerful indicators:
+        This advanced charting module provides professional-grade technical analysis with 5 powerful indicators:
 
         #### 📦 Volume Order Blocks (BigBeluga)
         - Detects institutional order blocks based on volume and EMA crossovers
@@ -1422,6 +1426,15 @@ if selected_tab == "📈 Advanced Chart Analysis":
         - More responsive to market conditions
         - Signal line for trend confirmation
         - Overbought/Oversold detection
+
+        #### 🎯 OM Indicator (Order Flow & Momentum)
+        - **VWAP**: Volume Weighted Average Price for intraday trading
+        - **VOB**: Volume Order Blocks with EMA-based detection
+        - **HVP**: High Volume Pivots marking significant support/resistance
+        - **Delta Module**: Buy/Sell pressure analysis with spike detection
+        - **VIDYA**: Variable Index Dynamic Average with trend detection
+        - **LTP Trap**: Last Traded Price trap signals for reversal detection
+        - Comprehensive order flow analysis combining 6 sub-indicators
 
         #### 🎯 How to Use
         1. Select market (NIFTY, SENSEX, or DOW)

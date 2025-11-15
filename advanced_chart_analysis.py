@@ -551,7 +551,7 @@ class AdvancedChartAnalysis:
                 mode='lines',
                 name='VIDYA',
                 line=dict(
-                    color=['#17dfad' if up else '#dd326b' for up in vidya['is_trend_up']],
+                    color='#ffa726',  # Orange color for VIDYA line
                     width=2
                 ),
                 showlegend=True

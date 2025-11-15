@@ -23,6 +23,7 @@ from bias_analysis import BiasAnalysisPro
 from option_chain_analysis import OptionChainAnalyzer
 from nse_options_helpers import *
 from advanced_chart_analysis import AdvancedChartAnalysis
+from overall_market_sentiment import OverallMarketSentiment
 
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE CONFIG
@@ -74,6 +75,12 @@ if 'advanced_chart_analyzer' not in st.session_state:
 
 if 'chart_data' not in st.session_state:
     st.session_state.chart_data = None
+
+if 'overall_sentiment_analyzer' not in st.session_state:
+    st.session_state.overall_sentiment_analyzer = OverallMarketSentiment()
+
+if 'overall_sentiment_results' not in st.session_state:
+    st.session_state.overall_sentiment_results = None
 
 # NSE Options Analyzer - Initialize instruments session state
 NSE_INSTRUMENTS = {
@@ -221,14 +228,283 @@ st.divider()
 # ═══════════════════════════════════════════════════════════════════════
 
 # Tab selector that persists across reruns
-tab_options = ["🎯 Trade Setup", "📊 Active Signals", "📈 Positions", "📊 Smart Trading Dashboard", "🎯 Bias Analysis Pro", "📊 Option Chain Analysis", "📈 Advanced Chart Analysis"]
+tab_options = ["🌍 Overall Market Sentiment", "🎯 Trade Setup", "📊 Active Signals", "📈 Positions", "📊 Smart Trading Dashboard", "🎯 Bias Analysis Pro", "📊 Option Chain Analysis", "📈 Advanced Chart Analysis"]
 selected_tab = st.radio("Select Tab", tab_options, index=st.session_state.active_tab, horizontal=True, key="tab_selector", label_visibility="collapsed")
 
 # Update active tab in session state
 st.session_state.active_tab = tab_options.index(selected_tab)
 
 # ═══════════════════════════════════════════════════════════════════════
-# TAB 1: TRADE SETUP
+# TAB 1: OVERALL MARKET SENTIMENT
+# ═══════════════════════════════════════════════════════════════════════
+
+if selected_tab == "🌍 Overall Market Sentiment":
+    st.header("🌍 Overall Market Sentiment")
+    st.caption("Aggregated Bias Analysis from All Tabs | Equal Weighted Sentiment Score")
+
+    # Analysis controls
+    col1, col2, col3 = st.columns([2, 1, 1])
+
+    with col1:
+        st.info("📊 This dashboard aggregates bias data from Smart Trading Dashboard, Bias Analysis Pro, and Option Chain Analysis")
+
+    with col2:
+        if st.button("🔄 Calculate Sentiment", type="primary", use_container_width=True):
+            with st.spinner("Aggregating bias data from all sources..."):
+                try:
+                    # Get results from all sources
+                    smart_dashboard_results = st.session_state.dashboard_results
+                    bias_analysis_results = st.session_state.bias_analysis_results
+                    option_chain_results = st.session_state.option_chain_results
+
+                    # Calculate overall sentiment
+                    sentiment_results = st.session_state.overall_sentiment_analyzer.calculate_overall_sentiment(
+                        smart_dashboard_results=smart_dashboard_results,
+                        bias_analysis_results=bias_analysis_results,
+                        option_chain_results=option_chain_results
+                    )
+
+                    st.session_state.overall_sentiment_results = sentiment_results
+
+                    if sentiment_results['success']:
+                        st.success("✅ Overall sentiment calculated successfully!")
+                    else:
+                        st.warning(f"⚠️ {sentiment_results.get('error', 'Unable to calculate sentiment')}")
+
+                except Exception as e:
+                    st.error(f"❌ Error calculating sentiment: {e}")
+
+    with col3:
+        if st.session_state.overall_sentiment_results:
+            if st.button("🗑️ Clear", use_container_width=True):
+                st.session_state.overall_sentiment_results = None
+                st.rerun()
+
+    st.divider()
+
+    # Display results if available
+    if st.session_state.overall_sentiment_results and st.session_state.overall_sentiment_results.get('success'):
+        results = st.session_state.overall_sentiment_results
+
+        # =====================================================================
+        # OVERALL SENTIMENT SUMMARY
+        # =====================================================================
+        st.subheader("📊 Overall Market Sentiment Summary")
+
+        col1, col2, col3, col4, col5 = st.columns(5)
+
+        with col1:
+            sentiment = results['overall_sentiment']
+            sentiment_emoji = "🐂" if sentiment == "BULLISH" else "🐻" if sentiment == "BEARISH" else "⚖️"
+            sentiment_color = "green" if sentiment == "BULLISH" else "red" if sentiment == "BEARISH" else "gray"
+
+            st.markdown(f"<h2 style='color:{sentiment_color};'>{sentiment_emoji} {sentiment}</h2>",
+                       unsafe_allow_html=True)
+            st.caption("Overall Sentiment")
+
+        with col2:
+            score = results['overall_score']
+            score_color = "green" if score > 0 else "red" if score < 0 else "gray"
+            st.markdown(f"<h2 style='color:{score_color};'>{score:.1f}</h2>",
+                       unsafe_allow_html=True)
+            st.caption("Sentiment Score")
+
+        with col3:
+            confidence = results['confidence']
+            st.metric("Confidence", f"{confidence:.1f}%")
+
+        with col4:
+            agreement = results['agreement_pct']
+            st.metric("Agreement", f"{agreement:.1f}%")
+
+        with col5:
+            sources_count = results['sources_count']
+            st.metric("Active Sources", f"{sources_count}/3")
+
+        st.divider()
+
+        # =====================================================================
+        # SOURCES BREAKDOWN
+        # =====================================================================
+        st.subheader("📋 Bias Sources Breakdown")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("🐂 Bullish Sources", results['bullish_sources'])
+
+        with col2:
+            st.metric("🐻 Bearish Sources", results['bearish_sources'])
+
+        with col3:
+            st.metric("⚖️ Neutral Sources", results['neutral_sources'])
+
+        st.divider()
+
+        # Individual source details
+        st.subheader("📊 Individual Source Analysis")
+
+        for source in results['sources']:
+            with st.expander(f"**{source['source']}** - {source['bias']}", expanded=True):
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    bias_color = "green" if "BULL" in source['bias'].upper() else "red" if "BEAR" in source['bias'].upper() else "gray"
+                    st.markdown(f"**Bias:** <span style='color:{bias_color}; font-size:18px;'>{source['bias']}</span>",
+                               unsafe_allow_html=True)
+
+                with col2:
+                    score_color = "green" if source['score'] > 0 else "red" if source['score'] < 0 else "gray"
+                    st.markdown(f"**Score:** <span style='color:{score_color}; font-size:18px;'>{source['score']:.2f}</span>",
+                               unsafe_allow_html=True)
+
+                with col3:
+                    st.markdown(f"**Confidence:** {source['confidence']:.1f}%")
+
+                # Additional data
+                if source['data']:
+                    st.write("**Additional Details:**")
+                    for key, value in source['data'].items():
+                        if isinstance(value, float):
+                            st.write(f"  - {key}: {value:.2f}")
+                        else:
+                            st.write(f"  - {key}: {value}")
+
+        st.divider()
+
+        # =====================================================================
+        # VISUAL REPRESENTATION
+        # =====================================================================
+        st.subheader("📊 Visual Bias Representation")
+
+        # Create DataFrame for chart
+        chart_data = pd.DataFrame({
+            'Source': [s['source'] for s in results['sources']],
+            'Score': [s['score'] for s in results['sources']]
+        })
+
+        # Sort by score
+        chart_data = chart_data.sort_values('Score', ascending=True)
+
+        # Display bar chart
+        st.bar_chart(chart_data.set_index('Source'))
+
+        st.divider()
+
+        # =====================================================================
+        # TRADING RECOMMENDATION
+        # =====================================================================
+        st.subheader("💡 Trading Recommendation")
+
+        recommendation = st.session_state.overall_sentiment_analyzer.get_sentiment_recommendation(results)
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.markdown("**Recommendation**")
+            rec_text = recommendation['recommendation']
+            if 'BUY' in rec_text:
+                st.success(f"### {rec_text}")
+            elif 'SELL' in rec_text:
+                st.error(f"### {rec_text}")
+            else:
+                st.warning(f"### {rec_text}")
+
+        with col2:
+            st.markdown("**Confidence Level**")
+            conf_level = recommendation['confidence_level']
+            conf_color = "green" if conf_level in ['VERY HIGH', 'HIGH'] else "orange" if conf_level == 'MODERATE' else "red"
+            st.markdown(f"<h3 style='color:{conf_color};'>{conf_level}</h3>",
+                       unsafe_allow_html=True)
+
+        with col3:
+            st.markdown("**Risk Level**")
+            risk_level = recommendation['risk_level']
+            risk_color = "green" if risk_level == 'LOW' else "red"
+            st.markdown(f"<h3 style='color:{risk_color};'>{risk_level}</h3>",
+                       unsafe_allow_html=True)
+
+        st.divider()
+
+        # Strategy details
+        st.info(f"""
+        **📝 Trading Strategy:**
+
+        {recommendation['strategy']}
+
+        **Key Points:**
+        - Overall Sentiment: **{sentiment}**
+        - Sentiment Score: **{score:.1f}** (Range: -100 to +100)
+        - Confidence: **{confidence:.1f}%**
+        - Source Agreement: **{agreement:.1f}%**
+        - Active Sources: **{sources_count}/3**
+
+        **Important Notes:**
+        - Always use proper risk management
+        - Set appropriate stop losses
+        - Monitor market conditions continuously
+        - Consider individual source details for confirmation
+        """)
+
+        # Timestamp
+        st.caption(f"Analysis Time: {results['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
+
+    else:
+        st.info("👆 Click 'Calculate Sentiment' button to aggregate bias from all sources")
+
+        st.markdown("""
+        ### About Overall Market Sentiment
+
+        This dashboard provides a comprehensive view of market sentiment by aggregating bias data from multiple analysis sources:
+
+        #### 📊 Data Sources (Equal Weighted)
+
+        1. **Smart Trading Dashboard** - 3-tier adaptive bias system
+           - Fast signals (7 technical indicators)
+           - Medium signals (price vs VWAP)
+           - Slow signals (stock performance)
+
+        2. **Bias Analysis Pro** - 15+ indicator comprehensive scoring
+           - Technical indicators (RSI, MFI, DMI, VWAP, EMA)
+           - Volume indicators (Volume ROC, OBV, Force Index)
+           - Momentum indicators (Price ROC, RSI Divergence, Choppiness)
+           - Market-wide indicators (Market Breadth, Volatility, ATR)
+
+        3. **Option Chain Analysis** - NSE options with bias detection
+           - Put-Call Ratio (PCR) analysis
+           - Open Interest analysis
+           - Support/Resistance zone detection
+
+        #### 🎯 How It Works
+
+        1. Each source provides a bias (BULLISH/BEARISH/NEUTRAL) and a score (-100 to +100)
+        2. All sources are given **equal weight** regardless of confidence
+        3. The overall score is calculated as the **average** of all available sources
+        4. Agreement percentage shows how many sources agree with the majority
+        5. Trading recommendation is generated based on overall score and agreement
+
+        #### ✅ How to Use
+
+        1. First, analyze the market using the individual tabs:
+           - Run "Smart Trading Dashboard" analysis
+           - Run "Bias Analysis Pro" analysis
+           - Analyze "Option Chain Analysis" (optional)
+
+        2. Come back to this tab and click "Calculate Sentiment"
+
+        3. Review the aggregated results:
+           - Overall sentiment and score
+           - Individual source breakdown
+           - Visual representation
+           - Trading recommendation
+
+        4. Use the recommendation to inform your trading decisions
+
+        **Note:** For best results, ensure you have analyzed at least 2 sources before calculating overall sentiment.
+        """)
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 2: TRADE SETUP
 # ═══════════════════════════════════════════════════════════════════════
 
 if selected_tab == "🎯 Trade Setup":

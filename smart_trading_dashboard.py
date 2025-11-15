@@ -97,8 +97,10 @@ class SmartTradingDashboard:
             'lookback_days': 60
         }
 
-    def fetch_data(self, symbol: str, period: str = '60d', interval: str = '1m') -> pd.DataFrame:
-        """Fetch data from Yahoo Finance"""
+    def fetch_data(self, symbol: str, period: str = '7d', interval: str = '5m') -> pd.DataFrame:
+        """Fetch data from Yahoo Finance
+        Note: Yahoo Finance limits intraday data - use 7d max for 5m interval
+        """
         try:
             ticker = yf.Ticker(symbol)
             df = ticker.history(period=period, interval=interval)
@@ -288,14 +290,15 @@ class SmartTradingDashboard:
         """Calculate metrics for a single stock"""
         try:
             # Fetch data for different timeframes
-            df_1m = self.fetch_data(symbol, period='5d', interval='1m')
+            # Use 5m interval (Yahoo Finance limitation for intraday data)
+            df_5m = self.fetch_data(symbol, period='5d', interval='5m')
             df_daily = self.fetch_data(symbol, period='60d', interval='1d')
 
-            if df_1m.empty or df_daily.empty:
+            if df_5m.empty or df_daily.empty:
                 return None
 
             # Current values
-            current_price = df_1m['Close'].iloc[-1]
+            current_price = df_5m['Close'].iloc[-1]
             prev_close_daily = df_daily['Close'].iloc[-2]
 
             # Daily change
@@ -328,7 +331,7 @@ class SmartTradingDashboard:
                 'change_pct': daily_change_pct,
                 'tf1_change_pct': tf1_change_pct,
                 'tf2_change_pct': tf2_change_pct,
-                'df': df_1m
+                'df': df_5m
             }
         except Exception as e:
             print(f"Error calculating metrics for {symbol}: {e}")
@@ -556,7 +559,8 @@ class SmartTradingDashboard:
 
         # Fetch main market data
         print("📊 Fetching market data...")
-        df = self.fetch_data(symbol, period='5d', interval='1m')
+        # Use 5m interval (Yahoo Finance limitation for intraday data)
+        df = self.fetch_data(symbol, period='5d', interval='5m')
 
         if df.empty:
             print("❌ No data available for analysis")

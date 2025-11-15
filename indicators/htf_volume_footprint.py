@@ -52,6 +52,9 @@ class HTFVolumeFootprint:
         footprints = []
 
         for period_start in df_resampled.index:
+            # Ensure period_start is a Timestamp
+            period_start = pd.Timestamp(period_start)
+
             # Get data for this period
             if self.timeframe == 'W':
                 period_end = period_start + pd.Timedelta(weeks=1)

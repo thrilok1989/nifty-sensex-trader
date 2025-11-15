@@ -77,9 +77,19 @@ class AdvancedChartAnalysis:
         Returns:
             plotly Figure object
         """
-        # Calculate all indicators
-        vob_data = self.vob_indicator.calculate(df) if show_vob else None
-        rsi_data = self.ultimate_rsi.get_signals(df) if show_rsi else None
+        try:
+            # Ensure dataframe has datetime index
+            if not isinstance(df.index, pd.DatetimeIndex):
+                try:
+                    df.index = pd.to_datetime(df.index)
+                except Exception as e:
+                    raise ValueError(f"Unable to convert dataframe index to datetime: {e}")
+
+            # Calculate all indicators
+            vob_data = self.vob_indicator.calculate(df) if show_vob else None
+            rsi_data = self.ultimate_rsi.get_signals(df) if show_rsi else None
+        except Exception as e:
+            raise Exception(f"Error calculating indicators: {str(e)}")
 
         # HTF Support/Resistance configuration
         htf_levels = []

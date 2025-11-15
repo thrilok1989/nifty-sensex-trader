@@ -309,7 +309,7 @@ class BiasAnalysisPro:
 
         for symbol, weight in self.config['stocks'].items():
             try:
-                df = self.fetch_data(symbol, period='5d', interval='1m')
+                df = self.fetch_data(symbol, period='5d', interval='1d')
                 if df.empty or len(df) < 2:
                     continue
 
@@ -351,12 +351,13 @@ class BiasAnalysisPro:
         """
 
         print(f"Fetching data for {symbol}...")
-        df = self.fetch_data(symbol, period='60d', interval='1m')
+        # Use daily data for 60 days - more reliable than 1m data which is limited
+        df = self.fetch_data(symbol, period='60d', interval='1d')
 
-        if df.empty or len(df) < 100:
+        if df.empty or len(df) < 30:
             return {
                 'success': False,
-                'error': 'Insufficient data'
+                'error': f'Insufficient data: Got {len(df)} rows, need at least 30 days'
             }
 
         current_price = df['Close'].iloc[-1]

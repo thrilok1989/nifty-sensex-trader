@@ -1275,10 +1275,238 @@ if selected_tab == "📈 Advanced Chart Analysis":
 
     st.divider()
 
+    # Indicator Configuration Section
+    st.subheader("⚙️ Indicator Configuration")
+    st.caption("Configure each indicator's parameters below")
+
+    # Volume Order Blocks Settings
+    if show_vob:
+        with st.expander("📦 Volume Order Blocks Settings", expanded=False):
+            col1, col2 = st.columns(2)
+            with col1:
+                vob_sensitivity = st.slider(
+                    "Sensitivity",
+                    min_value=3,
+                    max_value=15,
+                    value=5,
+                    step=1,
+                    help="Detection sensitivity for order blocks",
+                    key="vob_sensitivity"
+                )
+            with col2:
+                vob_mid_line = st.checkbox("Show Mid Line", value=True, key="vob_mid_line")
+                vob_trend_shadow = st.checkbox("Show Trend Shadow", value=True, key="vob_trend_shadow")
+
+    # HTF Support/Resistance Settings
+    if show_htf_sr:
+        with st.expander("📊 HTF Support/Resistance Settings", expanded=False):
+            st.markdown("**Timeframe Configuration**")
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                htf_3min_enabled = st.checkbox("3min", value=True, key="htf_3min_enabled")
+                htf_3min_length = st.number_input("3min Length", min_value=2, max_value=10, value=4, step=1, key="htf_3min_length")
+
+            with col2:
+                htf_5min_enabled = st.checkbox("5min", value=True, key="htf_5min_enabled")
+                htf_5min_length = st.number_input("5min Length", min_value=2, max_value=10, value=5, step=1, key="htf_5min_length")
+
+            with col3:
+                htf_10min_enabled = st.checkbox("10min", value=True, key="htf_10min_enabled")
+                htf_10min_length = st.number_input("10min Length", min_value=2, max_value=10, value=5, step=1, key="htf_10min_length")
+
+            with col4:
+                htf_15min_enabled = st.checkbox("15min", value=True, key="htf_15min_enabled")
+                htf_15min_length = st.number_input("15min Length", min_value=2, max_value=10, value=5, step=1, key="htf_15min_length")
+
+    # Volume Footprint Settings
+    if show_footprint:
+        with st.expander("👣 Volume Footprint Settings", expanded=False):
+            col1, col2 = st.columns(2)
+
+            with col1:
+                footprint_bins = st.slider(
+                    "Number of Bins",
+                    min_value=5,
+                    max_value=30,
+                    value=10,
+                    step=1,
+                    help="Number of price bins for volume distribution",
+                    key="footprint_bins"
+                )
+                footprint_timeframe = st.selectbox(
+                    "Timeframe",
+                    options=["D", "W", "2W", "M"],
+                    index=0,
+                    help="Higher timeframe for footprint analysis",
+                    key="footprint_timeframe"
+                )
+
+            with col2:
+                footprint_dynamic_poc = st.checkbox(
+                    "Dynamic POC",
+                    value=True,
+                    help="Show dynamic Point of Control",
+                    key="footprint_dynamic_poc"
+                )
+
+    # Ultimate RSI Settings
+    if show_rsi:
+        with st.expander("📈 Ultimate RSI Settings", expanded=False):
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                rsi_length = st.slider(
+                    "RSI Length",
+                    min_value=5,
+                    max_value=30,
+                    value=14,
+                    step=1,
+                    help="RSI calculation period",
+                    key="rsi_length"
+                )
+                rsi_method = st.selectbox(
+                    "Calculation Method",
+                    options=["RMA", "EMA", "SMA", "TMA"],
+                    index=0,
+                    help="Moving average method for RSI",
+                    key="rsi_method"
+                )
+
+            with col2:
+                rsi_smooth = st.slider(
+                    "Signal Smoothing",
+                    min_value=5,
+                    max_value=30,
+                    value=14,
+                    step=1,
+                    help="Signal line smoothing period",
+                    key="rsi_smooth"
+                )
+                rsi_signal_method = st.selectbox(
+                    "Signal Method",
+                    options=["EMA", "SMA", "RMA", "TMA"],
+                    index=0,
+                    help="Signal line calculation method",
+                    key="rsi_signal_method"
+                )
+
+            with col3:
+                rsi_ob_level = st.slider(
+                    "Overbought Level",
+                    min_value=70,
+                    max_value=90,
+                    value=80,
+                    step=5,
+                    help="Overbought threshold",
+                    key="rsi_ob_level"
+                )
+                rsi_os_level = st.slider(
+                    "Oversold Level",
+                    min_value=10,
+                    max_value=30,
+                    value=20,
+                    step=5,
+                    help="Oversold threshold",
+                    key="rsi_os_level"
+                )
+
+    # OM Indicator Settings
+    if show_om:
+        with st.expander("🎯 OM Indicator Settings", expanded=False):
+            st.markdown("**Volume Order Blocks (VOB) Module**")
+            col1, col2 = st.columns(2)
+            with col1:
+                om_vob_sensitivity = st.slider(
+                    "VOB Sensitivity",
+                    min_value=3,
+                    max_value=15,
+                    value=5,
+                    step=1,
+                    key="om_vob_sensitivity"
+                )
+
+            st.markdown("**High Volume Pivots (HVP) Module**")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                om_show_hvp = st.checkbox("Show HVP", value=True, key="om_show_hvp")
+            with col2:
+                om_hvp_left_bars = st.number_input("Left Bars", min_value=5, max_value=30, value=15, step=1, key="om_hvp_left_bars")
+            with col3:
+                om_hvp_right_bars = st.number_input("Right Bars", min_value=5, max_value=30, value=15, step=1, key="om_hvp_right_bars")
+            with col4:
+                om_hvp_volume_filter = st.number_input("Volume Filter", min_value=1.0, max_value=5.0, value=2.0, step=0.5, key="om_hvp_volume_filter")
+
+            st.markdown("**Delta Module**")
+            col1, col2 = st.columns(2)
+            with col1:
+                om_delta_length = st.slider("Delta Length", min_value=5, max_value=30, value=10, step=1, key="om_delta_length")
+            with col2:
+                om_delta_threshold = st.slider("Delta Threshold", min_value=0.5, max_value=5.0, value=1.5, step=0.5, key="om_delta_threshold")
+
+            st.markdown("**VIDYA Module**")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                om_vidya_length = st.slider("VIDYA Length", min_value=5, max_value=30, value=10, step=1, key="om_vidya_length")
+            with col2:
+                om_vidya_momentum = st.slider("Momentum Period", min_value=10, max_value=40, value=20, step=5, key="om_vidya_momentum")
+            with col3:
+                om_band_distance = st.slider("Band Distance", min_value=1.0, max_value=5.0, value=2.0, step=0.5, key="om_band_distance")
+
+    st.divider()
+
     # Display chart if data is available
     if st.session_state.chart_data is not None:
         try:
             with st.spinner("Rendering chart with indicators..."):
+                # Prepare indicator parameters
+                vob_params = {
+                    'sensitivity': vob_sensitivity if show_vob else 5,
+                    'mid_line': vob_mid_line if show_vob else True,
+                    'trend_shadow': vob_trend_shadow if show_vob else True
+                } if show_vob else None
+
+                htf_params = {
+                    'levels_config': []
+                }
+                if show_htf_sr:
+                    if htf_3min_enabled:
+                        htf_params['levels_config'].append({'timeframe': '3T', 'length': htf_3min_length, 'style': 'Solid', 'color': '#26a69a'})
+                    if htf_5min_enabled:
+                        htf_params['levels_config'].append({'timeframe': '5T', 'length': htf_5min_length, 'style': 'Solid', 'color': '#2196f3'})
+                    if htf_10min_enabled:
+                        htf_params['levels_config'].append({'timeframe': '10T', 'length': htf_10min_length, 'style': 'Solid', 'color': '#9c27b0'})
+                    if htf_15min_enabled:
+                        htf_params['levels_config'].append({'timeframe': '15T', 'length': htf_15min_length, 'style': 'Solid', 'color': '#ff9800'})
+
+                footprint_params = {
+                    'bins': footprint_bins if show_footprint else 10,
+                    'timeframe': footprint_timeframe if show_footprint else 'D',
+                    'dynamic_poc': footprint_dynamic_poc if show_footprint else True
+                } if show_footprint else None
+
+                rsi_params = {
+                    'length': rsi_length if show_rsi else 14,
+                    'smooth': rsi_smooth if show_rsi else 14,
+                    'method': rsi_method if show_rsi else 'RMA',
+                    'signal_method': rsi_signal_method if show_rsi else 'EMA',
+                    'ob_level': rsi_ob_level if show_rsi else 80,
+                    'os_level': rsi_os_level if show_rsi else 20
+                } if show_rsi else None
+
+                om_params = {
+                    'vob_sensitivity': om_vob_sensitivity if show_om else 5,
+                    'hvp_left_bars': om_hvp_left_bars if show_om else 15,
+                    'hvp_right_bars': om_hvp_right_bars if show_om else 15,
+                    'hvp_volume_filter': om_hvp_volume_filter if show_om else 2.0,
+                    'delta_length': om_delta_length if show_om else 10,
+                    'delta_threshold': om_delta_threshold if show_om else 1.5,
+                    'vidya_length': om_vidya_length if show_om else 10,
+                    'vidya_momentum': om_vidya_momentum if show_om else 20,
+                    'band_distance': om_band_distance if show_om else 2.0,
+                    'show_hvp': om_show_hvp if show_om else True
+                } if show_om else None
+
                 # Create chart with selected indicators
                 fig = st.session_state.advanced_chart_analyzer.create_advanced_chart(
                     st.session_state.chart_data,
@@ -1287,7 +1515,12 @@ if selected_tab == "📈 Advanced Chart Analysis":
                     show_htf_sr=show_htf_sr,
                     show_footprint=show_footprint,
                     show_rsi=show_rsi,
-                    show_om=show_om
+                    show_om=show_om,
+                    vob_params=vob_params,
+                    htf_params=htf_params,
+                    footprint_params=footprint_params,
+                    rsi_params=rsi_params,
+                    om_params=om_params
                 )
 
                 # Display chart
@@ -1324,7 +1557,7 @@ if selected_tab == "📈 Advanced Chart Analysis":
 
                 if show_rsi:
                     from indicators.ultimate_rsi import UltimateRSI
-                    rsi_indicator = UltimateRSI()
+                    rsi_indicator = UltimateRSI(**rsi_params) if rsi_params else UltimateRSI()
                     rsi_signals = rsi_indicator.get_signals(df_stats)
 
                     latest_rsi = rsi_signals['ultimate_rsi'][-1]
@@ -1334,8 +1567,10 @@ if selected_tab == "📈 Advanced Chart Analysis":
 
                     with col1:
                         st.markdown("**Ultimate RSI Analysis**")
-                        rsi_state = "Overbought" if latest_rsi > 80 else "Oversold" if latest_rsi < 20 else "Neutral"
-                        rsi_color = "red" if latest_rsi > 80 else "green" if latest_rsi < 20 else "gray"
+                        ob_threshold = rsi_params['ob_level'] if rsi_params else 80
+                        os_threshold = rsi_params['os_level'] if rsi_params else 20
+                        rsi_state = "Overbought" if latest_rsi > ob_threshold else "Oversold" if latest_rsi < os_threshold else "Neutral"
+                        rsi_color = "red" if latest_rsi > ob_threshold else "green" if latest_rsi < os_threshold else "gray"
 
                         st.markdown(f"Current RSI: <span style='color:{rsi_color}; font-size:24px;'>{latest_rsi:.2f}</span>", unsafe_allow_html=True)
                         st.write(f"Signal Line: {latest_signal:.2f}")
@@ -1343,9 +1578,9 @@ if selected_tab == "📈 Advanced Chart Analysis":
 
                     with col2:
                         st.markdown("**RSI Trading Recommendation**")
-                        if latest_rsi > 80:
+                        if latest_rsi > ob_threshold:
                             st.warning("⚠️ **OVERBOUGHT** - Consider taking profits or waiting for pullback")
-                        elif latest_rsi < 20:
+                        elif latest_rsi < os_threshold:
                             st.success("✅ **OVERSOLD** - Potential buying opportunity")
                         elif latest_rsi > latest_signal:
                             st.info("📈 **BULLISH** - RSI above signal line")
@@ -1356,7 +1591,7 @@ if selected_tab == "📈 Advanced Chart Analysis":
 
                 if show_vob:
                     from indicators.volume_order_blocks import VolumeOrderBlocks
-                    vob_indicator = VolumeOrderBlocks()
+                    vob_indicator = VolumeOrderBlocks(**vob_params) if vob_params else VolumeOrderBlocks()
                     vob_data = vob_indicator.calculate(df_stats)
 
                     st.divider()

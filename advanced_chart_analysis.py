@@ -24,11 +24,8 @@ class AdvancedChartAnalysis:
 
     def __init__(self):
         """Initialize Advanced Chart Analysis"""
-        self.vob_indicator = VolumeOrderBlocks()
+        # Indicators will be created with custom parameters when needed
         self.htf_sr_indicator = HTFSupportResistance()
-        self.htf_footprint = HTFVolumeFootprint(bins=10, timeframe='D', dynamic_poc=True)
-        self.ultimate_rsi = UltimateRSI()
-        self.om_indicator = OMIndicator()
 
     def fetch_intraday_data(self, symbol, period='1d', interval='1m'):
         """
@@ -64,7 +61,9 @@ class AdvancedChartAnalysis:
             return None
 
     def create_advanced_chart(self, df, symbol, show_vob=True, show_htf_sr=True,
-                             show_footprint=True, show_rsi=True, show_om=False):
+                             show_footprint=True, show_rsi=True, show_om=False,
+                             vob_params=None, htf_params=None, footprint_params=None,
+                             rsi_params=None, om_params=None):
         """
         Create advanced chart with all indicators
 
@@ -76,6 +75,11 @@ class AdvancedChartAnalysis:
             show_footprint: Show HTF Volume Footprint
             show_rsi: Show Ultimate RSI
             show_om: Show OM Indicator (comprehensive order flow)
+            vob_params: Parameters for Volume Order Blocks indicator
+            htf_params: Parameters for HTF Support/Resistance indicator
+            footprint_params: Parameters for HTF Volume Footprint indicator
+            rsi_params: Parameters for Ultimate RSI indicator
+            om_params: Parameters for OM Indicator
 
         Returns:
             plotly Figure object
@@ -88,28 +92,65 @@ class AdvancedChartAnalysis:
                 except Exception as e:
                     raise ValueError(f"Unable to convert dataframe index to datetime: {e}")
 
+            # Create indicators with custom parameters
+            vob_indicator = None
+            if show_vob:
+                if vob_params:
+                    vob_indicator = VolumeOrderBlocks(
+                        sensitivity=vob_params.get('sensitivity', 5),
+                        mid_line=vob_params.get('mid_line', True),
+                        trend_shadow=vob_params.get('trend_shadow', True)
+                    )
+                else:
+                    vob_indicator = VolumeOrderBlocks()
+
+            ultimate_rsi = None
+            if show_rsi:
+                if rsi_params:
+                    ultimate_rsi = UltimateRSI(**rsi_params)
+                else:
+                    ultimate_rsi = UltimateRSI()
+
+            om_indicator = None
+            if show_om:
+                if om_params:
+                    om_indicator = OMIndicator(**om_params)
+                else:
+                    om_indicator = OMIndicator()
+
+            htf_footprint = None
+            if show_footprint:
+                if footprint_params:
+                    htf_footprint = HTFVolumeFootprint(**footprint_params)
+                else:
+                    htf_footprint = HTFVolumeFootprint(bins=10, timeframe='D', dynamic_poc=True)
+
             # Calculate all indicators
-            vob_data = self.vob_indicator.calculate(df) if show_vob else None
-            rsi_data = self.ultimate_rsi.get_signals(df) if show_rsi else None
-            om_data = self.om_indicator.calculate(df) if show_om else None
+            vob_data = vob_indicator.calculate(df) if vob_indicator else None
+            rsi_data = ultimate_rsi.get_signals(df) if ultimate_rsi else None
+            om_data = om_indicator.calculate(df) if om_indicator else None
         except Exception as e:
             raise Exception(f"Error calculating indicators: {str(e)}")
 
         # HTF Support/Resistance configuration
         htf_levels = []
         if show_htf_sr:
-            levels_config = [
-                {'timeframe': '3T', 'length': 4, 'style': 'Solid', 'color': '#26a69a'},   # 3 min - Teal
-                {'timeframe': '5T', 'length': 5, 'style': 'Solid', 'color': '#2196f3'},   # 5 min - Blue
-                {'timeframe': '10T', 'length': 5, 'style': 'Solid', 'color': '#9c27b0'},  # 10 min - Purple
-                {'timeframe': '15T', 'length': 5, 'style': 'Solid', 'color': '#ff9800'}   # 15 min - Orange
-            ]
+            if htf_params and htf_params.get('levels_config'):
+                levels_config = htf_params['levels_config']
+            else:
+                # Default configuration
+                levels_config = [
+                    {'timeframe': '3T', 'length': 4, 'style': 'Solid', 'color': '#26a69a'},   # 3 min - Teal
+                    {'timeframe': '5T', 'length': 5, 'style': 'Solid', 'color': '#2196f3'},   # 5 min - Blue
+                    {'timeframe': '10T', 'length': 5, 'style': 'Solid', 'color': '#9c27b0'},  # 10 min - Purple
+                    {'timeframe': '15T', 'length': 5, 'style': 'Solid', 'color': '#ff9800'}   # 15 min - Orange
+                ]
             htf_levels = self.htf_sr_indicator.calculate_multi_timeframe(df, levels_config)
 
         # HTF Volume Footprint
         footprint_data = None
-        if show_footprint:
-            footprint_data = self.htf_footprint.calculate(df)
+        if show_footprint and htf_footprint:
+            footprint_data = htf_footprint.calculate(df)
 
         # Create subplots
         if show_rsi:

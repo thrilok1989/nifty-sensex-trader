@@ -51,15 +51,6 @@ def check_vob_touch(current_price, vob_level, tolerance=5):
     """Check if price touched VOB level"""
     return abs(current_price - vob_level) <= tolerance
 
-def is_expiry_day(expiry_date_str):
-    """Check if today is expiry day"""
-    try:
-        expiry_date = datetime.strptime(expiry_date_str, "%d-%b-%Y").date()
-        today = datetime.now(IST).date()
-        return expiry_date == today
-    except:
-        return False
-
 def get_market_status():
     """Get current market status"""
     now = datetime.now(IST)

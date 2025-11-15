@@ -2,6 +2,13 @@ import streamlit as st
 import time
 from datetime import datetime
 import pandas as pd
+import numpy as np
+import math
+from scipy.stats import norm
+from pytz import timezone as pytz_timezone
+import plotly.graph_objects as go
+import io
+import requests
 
 # Import modules
 from config import *
@@ -14,6 +21,7 @@ from dhan_api import check_dhan_connection
 from smart_trading_dashboard import SmartTradingDashboard
 from bias_analysis import BiasAnalysisPro
 from option_chain_analysis import OptionChainAnalyzer
+from nse_options_helpers import *
 
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE CONFIG
@@ -59,6 +67,43 @@ if 'option_chain_results' not in st.session_state:
 
 if 'active_tab' not in st.session_state:
     st.session_state.active_tab = 0
+
+# NSE Options Analyzer - Initialize instruments session state
+NSE_INSTRUMENTS = {
+    'indices': {
+        'NIFTY': {'lot_size': 75, 'zone_size': 20, 'atm_range': 200},
+        'BANKNIFTY': {'lot_size': 25, 'zone_size': 100, 'atm_range': 500},
+        'NIFTY IT': {'lot_size': 50, 'zone_size': 50, 'atm_range': 300},
+        'NIFTY AUTO': {'lot_size': 50, 'zone_size': 50, 'atm_range': 300}
+    },
+    'stocks': {
+        'TCS': {'lot_size': 150, 'zone_size': 30, 'atm_range': 150},
+        'RELIANCE': {'lot_size': 250, 'zone_size': 40, 'atm_range': 200},
+        'HDFCBANK': {'lot_size': 550, 'zone_size': 50, 'atm_range': 250}
+    }
+}
+
+# Initialize session states for all NSE instruments
+for category in NSE_INSTRUMENTS:
+    for instrument in NSE_INSTRUMENTS[category]:
+        if f'{instrument}_price_data' not in st.session_state:
+            st.session_state[f'{instrument}_price_data'] = pd.DataFrame(columns=["Time", "Spot"])
+
+        if f'{instrument}_trade_log' not in st.session_state:
+            st.session_state[f'{instrument}_trade_log'] = []
+
+        if f'{instrument}_call_log_book' not in st.session_state:
+            st.session_state[f'{instrument}_call_log_book'] = []
+
+        if f'{instrument}_support_zone' not in st.session_state:
+            st.session_state[f'{instrument}_support_zone'] = (None, None)
+
+        if f'{instrument}_resistance_zone' not in st.session_state:
+            st.session_state[f'{instrument}_resistance_zone'] = (None, None)
+
+# Initialize overall option chain data
+if 'overall_option_data' not in st.session_state:
+    st.session_state['overall_option_data'] = {}
 
 # ═══════════════════════════════════════════════════════════════════════
 # AUTO REFRESH
@@ -1099,329 +1144,50 @@ if selected_tab == "🎯 Bias Analysis Pro":
         """)
 
 # ═══════════════════════════════════════════════════════════════════════
-# TAB 6: OPTION CHAIN ANALYSIS
+# TAB 6: OPTION CHAIN ANALYSIS (NSE Options Analyzer)
 # ═══════════════════════════════════════════════════════════════════════
 
 if selected_tab == "📊 Option Chain Analysis":
-    st.header("📊 NSE Option Chain Analysis")
-    st.caption("Put-Call Ratio Analysis for NIFTY, BANKNIFTY, and FINNIFTY")
+    st.header("📊 NSE Options Analyzer")
+    st.caption("Comprehensive Option Chain Analysis with Bias Detection, Support/Resistance Zones, and Trade Signals")
 
-    # Analysis controls
-    col1, col2 = st.columns([3, 1])
+    # Create tabs for main sections
+    tab_indices, tab_stocks, tab_overall = st.tabs(["📈 Indices", "🏢 Stocks", "🌐 Overall Market Analysis"])
 
-    with col1:
-        st.markdown("**Analyze option chain data from NSE for comprehensive PCR ratios and market bias**")
+    with tab_indices:
+        st.header("NSE Indices Analysis")
+        # Create subtabs for each index
+        nifty_tab, banknifty_tab, it_tab, auto_tab = st.tabs(["NIFTY", "BANKNIFTY", "NIFTY IT", "NIFTY AUTO"])
 
-    with col2:
-        if st.button("🔄 Fetch All Data", type="primary", use_container_width=True):
-            with st.spinner("Fetching option chain data from NSE..."):
-                try:
-                    results = st.session_state.option_chain_analyzer.analyze_all_instruments()
-                    st.session_state.option_chain_results = results
-                    if results['success']:
-                        st.success("✅ Option chain data fetched successfully!")
-                    else:
-                        st.error(f"❌ Failed to fetch data: {results.get('error')}")
-                except Exception as e:
-                    st.error(f"❌ Analysis failed: {e}")
+        with nifty_tab:
+            analyze_instrument('NIFTY', NSE_INSTRUMENTS)
 
-    # Clear button
-    if st.session_state.option_chain_results:
-        col1, col2 = st.columns([3, 1])
-        with col2:
-            if st.button("🗑️ Clear Data", use_container_width=True):
-                st.session_state.option_chain_results = None
-                st.rerun()
+        with banknifty_tab:
+            analyze_instrument('BANKNIFTY', NSE_INSTRUMENTS)
 
-    st.divider()
+        with it_tab:
+            analyze_instrument('NIFTY IT', NSE_INSTRUMENTS)
 
-    # Display results if available
-    if st.session_state.option_chain_results and st.session_state.option_chain_results.get('success'):
-        results = st.session_state.option_chain_results
+        with auto_tab:
+            analyze_instrument('NIFTY AUTO', NSE_INSTRUMENTS)
 
-        # =====================================================================
-        # OVERALL MARKET BIAS
-        # =====================================================================
-        st.subheader("🌐 Overall Market Bias (Based on Option Chain)")
+    with tab_stocks:
+        st.header("Stock Options Analysis")
+        # Create subtabs for each stock
+        tcs_tab, reliance_tab, hdfc_tab = st.tabs(["TCS", "RELIANCE", "HDFCBANK"])
 
-        col1, col2, col3, col4 = st.columns(4)
+        with tcs_tab:
+            analyze_instrument('TCS', NSE_INSTRUMENTS)
 
-        with col1:
-            market_bias = results['market_bias']
-            bias_emoji = "🐂" if market_bias == "BULLISH" else "🐻" if market_bias == "BEARISH" else "⚖️"
-            bias_color = "green" if market_bias == "BULLISH" else "red" if market_bias == "BEARISH" else "gray"
+        with reliance_tab:
+            analyze_instrument('RELIANCE', NSE_INSTRUMENTS)
 
-            st.markdown(f"<h2 style='color:{bias_color};'>{bias_emoji} {market_bias}</h2>",
-                       unsafe_allow_html=True)
-            st.caption("Overall Market Bias")
+        with hdfc_tab:
+            analyze_instrument('HDFCBANK', NSE_INSTRUMENTS)
 
-        with col2:
-            confidence = results['confidence']
-            confidence_color = "green" if confidence > 70 else "orange" if confidence > 50 else "red"
-            st.markdown(f"<h2 style='color:{confidence_color};'>{confidence:.1f}%</h2>",
-                       unsafe_allow_html=True)
-            st.caption("Confidence Level")
-
-        with col3:
-            st.metric("🐂 Bullish Instruments", results['bullish_count'])
-
-        with col4:
-            st.metric("🐻 Bearish Instruments", results['bearish_count'])
-
-        # Bias distribution visualization
-        st.markdown("### 📊 Market Sentiment Distribution")
-        sentiment_df = pd.DataFrame({
-            'Sentiment': ['Bullish', 'Bearish', 'Neutral'],
-            'Count': [results['bullish_count'], results['bearish_count'], results['neutral_count']]
-        })
-        st.bar_chart(sentiment_df.set_index('Sentiment'))
-
-        st.divider()
-
-        # =====================================================================
-        # INDIVIDUAL INSTRUMENT ANALYSIS
-        # =====================================================================
-        st.subheader("📈 Individual Instrument Analysis")
-
-        for instrument in results['instruments']:
-            with st.expander(f"📊 {instrument['symbol']} - {instrument['overall_bias']} {('🐂' if instrument['overall_bias'] == 'BULLISH' else '🐻' if instrument['overall_bias'] == 'BEARISH' else '⚖️')}", expanded=True):
-
-                # Spot price and expiry
-                col1, col2, col3 = st.columns(3)
-
-                with col1:
-                    st.metric("Spot Price", f"₹{instrument['spot_price']:,.2f}")
-
-                with col2:
-                    st.metric("Expiry", instrument['expiry'])
-
-                with col3:
-                    bias_score = instrument['bias_score']
-                    score_color = "green" if bias_score > 0 else "red" if bias_score < 0 else "gray"
-                    st.markdown(f"<h3 style='color:{score_color};'>Score: {bias_score}</h3>",
-                               unsafe_allow_html=True)
-
-                st.markdown("---")
-
-                # PCR Ratios
-                st.markdown("**📊 Put-Call Ratio (PCR) Analysis**")
-
-                col1, col2, col3 = st.columns(3)
-
-                with col1:
-                    pcr_oi = instrument['pcr_oi']
-                    oi_bias = instrument['oi_bias']
-                    oi_color = "green" if oi_bias == "BULLISH" else "red" if oi_bias == "BEARISH" else "gray"
-
-                    st.markdown(f"**PCR (Total OI)**")
-                    st.markdown(f"<h3 style='color:{oi_color};'>{pcr_oi:.2f}</h3>", unsafe_allow_html=True)
-                    st.caption(f"{oi_bias} {'🐂' if oi_bias == 'BULLISH' else '🐻' if oi_bias == 'BEARISH' else '⚖️'}")
-
-                    st.caption("_PCR > 1.2: Bullish | PCR < 0.8: Bearish_")
-
-                with col2:
-                    pcr_change = instrument['pcr_change_oi']
-                    change_bias = instrument['change_oi_bias']
-                    change_color = "green" if change_bias == "BULLISH" else "red" if change_bias == "BEARISH" else "gray"
-
-                    st.markdown(f"**PCR (Change in OI)**")
-                    st.markdown(f"<h3 style='color:{change_color};'>{pcr_change:.2f}</h3>", unsafe_allow_html=True)
-                    st.caption(f"{change_bias} {'🐂' if change_bias == 'BULLISH' else '🐻' if change_bias == 'BEARISH' else '⚖️'}")
-
-                    st.caption("_More weighted - Recent activity_")
-
-                with col3:
-                    pcr_vol = instrument['pcr_volume']
-                    vol_bias = instrument['volume_bias']
-                    vol_color = "green" if vol_bias == "BULLISH" else "red" if vol_bias == "BEARISH" else "gray"
-
-                    st.markdown(f"**PCR (Volume)**")
-                    st.markdown(f"<h3 style='color:{vol_color};'>{pcr_vol:.2f}</h3>", unsafe_allow_html=True)
-                    st.caption(f"{vol_bias} {'🐂' if vol_bias == 'BULLISH' else '🐻' if vol_bias == 'BEARISH' else '⚖️'}")
-
-                st.markdown("---")
-
-                # Detailed OI breakdown
-                st.markdown("**📋 Detailed Open Interest Breakdown**")
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-                    st.markdown("**📉 CALL Side**")
-                    st.write(f"Total OI: {instrument['total_ce_oi']:,}")
-                    st.write(f"Change in OI: {instrument['total_ce_change']:+,}")
-                    st.write(f"Total Volume: {instrument['total_ce_volume']:,}")
-
-                with col2:
-                    st.markdown("**📈 PUT Side**")
-                    st.write(f"Total OI: {instrument['total_pe_oi']:,}")
-                    st.write(f"Change in OI: {instrument['total_pe_change']:+,}")
-                    st.write(f"Total Volume: {instrument['total_pe_volume']:,}")
-
-                # Visual comparison
-                st.markdown("**📊 OI Comparison**")
-
-                oi_comparison = pd.DataFrame({
-                    'Type': ['CALL OI', 'PUT OI', 'CALL ΔOI', 'PUT ΔOI'],
-                    'Value': [
-                        instrument['total_ce_oi'] / 100000,  # In lakhs
-                        instrument['total_pe_oi'] / 100000,
-                        abs(instrument['total_ce_change']) / 100000,
-                        abs(instrument['total_pe_change']) / 100000
-                    ]
-                })
-                st.bar_chart(oi_comparison.set_index('Type'))
-
-        st.divider()
-
-        # =====================================================================
-        # TRADING RECOMMENDATIONS
-        # =====================================================================
-        st.subheader("💡 Trading Recommendations")
-
-        market_bias = results['market_bias']
-        confidence = results['confidence']
-
-        if market_bias == "BULLISH" and confidence > 70:
-            st.success("### 🐂 STRONG BULLISH SIGNAL (Option Chain)")
-            st.info("""
-            **Based on Option Chain PCR Analysis:**
-            - ✅ High PUT OI compared to CALL OI
-            - ✅ PUT writing is dominant (Bearish premium sellers)
-            - ✅ Market expects upside movement
-
-            **Recommended Strategy:**
-            - Look for CALL buying opportunities on dips
-            - Sell PUT options at support levels
-            - Avoid naked CALL selling
-            """)
-        elif market_bias == "BULLISH" and confidence >= 50:
-            st.success("### 🐂 MODERATE BULLISH SIGNAL (Option Chain)")
-            st.info("""
-            **Based on Option Chain PCR Analysis:**
-            - ⚠️ Moderately high PUT OI
-            - ⚠️ Mixed signals from different instruments
-
-            **Recommended Strategy:**
-            - Consider CALL spreads instead of naked calls
-            - Use defined risk strategies
-            - Monitor PCR changes closely
-            """)
-        elif market_bias == "BEARISH" and confidence > 70:
-            st.error("### 🐻 STRONG BEARISH SIGNAL (Option Chain)")
-            st.info("""
-            **Based on Option Chain PCR Analysis:**
-            - ✅ High CALL OI compared to PUT OI
-            - ✅ CALL writing is dominant (Bullish premium sellers)
-            - ✅ Market expects downside movement
-
-            **Recommended Strategy:**
-            - Look for PUT buying opportunities on rallies
-            - Sell CALL options at resistance levels
-            - Avoid naked PUT selling
-            """)
-        elif market_bias == "BEARISH" and confidence >= 50:
-            st.error("### 🐻 MODERATE BEARISH SIGNAL (Option Chain)")
-            st.info("""
-            **Based on Option Chain PCR Analysis:**
-            - ⚠️ Moderately high CALL OI
-            - ⚠️ Mixed signals from different instruments
-
-            **Recommended Strategy:**
-            - Consider PUT spreads instead of naked puts
-            - Use defined risk strategies
-            - Monitor PCR changes closely
-            """)
-        else:
-            st.warning("### ⚖️ NEUTRAL SIGNAL (Option Chain)")
-            st.info("""
-            **Based on Option Chain PCR Analysis:**
-            - 🔄 Balanced PUT and CALL OI
-            - 🔄 No clear directional bias
-
-            **Recommended Strategy:**
-            - Use non-directional strategies (Iron Condor, Butterfly)
-            - Wait for clearer bias formation
-            - Reduce position sizes
-            - Focus on premium selling in range-bound conditions
-            """)
-
-        # PCR Interpretation Guide
-        st.divider()
-        st.markdown("### 📚 PCR Interpretation Guide")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.markdown("""
-            **Understanding PCR:**
-            - **PCR = PUT OI / CALL OI**
-            - PCR > 1.2: **Bullish** (More PUTs = Expecting UP move)
-            - PCR < 0.8: **Bearish** (More CALLs = Expecting DOWN move)
-            - PCR 0.8-1.2: **Neutral** (Balanced)
-            """)
-
-        with col2:
-            st.markdown("""
-            **Weight Priority:**
-            1. **PCR (Change in OI)** - Highest weight (Recent activity)
-            2. **PCR (Total OI)** - Medium weight (Overall sentiment)
-            3. **PCR (Volume)** - Lower weight (Trading activity)
-            """)
-
-        # Timestamp
-        st.caption(f"Data Updated: {results['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
-
-    else:
-        st.info("👆 Click 'Fetch All Data' button to analyze option chain")
-
-        st.markdown("""
-        ### About Option Chain Analysis
-
-        This tool analyzes NSE option chain data to provide comprehensive Put-Call Ratio (PCR) analysis:
-
-        #### 📊 Instruments Analyzed
-        - **NIFTY** - Nifty 50 Index Options
-        - **BANKNIFTY** - Bank Nifty Index Options
-        - **FINNIFTY** - Nifty Financial Services Options
-
-        #### 📈 PCR Ratios Calculated
-        1. **PCR (Total OI)**: PUT OI / CALL OI
-           - Shows overall market positioning
-           - Indicates long-term sentiment
-
-        2. **PCR (Change in OI)**: PUT ΔOI / CALL ΔOI
-           - Shows recent activity
-           - **Most important** - Higher weight in bias calculation
-           - Indicates fresh positions
-
-        3. **PCR (Volume)**: PUT Volume / CALL Volume
-           - Shows trading activity
-           - Indicates intraday sentiment
-
-        #### 🎯 Bias Calculation
-        - Each PCR ratio gets a bias (BULLISH/BEARISH/NEUTRAL)
-        - **Weighted scoring system:**
-          - Change in OI Bias: Weight = 5 (Most important)
-          - Total OI Bias: Weight = 3
-          - Volume Bias: Weight = 2
-        - Overall bias based on combined weighted score
-
-        #### 📊 Interpretation
-        - **PCR > 1.2**: Bullish (More PUT writers - Expect UP move)
-        - **PCR < 0.8**: Bearish (More CALL writers - Expect DOWN move)
-        - **PCR 0.8-1.2**: Neutral (Balanced)
-
-        #### ✅ How to Use
-        1. Click "Fetch All Data" to get latest NSE option chain
-        2. Review overall market bias
-        3. Check individual instrument PCR ratios
-        4. Review trading recommendations
-        5. Combine with other technical analysis for better decision making
-
-        **Note:** Option chain data is fetched live from NSE during market hours.
-        """)
-
+    with tab_overall:
+        # Overall Market Analysis with PCR
+        display_overall_option_chain_analysis(NSE_INSTRUMENTS)
 # ═══════════════════════════════════════════════════════════════════════
 # FOOTER
 # ═══════════════════════════════════════════════════════════════════════

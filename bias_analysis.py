@@ -101,8 +101,10 @@ class BiasAnalysisPro:
     # DATA FETCHING
     # =========================================================================
 
-    def fetch_data(self, symbol: str, period: str = '60d', interval: str = '1m') -> pd.DataFrame:
-        """Fetch data from Yahoo Finance"""
+    def fetch_data(self, symbol: str, period: str = '7d', interval: str = '5m') -> pd.DataFrame:
+        """Fetch data from Yahoo Finance
+        Note: Yahoo Finance limits intraday data - use 7d max for 5m interval
+        """
         try:
             ticker = yf.Ticker(symbol)
             df = ticker.history(period=period, interval=interval)
@@ -309,7 +311,8 @@ class BiasAnalysisPro:
 
         for symbol, weight in self.config['stocks'].items():
             try:
-                df = self.fetch_data(symbol, period='5d', interval='1m')
+                # Use 5d period with 5m interval (Yahoo Finance limitation for intraday data)
+                df = self.fetch_data(symbol, period='5d', interval='5m')
                 if df.empty or len(df) < 2:
                     continue
 
@@ -351,7 +354,8 @@ class BiasAnalysisPro:
         """
 
         print(f"Fetching data for {symbol}...")
-        df = self.fetch_data(symbol, period='60d', interval='1m')
+        # Use 7d period with 5m interval (Yahoo Finance limitation for intraday data)
+        df = self.fetch_data(symbol, period='7d', interval='5m')
 
         if df.empty or len(df) < 100:
             return {

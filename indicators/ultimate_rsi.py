@@ -50,11 +50,23 @@ class UltimateRSI:
         df['lower'] = df['low'].rolling(window=self.length).min()
         df['range'] = df['upper'] - df['lower']
 
+        # Calculate previous values for comparison
+        df['upper_prev'] = df['upper'].shift(1)
+        df['lower_prev'] = df['lower'].shift(1)
+
         # Calculate price change
         df['price_change'] = df['close'].diff()
 
-        # Calculate diff based on range changes
-        df['diff'] = df.apply(lambda row: self._calculate_diff(row), axis=1)
+        # Calculate diff based on range changes (vectorized approach)
+        df['diff'] = df['price_change'].copy()  # Default to price change
+
+        # Where upper increased
+        upper_increased = df['upper'] > df['upper_prev']
+        df.loc[upper_increased, 'diff'] = df.loc[upper_increased, 'range']
+
+        # Where lower decreased
+        lower_decreased = df['lower'] < df['lower_prev']
+        df.loc[lower_decreased, 'diff'] = -df.loc[lower_decreased, 'range']
 
         # Calculate numerator (smoothed diff)
         df['num'] = self._apply_smoothing(df['diff'], self.length, self.method)
@@ -84,29 +96,6 @@ class UltimateRSI:
             'ob_level': self.ob_level,
             'os_level': self.os_level
         }
-
-    def _calculate_diff(self, row):
-        """Calculate diff based on range changes"""
-        upper = row['upper']
-        upper_prev = row.name - 1
-
-        if upper_prev in row.index:
-            upper_prev_val = row['upper']
-        else:
-            upper_prev_val = upper
-
-        lower = row['lower']
-        r = row['range']
-        price_change = row['price_change']
-
-        # Check if upper increased
-        if upper > upper_prev_val:
-            return r
-        # Check if lower decreased
-        elif lower < (row.name - 1 if row.name > 0 else lower):
-            return -r
-        else:
-            return price_change
 
     def _apply_smoothing(self, series, length, method):
         """Apply smoothing based on method"""

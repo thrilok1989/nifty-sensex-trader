@@ -119,12 +119,21 @@ class HTFSupportResistance:
         Returns:
             DataFrame: Resampled dataframe
         """
+        # Make a copy to avoid modifying original
+        df = df.copy()
+
         # Ensure datetime index
         if not isinstance(df.index, pd.DatetimeIndex):
             if 'timestamp' in df.columns:
                 df = df.set_index('timestamp')
             elif 'datetime' in df.columns:
                 df = df.set_index('datetime')
+            else:
+                # Try to convert index to datetime
+                try:
+                    df.index = pd.to_datetime(df.index)
+                except Exception:
+                    pass
 
         # Map Pine Script timeframes to pandas resample strings
         timeframe_map = {

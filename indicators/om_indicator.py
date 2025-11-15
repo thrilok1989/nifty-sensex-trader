@@ -312,8 +312,8 @@ class OMIndicator:
                 smoothed.iloc[i] = upper_band.iloc[i]
 
         # Detect trend changes
-        trend_cross_up = (~is_trend_up.shift(1)) & is_trend_up
-        trend_cross_down = is_trend_up.shift(1) & (~is_trend_up)
+        trend_cross_up = (~is_trend_up.shift(1).fillna(False)) & is_trend_up
+        trend_cross_down = is_trend_up.shift(1).fillna(False) & (~is_trend_up)
 
         # Calculate volume delta
         up_volume = []

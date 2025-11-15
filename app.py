@@ -11,6 +11,7 @@ from strike_calculator import calculate_strike, calculate_levels
 from trade_executor import TradeExecutor
 from telegram_alerts import TelegramBot, send_test_message
 from dhan_api import check_dhan_connection
+from smart_trading_dashboard import SmartTradingDashboard
 
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE CONFIG
@@ -35,6 +36,12 @@ if 'last_refresh' not in st.session_state:
 
 if 'active_setup_id' not in st.session_state:
     st.session_state.active_setup_id = None
+
+if 'smart_dashboard' not in st.session_state:
+    st.session_state.smart_dashboard = SmartTradingDashboard()
+
+if 'dashboard_results' not in st.session_state:
+    st.session_state.dashboard_results = None
 
 # ═══════════════════════════════════════════════════════════════════════
 # AUTO REFRESH
@@ -148,7 +155,7 @@ st.divider()
 # TABS
 # ═══════════════════════════════════════════════════════════════════════
 
-tab1, tab2, tab3 = st.tabs(["🎯 Trade Setup", "📊 Active Signals", "📈 Positions"])
+tab1, tab2, tab3, tab4 = st.tabs(["🎯 Trade Setup", "📊 Active Signals", "📈 Positions", "📊 Smart Trading Dashboard"])
 
 # ═══════════════════════════════════════════════════════════════════════
 # TAB 1: TRADE SETUP
@@ -415,6 +422,277 @@ with tab3:
         
         except Exception as e:
             st.error(f"Error: {e}")
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 4: SMART TRADING DASHBOARD
+# ═══════════════════════════════════════════════════════════════════════
+
+with tab4:
+    st.header("📊 Smart Trading Dashboard")
+    st.caption("Adaptive Market Analysis with Volume Order Blocks")
+
+    # Analysis controls
+    col1, col2, col3 = st.columns([2, 1, 1])
+
+    with col1:
+        analyze_symbol = st.selectbox(
+            "Select Market",
+            ["^NSEI (NIFTY 50)", "^BSESN (SENSEX)", "^DJI (DOW JONES)"],
+            key="dashboard_symbol"
+        )
+        symbol = analyze_symbol.split()[0]
+
+    with col2:
+        if st.button("🔄 Analyze Market", type="primary", use_container_width=True):
+            with st.spinner("Analyzing market data..."):
+                try:
+                    results = st.session_state.smart_dashboard.analyze_market(symbol)
+                    st.session_state.dashboard_results = results
+                    st.success("✅ Analysis completed!")
+                except Exception as e:
+                    st.error(f"❌ Analysis failed: {e}")
+
+    with col3:
+        if st.session_state.dashboard_results:
+            if st.button("🗑️ Clear", use_container_width=True):
+                st.session_state.dashboard_results = None
+                st.rerun()
+
+    st.divider()
+
+    # Display results if available
+    if st.session_state.dashboard_results:
+        results = st.session_state.dashboard_results
+
+        # Market Overview
+        st.subheader("📈 Market Overview")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric(
+                "Current Price",
+                f"₹{results['current_price']:,.2f}"
+            )
+
+        with col2:
+            bias = results['market_bias']
+            bias_emoji = "🐂" if bias == "BULLISH" else "🐻" if bias == "BEARISH" else "⏸"
+            st.metric(
+                "Market Bias",
+                f"{bias} {bias_emoji}"
+            )
+
+        with col3:
+            st.metric(
+                "Condition",
+                results['market_condition']
+            )
+
+        with col4:
+            mode = "⚡ REVERSAL" if results['bias_data']['reversal_mode'] else "📊 NORMAL"
+            st.metric(
+                "Mode",
+                mode
+            )
+
+        st.divider()
+
+        # Bias Analysis
+        st.subheader("🎯 Market Bias Analysis")
+
+        bias_data = results['bias_data']
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**Overall Bias**")
+            bias_df = pd.DataFrame({
+                'Type': ['Bullish', 'Bearish'],
+                'Percentage': [bias_data['bullish_bias_pct'], bias_data['bearish_bias_pct']]
+            })
+            st.bar_chart(bias_df.set_index('Type'))
+
+        with col2:
+            st.markdown("**Signal Breakdown**")
+            signal_df = pd.DataFrame({
+                'Signal Type': ['Fast (Technical)', 'Medium (Price)', 'Slow (Stocks)'],
+                'Bullish %': [
+                    bias_data['fast_bull_pct'],
+                    bias_data['medium_bull_pct'],
+                    bias_data['slow_bull_pct']
+                ],
+                'Bearish %': [
+                    bias_data['fast_bear_pct'],
+                    bias_data['medium_bear_pct'],
+                    bias_data['slow_bear_pct']
+                ]
+            })
+            st.dataframe(signal_df, use_container_width=True, hide_index=True)
+
+        # Divergence alerts
+        if bias_data['divergence_detected']:
+            if bias_data['bullish_divergence']:
+                st.warning("⚠️ **BULLISH DIVERGENCE** - Reversal UP possible!")
+            if bias_data['bearish_divergence']:
+                st.warning("⚠️ **BEARISH DIVERGENCE** - Reversal DOWN possible!")
+
+        st.divider()
+
+        # Technical Indicators
+        st.subheader("🔧 Technical Indicators")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        ind = results['indicators']
+
+        with col1:
+            st.metric("RSI", f"{ind['rsi']:.2f}",
+                     delta="Bullish" if ind['rsi'] > 50 else "Bearish",
+                     delta_color="normal")
+
+        with col2:
+            st.metric("MFI", f"{ind['mfi']:.2f}",
+                     delta="Bullish" if ind['mfi'] > 50 else "Bearish",
+                     delta_color="normal")
+
+        with col3:
+            st.metric("ADX", f"{ind['adx']:.2f}",
+                     delta="Strong" if ind['adx'] >= 25 else "Weak",
+                     delta_color="normal")
+
+        with col4:
+            vwap_signal = "Above" if results['current_price'] > ind['vwap'] else "Below"
+            st.metric("VWAP", f"₹{ind['vwap']:.2f}",
+                     delta=vwap_signal,
+                     delta_color="normal")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            di_signal = "Bullish" if ind['plus_di'] > ind['minus_di'] else "Bearish"
+            st.metric("DI+ vs DI-", f"{ind['plus_di']:.2f} vs {ind['minus_di']:.2f}",
+                     delta=di_signal,
+                     delta_color="normal")
+
+        st.divider()
+
+        # Market Condition Details
+        st.subheader("🎯 Market Condition Details")
+
+        range_data = results['range_data']
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("Movement Quality", range_data['movement_quality'])
+
+        with col2:
+            st.metric("Range %", f"{range_data['range_pct']:.2f}%")
+
+        with col3:
+            st.metric("EMA Spread %", f"{range_data['ema_spread_pct']:.2f}%")
+
+        if results['market_condition'] == "RANGE-BOUND":
+            st.info("📦 **Market is RANGE-BOUND** - Range trading recommended")
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.metric("Range High", f"₹{range_data['range_high']:.2f}")
+
+            with col2:
+                st.metric("Range Mid", f"₹{range_data['range_mid']:.2f}")
+
+            with col3:
+                st.metric("Range Low", f"₹{range_data['range_low']:.2f}")
+
+        st.divider()
+
+        # Stocks Performance
+        st.subheader("📊 Top Stocks Performance")
+
+        if results.get('stock_data_table'):
+            # Convert to DataFrame for better display
+            stock_df = pd.DataFrame(
+                results['stock_data_table'],
+                columns=["Symbol", "LTP", "Change", "Change%", "15m%", "1h%", "Status"]
+            )
+            st.dataframe(stock_df, use_container_width=True, hide_index=True)
+
+        # Market averages
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("Market Avg (Daily)", f"{bias_data['weighted_avg_daily']:.2f}%")
+
+        with col2:
+            st.metric("Market Avg (15m)", f"{bias_data['weighted_avg_tf1']:.2f}%")
+
+        with col3:
+            st.metric("Market Avg (1h)", f"{bias_data['weighted_avg_tf2']:.2f}%")
+
+        st.divider()
+
+        # Trading Signal
+        st.subheader("🎯 Trading Signal")
+
+        bias = results['bias_data']['market_bias']
+        condition = results['market_condition']
+
+        if bias == "BULLISH":
+            st.success("🐂 **BULLISH SIGNAL**")
+            st.info("**Strategy:** Wait for support level touch for LONG entry")
+            if condition == "RANGE-BOUND":
+                st.write(f"**Entry Zone:** Near Range Low ₹{range_data['range_low']:.2f}")
+                st.write(f"**Target:** Range High ₹{range_data['range_high']:.2f}")
+            else:
+                st.write("**Entry:** Wait for pivot support level")
+
+        elif bias == "BEARISH":
+            st.error("🐻 **BEARISH SIGNAL**")
+            st.info("**Strategy:** Wait for resistance level touch for SHORT entry")
+            if condition == "RANGE-BOUND":
+                st.write(f"**Entry Zone:** Near Range High ₹{range_data['range_high']:.2f}")
+                st.write(f"**Target:** Range Low ₹{range_data['range_low']:.2f}")
+            else:
+                st.write("**Entry:** Wait for pivot resistance level")
+
+        else:
+            st.warning("⏸ **NEUTRAL - NO CLEAR SIGNAL**")
+            st.info("**Strategy:** Wait for clear bias formation")
+
+        if results['bias_data']['divergence_detected']:
+            st.warning("⚠️ **WARNING:** Divergence detected - Reversal possible!")
+
+        if condition == "RANGE-BOUND":
+            st.info("📦 Market is RANGE-BOUND - Range trading recommended")
+
+        # Timestamp
+        st.caption(f"Analysis Time: {results['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
+
+    else:
+        st.info("👆 Click 'Analyze Market' button to start analysis")
+
+        st.markdown("""
+        ### About Smart Trading Dashboard
+
+        This dashboard provides comprehensive market analysis using:
+
+        - **Adaptive Bias Calculation**: 3-tier signal system (Fast/Medium/Slow)
+        - **Volume Order Blocks**: EMA-based order block detection
+        - **Range Detection**: Identifies range-bound vs trending markets
+        - **Technical Indicators**: RSI, MFI, DMI, VWAP, VIDYA, ATR
+        - **Multi-Stock Analysis**: Analyzes top 9 NSE stocks for weighted bias
+        - **Divergence Detection**: Identifies potential reversals
+        - **Reversal Mode**: Adaptive weights when divergence is detected
+
+        **How to use:**
+        1. Select the market to analyze
+        2. Click "Analyze Market" button
+        3. Review the comprehensive analysis and trading signals
+        4. Use the signals to inform your trading decisions
+        """)
 
 # ═══════════════════════════════════════════════════════════════════════
 # FOOTER

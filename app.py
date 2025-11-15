@@ -22,6 +22,7 @@ from smart_trading_dashboard import SmartTradingDashboard
 from bias_analysis import BiasAnalysisPro
 from option_chain_analysis import OptionChainAnalyzer
 from nse_options_helpers import *
+from advanced_chart_analysis import AdvancedChartAnalysis
 
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE CONFIG
@@ -67,6 +68,12 @@ if 'option_chain_results' not in st.session_state:
 
 if 'active_tab' not in st.session_state:
     st.session_state.active_tab = 0
+
+if 'advanced_chart_analyzer' not in st.session_state:
+    st.session_state.advanced_chart_analyzer = AdvancedChartAnalysis()
+
+if 'chart_data' not in st.session_state:
+    st.session_state.chart_data = None
 
 # NSE Options Analyzer - Initialize instruments session state
 NSE_INSTRUMENTS = {
@@ -218,7 +225,7 @@ st.divider()
 # ═══════════════════════════════════════════════════════════════════════
 
 # Tab selector that persists across reruns
-tab_options = ["🎯 Trade Setup", "📊 Active Signals", "📈 Positions", "📊 Smart Trading Dashboard", "🎯 Bias Analysis Pro", "📊 Option Chain Analysis"]
+tab_options = ["🎯 Trade Setup", "📊 Active Signals", "📈 Positions", "📊 Smart Trading Dashboard", "🎯 Bias Analysis Pro", "📊 Option Chain Analysis", "📈 Advanced Chart Analysis"]
 selected_tab = st.radio("Select Tab", tab_options, index=st.session_state.active_tab, horizontal=True, key="tab_selector", label_visibility="collapsed")
 
 # Update active tab in session state
@@ -1188,6 +1195,245 @@ if selected_tab == "📊 Option Chain Analysis":
     with tab_overall:
         # Overall Market Analysis with PCR
         display_overall_option_chain_analysis(NSE_INSTRUMENTS)
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 7: ADVANCED CHART ANALYSIS
+# ═══════════════════════════════════════════════════════════════════════
+
+if selected_tab == "📈 Advanced Chart Analysis":
+    st.header("📈 Advanced Chart Analysis")
+    st.caption("TradingView-style Chart with 4 Advanced Indicators: Volume Order Blocks, HTF Support/Resistance, Volume Footprint, Ultimate RSI")
+
+    # Chart controls
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+
+    with col1:
+        chart_symbol = st.selectbox(
+            "Select Market",
+            ["^NSEI (NIFTY 50)", "^BSESN (SENSEX)", "^DJI (DOW JONES)"],
+            key="chart_symbol"
+        )
+        symbol_code = chart_symbol.split()[0]
+
+    with col2:
+        chart_period = st.selectbox(
+            "Period",
+            ["1d", "5d", "1mo"],
+            index=0,
+            key="chart_period"
+        )
+
+    with col3:
+        chart_interval = st.selectbox(
+            "Interval",
+            ["1m", "5m", "15m", "1h"],
+            index=0,
+            key="chart_interval"
+        )
+
+    with col4:
+        if st.button("🔄 Load Chart", type="primary", use_container_width=True):
+            with st.spinner("Loading chart data and calculating indicators..."):
+                try:
+                    # Fetch data
+                    df = st.session_state.advanced_chart_analyzer.fetch_intraday_data(
+                        symbol_code, period=chart_period, interval=chart_interval
+                    )
+
+                    if df is not None and len(df) > 0:
+                        st.session_state.chart_data = df
+                        st.success(f"✅ Loaded {len(df)} candles")
+                    else:
+                        st.error("❌ Failed to fetch data. Try a different period or interval.")
+                        st.session_state.chart_data = None
+
+                except Exception as e:
+                    st.error(f"❌ Error loading chart: {e}")
+                    st.session_state.chart_data = None
+
+    st.divider()
+
+    # Indicator toggles
+    st.subheader("🔧 Indicator Settings")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        show_vob = st.checkbox("📦 Volume Order Blocks", value=True, key="show_vob")
+
+    with col2:
+        show_htf_sr = st.checkbox("📊 HTF Support/Resistance", value=True, key="show_htf_sr")
+
+    with col3:
+        show_footprint = st.checkbox("👣 Volume Footprint", value=True, key="show_footprint")
+
+    with col4:
+        show_rsi = st.checkbox("📈 Ultimate RSI", value=True, key="show_rsi")
+
+    st.divider()
+
+    # Display chart if data is available
+    if st.session_state.chart_data is not None:
+        try:
+            with st.spinner("Rendering chart with indicators..."):
+                # Create chart with selected indicators
+                fig = st.session_state.advanced_chart_analyzer.create_advanced_chart(
+                    st.session_state.chart_data,
+                    symbol_code,
+                    show_vob=show_vob,
+                    show_htf_sr=show_htf_sr,
+                    show_footprint=show_footprint,
+                    show_rsi=show_rsi
+                )
+
+                # Display chart
+                st.plotly_chart(fig, use_container_width=True)
+
+                # Chart statistics
+                st.subheader("📊 Chart Statistics")
+
+                col1, col2, col3, col4, col5 = st.columns(5)
+
+                df_stats = st.session_state.chart_data
+
+                with col1:
+                    st.metric("Current Price", f"₹{df_stats['close'].iloc[-1]:,.2f}")
+
+                with col2:
+                    price_change = df_stats['close'].iloc[-1] - df_stats['close'].iloc[0]
+                    price_change_pct = (price_change / df_stats['close'].iloc[0]) * 100
+                    st.metric("Change", f"₹{price_change:,.2f}", delta=f"{price_change_pct:.2f}%")
+
+                with col3:
+                    st.metric("High", f"₹{df_stats['high'].max():,.2f}")
+
+                with col4:
+                    st.metric("Low", f"₹{df_stats['low'].min():,.2f}")
+
+                with col5:
+                    avg_volume = df_stats['volume'].mean()
+                    st.metric("Avg Volume", f"{avg_volume:,.0f}")
+
+                # Trading signals based on indicators
+                st.divider()
+                st.subheader("🎯 Trading Signals")
+
+                if show_rsi:
+                    from indicators.ultimate_rsi import UltimateRSI
+                    rsi_indicator = UltimateRSI()
+                    rsi_signals = rsi_indicator.get_signals(df_stats)
+
+                    latest_rsi = rsi_signals['ultimate_rsi'][-1]
+                    latest_signal = rsi_signals['signal'][-1]
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        st.markdown("**Ultimate RSI Analysis**")
+                        rsi_state = "Overbought" if latest_rsi > 80 else "Oversold" if latest_rsi < 20 else "Neutral"
+                        rsi_color = "red" if latest_rsi > 80 else "green" if latest_rsi < 20 else "gray"
+
+                        st.markdown(f"Current RSI: <span style='color:{rsi_color}; font-size:24px;'>{latest_rsi:.2f}</span>", unsafe_allow_html=True)
+                        st.write(f"Signal Line: {latest_signal:.2f}")
+                        st.write(f"State: **{rsi_state}**")
+
+                    with col2:
+                        st.markdown("**RSI Trading Recommendation**")
+                        if latest_rsi > 80:
+                            st.warning("⚠️ **OVERBOUGHT** - Consider taking profits or waiting for pullback")
+                        elif latest_rsi < 20:
+                            st.success("✅ **OVERSOLD** - Potential buying opportunity")
+                        elif latest_rsi > latest_signal:
+                            st.info("📈 **BULLISH** - RSI above signal line")
+                        elif latest_rsi < latest_signal:
+                            st.info("📉 **BEARISH** - RSI below signal line")
+                        else:
+                            st.info("⏸ **NEUTRAL** - No clear signal")
+
+                if show_vob:
+                    from indicators.volume_order_blocks import VolumeOrderBlocks
+                    vob_indicator = VolumeOrderBlocks()
+                    vob_data = vob_indicator.calculate(df_stats)
+
+                    st.divider()
+                    st.markdown("**Volume Order Blocks**")
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        st.write(f"🟢 **Bullish OBs:** {len([b for b in vob_data['bullish_blocks'] if b['active']])}")
+                        if len(vob_data['bullish_blocks']) > 0:
+                            for i, block in enumerate(vob_data['bullish_blocks'][-3:]):
+                                if block['active']:
+                                    st.write(f"  - Support: {block['lower']:.2f} - {block['upper']:.2f}")
+
+                    with col2:
+                        st.write(f"🔴 **Bearish OBs:** {len([b for b in vob_data['bearish_blocks'] if b['active']])}")
+                        if len(vob_data['bearish_blocks']) > 0:
+                            for i, block in enumerate(vob_data['bearish_blocks'][-3:]):
+                                if block['active']:
+                                    st.write(f"  - Resistance: {block['lower']:.2f} - {block['upper']:.2f}")
+
+                # Data table
+                st.divider()
+                st.subheader("📋 Recent Candles Data")
+
+                # Show last 20 candles
+                display_df = df_stats.tail(20).copy()
+                display_df = display_df.reset_index()
+
+                if 'timestamp' in display_df.columns:
+                    display_df['timestamp'] = display_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M')
+                elif display_df.index.name == 'Datetime':
+                    display_df['Time'] = display_df.index.strftime('%Y-%m-%d %H:%M')
+
+                st.dataframe(display_df[['open', 'high', 'low', 'close', 'volume']].tail(20),
+                           use_container_width=True)
+
+        except Exception as e:
+            st.error(f"❌ Error rendering chart: {e}")
+            st.write("Error details:", str(e))
+
+    else:
+        st.info("👆 Click 'Load Chart' button to display the advanced chart")
+
+        st.markdown("""
+        ### About Advanced Chart Analysis
+
+        This advanced charting module provides professional-grade technical analysis with 4 powerful indicators:
+
+        #### 📦 Volume Order Blocks (BigBeluga)
+        - Detects institutional order blocks based on volume and EMA crossovers
+        - Shows bullish (support) and bearish (resistance) zones
+        - Helps identify high-probability entry/exit zones
+
+        #### 📊 HTF Support/Resistance (BigBeluga)
+        - Multi-timeframe pivot analysis (4H, 12H, Daily, Weekly)
+        - Identifies key support and resistance levels
+        - Non-repainting pivot detection
+
+        #### 👣 Real-Time HTF Volume Footprint (BigBeluga)
+        - Volume distribution across price levels
+        - Point of Control (POC) - highest volume traded price
+        - Value Area - where 70% of volume occurred
+
+        #### 📈 Ultimate RSI (LuxAlgo)
+        - Enhanced RSI using price range instead of just price change
+        - More responsive to market conditions
+        - Signal line for trend confirmation
+        - Overbought/Oversold detection
+
+        #### 🎯 How to Use
+        1. Select market (NIFTY, SENSEX, or DOW)
+        2. Choose period and interval (default: 1 day, 1 minute)
+        3. Click "Load Chart" to fetch data
+        4. Toggle indicators on/off as needed
+        5. Analyze chart and trading signals
+        6. Use signals to inform your trading decisions
+
+        **Note:** All indicators are converted from Pine Script with high accuracy and optimized for Python/Plotly.
+        """)
+
 # ═══════════════════════════════════════════════════════════════════════
 # FOOTER
 # ═══════════════════════════════════════════════════════════════════════

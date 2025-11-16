@@ -233,7 +233,7 @@ st.session_state.active_tab = tab_options.index(selected_tab)
 # ═══════════════════════════════════════════════════════════════════════
 
 if selected_tab == "🌟 Overall Market Sentiment":
-    render_overall_market_sentiment()
+    render_overall_market_sentiment(NSE_INSTRUMENTS)
 
 # ═══════════════════════════════════════════════════════════════════════
 # TAB 2: TRADE SETUP

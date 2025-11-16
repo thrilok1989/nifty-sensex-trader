@@ -6,6 +6,7 @@ Aggregates bias data from all tabs in the application to provide a unified marke
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from nse_options_helpers import fetch_option_chain_data
 
 
 def calculate_overall_sentiment():
@@ -179,7 +180,74 @@ def calculate_overall_sentiment():
     }
 
 
-def render_overall_market_sentiment():
+def run_all_analyses(NSE_INSTRUMENTS):
+    """
+    Runs all three analyses and stores results in session state:
+    1. Smart Trading Dashboard
+    2. Bias Analysis Pro
+    3. Option Chain Analysis
+    """
+    success = True
+    errors = []
+
+    try:
+        # 1. Run Smart Trading Dashboard Analysis
+        with st.spinner("📊 Running Smart Trading Dashboard analysis..."):
+            try:
+                symbol = "^NSEI"  # NIFTY 50
+                results = st.session_state.smart_dashboard.analyze_market(symbol)
+                st.session_state.dashboard_results = results
+                st.success("✅ Smart Trading Dashboard analysis completed!")
+            except Exception as e:
+                errors.append(f"Smart Trading Dashboard: {str(e)}")
+                success = False
+
+        # 2. Run Bias Analysis Pro
+        with st.spinner("🎯 Running Bias Analysis Pro..."):
+            try:
+                symbol = "^NSEI"  # NIFTY 50
+                results = st.session_state.bias_analyzer.analyze_all_bias_indicators(symbol)
+                st.session_state.bias_analysis_results = results
+                if results.get('success'):
+                    st.success("✅ Bias Analysis Pro completed!")
+                else:
+                    errors.append(f"Bias Analysis Pro: {results.get('error', 'Unknown error')}")
+                    success = False
+            except Exception as e:
+                errors.append(f"Bias Analysis Pro: {str(e)}")
+                success = False
+
+        # 3. Run Option Chain Analysis for all instruments
+        with st.spinner("📊 Running Option Chain Analysis for all instruments..."):
+            try:
+                overall_data = {}
+                all_instruments = list(NSE_INSTRUMENTS['indices'].keys()) + list(NSE_INSTRUMENTS['stocks'].keys())
+
+                # Create a progress bar
+                progress_bar = st.progress(0)
+                progress_text = st.empty()
+
+                for idx, instrument in enumerate(all_instruments):
+                    progress_text.text(f"Analyzing {instrument}... ({idx + 1}/{len(all_instruments)})")
+                    data = fetch_option_chain_data(instrument, NSE_INSTRUMENTS)
+                    overall_data[instrument] = data
+                    progress_bar.progress((idx + 1) / len(all_instruments))
+
+                st.session_state['overall_option_data'] = overall_data
+                progress_text.empty()
+                st.success("✅ Option Chain Analysis completed!")
+            except Exception as e:
+                errors.append(f"Option Chain Analysis: {str(e)}")
+                success = False
+
+    except Exception as e:
+        errors.append(f"Overall error: {str(e)}")
+        success = False
+
+    return success, errors
+
+
+def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     """
     Renders the Overall Market Sentiment tab
     """
@@ -191,8 +259,29 @@ def render_overall_market_sentiment():
 
     if not result['data_available']:
         st.warning("⚠️ No data available. Please navigate to other tabs to generate bias data first.")
+
+        # Add "Show Bias" button
+        if NSE_INSTRUMENTS is not None:
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                if st.button("🎯 Show Bias", type="primary", use_container_width=True, key="show_bias_button"):
+                    success, errors = run_all_analyses(NSE_INSTRUMENTS)
+
+                    if success:
+                        st.balloons()
+                        st.success("🎉 All analyses completed successfully! Refreshing results...")
+                        st.rerun()
+                    else:
+                        st.error("❌ Some analyses failed:")
+                        for error in errors:
+                            st.error(f"  - {error}")
+
         st.info("""
         **How to use this tab:**
+
+        **Option 1 (Recommended):** Click the **"Show Bias"** button above to automatically run all analyses and display the aggregated market sentiment.
+
+        **Option 2 (Manual):**
         1. Visit the **Smart Trading Dashboard** tab to generate trading signals
         2. Visit the **Bias Analysis Pro** tab to analyze technical indicators
         3. Visit the **Option Chain Analysis** tab to analyze options data
@@ -407,6 +496,23 @@ def render_overall_market_sentiment():
     st.markdown("---")
     st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-    # Refresh button
-    if st.button("🔄 Refresh Analysis", use_container_width=True):
-        st.rerun()
+    # Action buttons
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("🔄 Refresh Analysis", use_container_width=True):
+            st.rerun()
+
+    with col2:
+        if NSE_INSTRUMENTS is not None:
+            if st.button("🎯 Re-run All Analyses", type="primary", use_container_width=True, key="rerun_bias_button"):
+                success, errors = run_all_analyses(NSE_INSTRUMENTS)
+
+                if success:
+                    st.balloons()
+                    st.success("🎉 All analyses completed successfully! Refreshing results...")
+                    st.rerun()
+                else:
+                    st.error("❌ Some analyses failed:")
+                    for error in errors:
+                        st.error(f"  - {error}")

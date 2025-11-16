@@ -23,6 +23,7 @@ from bias_analysis import BiasAnalysisPro
 from option_chain_analysis import OptionChainAnalyzer
 from nse_options_helpers import *
 from advanced_chart_analysis import AdvancedChartAnalysis
+from overall_market_sentiment import render_overall_market_sentiment
 
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE CONFIG
@@ -221,17 +222,24 @@ st.divider()
 # ═══════════════════════════════════════════════════════════════════════
 
 # Tab selector that persists across reruns
-tab_options = ["🎯 Trade Setup", "📊 Active Signals", "📈 Positions", "📊 Smart Trading Dashboard", "🎯 Bias Analysis Pro", "📊 Option Chain Analysis", "📈 Advanced Chart Analysis"]
+tab_options = ["🌟 Overall Market Sentiment", "🎯 Trade Setup", "📊 Active Signals", "📈 Positions", "📊 Smart Trading Dashboard", "🎯 Bias Analysis Pro", "📊 Option Chain Analysis", "📈 Advanced Chart Analysis"]
 selected_tab = st.radio("Select Tab", tab_options, index=st.session_state.active_tab, horizontal=True, key="tab_selector", label_visibility="collapsed")
 
 # Update active tab in session state
 st.session_state.active_tab = tab_options.index(selected_tab)
 
 # ═══════════════════════════════════════════════════════════════════════
-# TAB 1: TRADE SETUP
+# TAB 1: OVERALL MARKET SENTIMENT
 # ═══════════════════════════════════════════════════════════════════════
 
-if selected_tab == "🎯 Trade Setup":
+if selected_tab == "🌟 Overall Market Sentiment":
+    render_overall_market_sentiment()
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 2: TRADE SETUP
+# ═══════════════════════════════════════════════════════════════════════
+
+elif selected_tab == "🎯 Trade Setup":
     st.header("🎯 Create New Trade Setup")
     
     col1, col2 = st.columns(2)
@@ -333,7 +341,7 @@ if selected_tab == "🎯 Trade Setup":
 # TAB 2: ACTIVE SIGNALS
 # ═══════════════════════════════════════════════════════════════════════
 
-if selected_tab == "📊 Active Signals":
+elif selected_tab == "📊 Active Signals":
     st.header("📊 Active Signal Setups")
     
     active_setups = st.session_state.signal_manager.get_active_setups()
@@ -437,7 +445,7 @@ if selected_tab == "📊 Active Signals":
 # TAB 3: POSITIONS
 # ═══════════════════════════════════════════════════════════════════════
 
-if selected_tab == "📈 Positions":
+elif selected_tab == "📈 Positions":
     st.header("📈 Active Positions")
     
     if DEMO_MODE:
@@ -497,7 +505,7 @@ if selected_tab == "📈 Positions":
 # TAB 4: SMART TRADING DASHBOARD
 # ═══════════════════════════════════════════════════════════════════════
 
-if selected_tab == "📊 Smart Trading Dashboard":
+elif selected_tab == "📊 Smart Trading Dashboard":
     st.header("📊 Smart Trading Dashboard")
     st.caption("Adaptive Market Analysis with Volume Order Blocks")
 
@@ -768,7 +776,7 @@ if selected_tab == "📊 Smart Trading Dashboard":
 # TAB 5: BIAS ANALYSIS PRO
 # ═══════════════════════════════════════════════════════════════════════
 
-if selected_tab == "🎯 Bias Analysis Pro":
+elif selected_tab == "🎯 Bias Analysis Pro":
     st.header("🎯 Comprehensive Bias Analysis Pro")
     st.caption("15+ Bias Indicators with Weighted Scoring System | Converted from Pine Script")
 
@@ -1150,7 +1158,7 @@ if selected_tab == "🎯 Bias Analysis Pro":
 # TAB 6: OPTION CHAIN ANALYSIS (NSE Options Analyzer)
 # ═══════════════════════════════════════════════════════════════════════
 
-if selected_tab == "📊 Option Chain Analysis":
+elif selected_tab == "📊 Option Chain Analysis":
     st.header("📊 NSE Options Analyzer")
     st.caption("Comprehensive Option Chain Analysis with Bias Detection, Support/Resistance Zones, and Trade Signals")
 
@@ -1196,7 +1204,7 @@ if selected_tab == "📊 Option Chain Analysis":
 # TAB 7: ADVANCED CHART ANALYSIS
 # ═══════════════════════════════════════════════════════════════════════
 
-if selected_tab == "📈 Advanced Chart Analysis":
+elif selected_tab == "📈 Advanced Chart Analysis":
     st.header("📈 Advanced Chart Analysis")
     st.caption("TradingView-style Chart with 5 Advanced Indicators: Volume Order Blocks, HTF Support/Resistance (3min, 5min, 10min, 15min levels), Volume Footprint (1D timeframe, 10 bins, Dynamic POC), Ultimate RSI, OM Indicator (Order Flow & Momentum)")
 

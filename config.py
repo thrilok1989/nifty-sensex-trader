@@ -52,6 +52,9 @@ VOB_TOUCH_TOLERANCE = 5  # Points
 # UI SETTINGS
 # ═══════════════════════════════════════════════════════════════════════
 
+# Auto-refresh interval: 60 seconds (1 minute)
+# Data is fetched sequentially with 10-second intervals within each cycle:
+# 0-10s: Chart data, 10-20s: OHLC data, 20-30s: Expiry list, 30-40s: Option chain
 AUTO_REFRESH_INTERVAL = 60  # seconds
 DEMO_MODE = False
 

@@ -1,5 +1,4 @@
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
 import requests
 import pandas as pd
 import numpy as np
@@ -12,7 +11,7 @@ import io
 
 # === Streamlit Config ===
 st.set_page_config(page_title="NSE Options Analyzer", layout="wide")
-st_autorefresh(interval=1200000, key="datarefresh")  # 20 minutes
+# Auto-refresh removed - controlled by main app (60-second cycle)
 
 # Define all instruments we'll analyze
 INSTRUMENTS = {

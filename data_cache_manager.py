@@ -1,0 +1,422 @@
+"""
+Data Cache Manager with Background Loading
+===========================================
+
+This module provides:
+- Thread-safe caching for all data sources
+- Background data loading and auto-refresh
+- Pre-loading of all tab data on startup
+- 1-minute refresh cycle with 10-second interval updates
+- Smart cache invalidation and updates
+
+Cache Strategy:
+- NIFTY/SENSEX data: 60-second TTL, background refresh every 10 seconds
+- Smart Dashboard: 60-second TTL, background refresh
+- Bias Analysis: 60-second TTL, background refresh
+- Option Chain: 60-second TTL, background refresh
+- Advanced Charts: 60-second TTL, background refresh
+"""
+
+import threading
+import time
+from datetime import datetime, timedelta
+from typing import Any, Dict, Optional, Callable
+import streamlit as st
+import pandas as pd
+from functools import wraps
+
+
+class DataCacheManager:
+    """
+    Thread-safe data cache manager with background loading and auto-refresh
+    """
+
+    def __init__(self):
+        """Initialize cache manager"""
+        self._cache = {}
+        self._cache_timestamps = {}
+        self._cache_locks = {}
+        self._background_threads = {}
+        self._stop_threads = threading.Event()
+        self._main_lock = threading.Lock()
+
+        # Cache TTLs (in seconds)
+        self.ttl_config = {
+            'nifty_data': 60,
+            'sensex_data': 60,
+            'smart_dashboard': 60,
+            'bias_analysis': 60,
+            'option_chain': 60,
+            'advanced_chart': 60,
+        }
+
+        # Background refresh intervals (in seconds)
+        self.refresh_intervals = {
+            'market_data': 10,      # NIFTY/SENSEX every 10 seconds
+            'analysis_data': 60,    # All analysis every 60 seconds
+        }
+
+    def _get_lock(self, cache_key: str) -> threading.Lock:
+        """Get or create a lock for a cache key"""
+        with self._main_lock:
+            if cache_key not in self._cache_locks:
+                self._cache_locks[cache_key] = threading.Lock()
+            return self._cache_locks[cache_key]
+
+    def get(self, cache_key: str, default=None) -> Any:
+        """
+        Get value from cache
+
+        Args:
+            cache_key: Cache key
+            default: Default value if not found
+
+        Returns:
+            Cached value or default
+        """
+        lock = self._get_lock(cache_key)
+        with lock:
+            if cache_key in self._cache:
+                # Check if cache is still valid
+                if cache_key in self.ttl_config:
+                    ttl = self.ttl_config[cache_key]
+                    timestamp = self._cache_timestamps.get(cache_key, 0)
+                    if time.time() - timestamp < ttl:
+                        return self._cache[cache_key]
+                else:
+                    # No TTL configured, return cached value
+                    return self._cache[cache_key]
+
+            return default
+
+    def set(self, cache_key: str, value: Any):
+        """
+        Set value in cache
+
+        Args:
+            cache_key: Cache key
+            value: Value to cache
+        """
+        lock = self._get_lock(cache_key)
+        with lock:
+            self._cache[cache_key] = value
+            self._cache_timestamps[cache_key] = time.time()
+
+    def invalidate(self, cache_key: str):
+        """
+        Invalidate cache entry
+
+        Args:
+            cache_key: Cache key to invalidate
+        """
+        lock = self._get_lock(cache_key)
+        with lock:
+            if cache_key in self._cache:
+                del self._cache[cache_key]
+            if cache_key in self._cache_timestamps:
+                del self._cache_timestamps[cache_key]
+
+    def is_valid(self, cache_key: str) -> bool:
+        """
+        Check if cache entry is valid
+
+        Args:
+            cache_key: Cache key
+
+        Returns:
+            True if cache is valid, False otherwise
+        """
+        lock = self._get_lock(cache_key)
+        with lock:
+            if cache_key not in self._cache:
+                return False
+
+            if cache_key in self.ttl_config:
+                ttl = self.ttl_config[cache_key]
+                timestamp = self._cache_timestamps.get(cache_key, 0)
+                return time.time() - timestamp < ttl
+
+            return True
+
+    def get_or_load(self, cache_key: str, loader_func: Callable, *args, **kwargs) -> Any:
+        """
+        Get from cache or load using loader function
+
+        Args:
+            cache_key: Cache key
+            loader_func: Function to load data if not cached
+            *args: Arguments for loader function
+            **kwargs: Keyword arguments for loader function
+
+        Returns:
+            Cached or loaded value
+        """
+        # Try to get from cache first
+        cached_value = self.get(cache_key)
+        if cached_value is not None:
+            return cached_value
+
+        # Load data
+        try:
+            value = loader_func(*args, **kwargs)
+            self.set(cache_key, value)
+            return value
+        except Exception as e:
+            # Return cached value even if expired, better than nothing
+            lock = self._get_lock(cache_key)
+            with lock:
+                if cache_key in self._cache:
+                    return self._cache[cache_key]
+            raise e
+
+    def start_background_refresh(self, cache_key: str, loader_func: Callable,
+                                 interval: int = 60, *args, **kwargs):
+        """
+        Start background refresh for a cache key
+
+        Args:
+            cache_key: Cache key
+            loader_func: Function to load data
+            interval: Refresh interval in seconds
+            *args: Arguments for loader function
+            **kwargs: Keyword arguments for loader function
+        """
+        if cache_key in self._background_threads:
+            return  # Already running
+
+        def refresh_loop():
+            """Background refresh loop"""
+            while not self._stop_threads.is_set():
+                try:
+                    # Load data
+                    value = loader_func(*args, **kwargs)
+                    self.set(cache_key, value)
+                except Exception as e:
+                    print(f"Background refresh error for {cache_key}: {e}")
+
+                # Wait for interval or stop event
+                self._stop_threads.wait(interval)
+
+        # Start thread
+        thread = threading.Thread(target=refresh_loop, daemon=True)
+        thread.start()
+        self._background_threads[cache_key] = thread
+
+    def stop_all_background_refresh(self):
+        """Stop all background refresh threads"""
+        self._stop_threads.set()
+
+        # Wait for all threads to finish
+        for thread in self._background_threads.values():
+            thread.join(timeout=5)
+
+        self._background_threads.clear()
+        self._stop_threads.clear()
+
+    def clear_all(self):
+        """Clear all cache entries"""
+        with self._main_lock:
+            self._cache.clear()
+            self._cache_timestamps.clear()
+
+
+# Global cache manager instance
+_cache_manager = None
+
+
+def get_cache_manager() -> DataCacheManager:
+    """
+    Get global cache manager instance
+
+    Returns:
+        DataCacheManager instance
+    """
+    global _cache_manager
+    if _cache_manager is None:
+        _cache_manager = DataCacheManager()
+    return _cache_manager
+
+
+def cache_with_ttl(cache_key: str, ttl: int = 60):
+    """
+    Decorator to cache function results with TTL
+
+    Args:
+        cache_key: Cache key
+        ttl: Time to live in seconds
+
+    Returns:
+        Decorated function
+    """
+    def decorator(func: Callable):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            cache_manager = get_cache_manager()
+
+            # Try to get from cache
+            cached_value = cache_manager.get(cache_key)
+            if cached_value is not None:
+                return cached_value
+
+            # Load data
+            value = func(*args, **kwargs)
+            cache_manager.set(cache_key, value)
+            return value
+
+        return wrapper
+    return decorator
+
+
+def preload_all_data():
+    """
+    Pre-load all data for all tabs in background
+
+    This function should be called on app startup to pre-load:
+    - NIFTY/SENSEX data
+    - Smart Trading Dashboard data
+    - Bias Analysis data
+    - Option Chain data (for main instruments)
+    - Advanced Chart data (for main symbols)
+    """
+    cache_manager = get_cache_manager()
+
+    # Import here to avoid circular imports
+    from market_data import fetch_nifty_data, fetch_sensex_data
+    from smart_trading_dashboard import SmartTradingDashboard
+    from bias_analysis import BiasAnalysisPro
+
+    def load_market_data():
+        """Load market data in background"""
+        try:
+            # Load NIFTY data
+            nifty_data = fetch_nifty_data()
+            cache_manager.set('nifty_data', nifty_data)
+
+            # Load SENSEX data
+            sensex_data = fetch_sensex_data()
+            cache_manager.set('sensex_data', sensex_data)
+        except Exception as e:
+            print(f"Error loading market data: {e}")
+
+    def load_dashboard_data():
+        """Load dashboard data in background"""
+        try:
+            if 'smart_dashboard' in st.session_state:
+                dashboard = st.session_state.smart_dashboard
+            else:
+                dashboard = SmartTradingDashboard()
+
+            # Default to NIFTY analysis
+            results = dashboard.analyze_market("^NSEI")
+            cache_manager.set('smart_dashboard', results)
+        except Exception as e:
+            print(f"Error loading dashboard data: {e}")
+
+    def load_bias_analysis_data():
+        """Load bias analysis data in background"""
+        try:
+            if 'bias_analyzer' in st.session_state:
+                analyzer = st.session_state.bias_analyzer
+            else:
+                analyzer = BiasAnalysisPro()
+
+            # Default to NIFTY analysis
+            results = analyzer.analyze_all_bias_indicators("^NSEI")
+            cache_manager.set('bias_analysis', results)
+        except Exception as e:
+            print(f"Error loading bias analysis data: {e}")
+
+    # Start background threads for continuous refresh
+
+    # Market data: refresh every 10 seconds
+    cache_manager.start_background_refresh(
+        'market_data_refresh',
+        load_market_data,
+        interval=10
+    )
+
+    # Dashboard data: refresh every 60 seconds
+    cache_manager.start_background_refresh(
+        'dashboard_refresh',
+        load_dashboard_data,
+        interval=60
+    )
+
+    # Bias analysis: refresh every 60 seconds
+    cache_manager.start_background_refresh(
+        'bias_analysis_refresh',
+        load_bias_analysis_data,
+        interval=60
+    )
+
+    # Initial load (immediate)
+    initial_load_thread = threading.Thread(target=load_market_data, daemon=True)
+    initial_load_thread.start()
+
+
+def get_cached_nifty_data():
+    """
+    Get cached NIFTY data or load if not available
+
+    Returns:
+        NIFTY data dict
+    """
+    cache_manager = get_cache_manager()
+    cached_data = cache_manager.get('nifty_data')
+
+    if cached_data is not None:
+        return cached_data
+
+    # If not cached, load synchronously
+    from market_data import fetch_nifty_data
+    data = fetch_nifty_data()
+    cache_manager.set('nifty_data', data)
+    return data
+
+
+def get_cached_sensex_data():
+    """
+    Get cached SENSEX data or load if not available
+
+    Returns:
+        SENSEX data dict
+    """
+    cache_manager = get_cache_manager()
+    cached_data = cache_manager.get('sensex_data')
+
+    if cached_data is not None:
+        return cached_data
+
+    # If not cached, load synchronously
+    from market_data import fetch_sensex_data
+    data = fetch_sensex_data()
+    cache_manager.set('sensex_data', data)
+    return data
+
+
+def get_cached_dashboard_results():
+    """
+    Get cached Smart Dashboard results
+
+    Returns:
+        Dashboard results dict or None
+    """
+    cache_manager = get_cache_manager()
+    return cache_manager.get('smart_dashboard')
+
+
+def get_cached_bias_analysis_results():
+    """
+    Get cached Bias Analysis results
+
+    Returns:
+        Bias analysis results dict or None
+    """
+    cache_manager = get_cache_manager()
+    return cache_manager.get('bias_analysis')
+
+
+def invalidate_all_caches():
+    """Invalidate all caches (useful for manual refresh)"""
+    cache_manager = get_cache_manager()
+    cache_manager.clear_all()

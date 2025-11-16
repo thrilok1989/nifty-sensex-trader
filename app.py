@@ -24,6 +24,14 @@ from option_chain_analysis import OptionChainAnalyzer
 from nse_options_helpers import *
 from advanced_chart_analysis import AdvancedChartAnalysis
 from overall_market_sentiment import render_overall_market_sentiment
+from data_cache_manager import (
+    get_cache_manager,
+    preload_all_data,
+    get_cached_nifty_data,
+    get_cached_sensex_data,
+    get_cached_dashboard_results,
+    get_cached_bias_analysis_results
+)
 
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE CONFIG
@@ -75,6 +83,13 @@ if 'advanced_chart_analyzer' not in st.session_state:
 
 if 'chart_data' not in st.session_state:
     st.session_state.chart_data = None
+
+# Initialize background data loading
+if 'data_preloaded' not in st.session_state:
+    st.session_state.data_preloaded = False
+    # Start background data loading on first run
+    preload_all_data()
+    st.session_state.data_preloaded = True
 
 # NSE Options Analyzer - Initialize instruments session state
 NSE_INSTRUMENTS = {
@@ -179,16 +194,40 @@ with st.sidebar:
     st.write(f"**SENSEX Lot Size:** {LOT_SIZES['SENSEX']}")
     st.write(f"**SL Offset:** {STOP_LOSS_OFFSET} points")
 
+    st.divider()
+
+    # Background Data Loading Status
+    st.subheader("🔄 Data Loading")
+    cache_manager = get_cache_manager()
+
+    # Check cache status for each data type
+    data_status = {
+        'Market Data': cache_manager.is_valid('nifty_data'),
+        'Dashboard': cache_manager.is_valid('smart_dashboard'),
+        'Bias Analysis': cache_manager.is_valid('bias_analysis'),
+    }
+
+    for name, is_valid in data_status.items():
+        if is_valid:
+            st.success(f"✅ {name}")
+        else:
+            st.info(f"⏳ {name} Loading...")
+
+    st.caption("🔄 Auto-refreshing every 10-60 seconds")
+
 # ═══════════════════════════════════════════════════════════════════════
 # MAIN CONTENT
 # ═══════════════════════════════════════════════════════════════════════
 
-# Fetch NIFTY data
-nifty_data = fetch_nifty_data()
+# Get NIFTY data from cache (loaded in background)
+nifty_data = get_cached_nifty_data()
 
-if not nifty_data['success']:
-    st.error(f"❌ Failed to fetch NIFTY data: {nifty_data.get('error')}")
-    st.stop()
+if not nifty_data or not nifty_data.get('success'):
+    # Fallback to direct fetch if cache is empty
+    nifty_data = fetch_nifty_data()
+    if not nifty_data['success']:
+        st.error(f"❌ Failed to fetch NIFTY data: {nifty_data.get('error')}")
+        st.stop()
 
 # Display market data
 col1, col2, col3, col4 = st.columns(4)
@@ -213,7 +252,19 @@ with col3:
     )
 
 with col4:
-    st.info("📅 Normal Day")
+    # Show data freshness status
+    cache_manager = get_cache_manager()
+    nifty_cache_time = cache_manager._cache_timestamps.get('nifty_data', 0)
+    if nifty_cache_time > 0:
+        age_seconds = int(time.time() - nifty_cache_time)
+        if age_seconds < 15:
+            st.success(f"🟢 Live ({age_seconds}s ago)")
+        elif age_seconds < 60:
+            st.info(f"🔵 Fresh ({age_seconds}s ago)")
+        else:
+            st.warning(f"🟡 Updating...")
+    else:
+        st.info("📅 Loading...")
 
 st.divider()
 
@@ -507,7 +558,13 @@ elif selected_tab == "📈 Positions":
 
 elif selected_tab == "📊 Smart Trading Dashboard":
     st.header("📊 Smart Trading Dashboard")
-    st.caption("Adaptive Market Analysis with Volume Order Blocks")
+    st.caption("Adaptive Market Analysis with Volume Order Blocks | 🔄 Auto-refreshing every 60 seconds")
+
+    # Auto-load cached results if not already in session state
+    if not st.session_state.dashboard_results:
+        cached_results = get_cached_dashboard_results()
+        if cached_results:
+            st.session_state.dashboard_results = cached_results
 
     # Analysis controls
     col1, col2, col3 = st.columns([2, 1, 1])
@@ -521,12 +578,15 @@ elif selected_tab == "📊 Smart Trading Dashboard":
         symbol = analyze_symbol.split()[0]
 
     with col2:
-        if st.button("🔄 Analyze Market", type="primary", use_container_width=True):
-            with st.spinner("Analyzing market data..."):
+        if st.button("🔄 Refresh Now", type="primary", use_container_width=True):
+            with st.spinner("Refreshing market data..."):
                 try:
                     results = st.session_state.smart_dashboard.analyze_market(symbol)
                     st.session_state.dashboard_results = results
-                    st.success("✅ Analysis completed!")
+                    # Update cache
+                    cache_manager = get_cache_manager()
+                    cache_manager.set('smart_dashboard', results)
+                    st.success("✅ Analysis refreshed!")
                 except Exception as e:
                     st.error(f"❌ Analysis failed: {e}")
 
@@ -778,7 +838,13 @@ elif selected_tab == "📊 Smart Trading Dashboard":
 
 elif selected_tab == "🎯 Bias Analysis Pro":
     st.header("🎯 Comprehensive Bias Analysis Pro")
-    st.caption("15+ Bias Indicators with Weighted Scoring System | Converted from Pine Script")
+    st.caption("15+ Bias Indicators with Weighted Scoring System | 🔄 Auto-refreshing every 60 seconds")
+
+    # Auto-load cached results if not already in session state
+    if not st.session_state.bias_analysis_results:
+        cached_results = get_cached_bias_analysis_results()
+        if cached_results:
+            st.session_state.bias_analysis_results = cached_results
 
     # Analysis controls
     col1, col2, col3 = st.columns([2, 1, 1])
@@ -792,13 +858,16 @@ elif selected_tab == "🎯 Bias Analysis Pro":
         symbol_code = bias_symbol.split()[0]
 
     with col2:
-        if st.button("🔍 Analyze All Bias", type="primary", use_container_width=True):
-            with st.spinner("Analyzing 15+ bias indicators... This may take a moment..."):
+        if st.button("🔄 Refresh Now", type="primary", use_container_width=True):
+            with st.spinner("Refreshing bias indicators..."):
                 try:
                     results = st.session_state.bias_analyzer.analyze_all_bias_indicators(symbol_code)
                     st.session_state.bias_analysis_results = results
+                    # Update cache
+                    cache_manager = get_cache_manager()
+                    cache_manager.set('bias_analysis', results)
                     if results['success']:
-                        st.success("✅ Bias analysis completed!")
+                        st.success("✅ Bias analysis refreshed!")
                     else:
                         st.error(f"❌ Analysis failed: {results.get('error')}")
                 except Exception as e:

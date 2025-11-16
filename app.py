@@ -1206,7 +1206,7 @@ elif selected_tab == "📊 Option Chain Analysis":
 
 elif selected_tab == "📈 Advanced Chart Analysis":
     st.header("📈 Advanced Chart Analysis")
-    st.caption("TradingView-style Chart with 5 Advanced Indicators: Volume Order Blocks, HTF Support/Resistance (3min, 5min, 10min, 15min levels), Volume Footprint (1D timeframe, 10 bins, Dynamic POC), Ultimate RSI, OM Indicator (Order Flow & Momentum)")
+    st.caption("TradingView-style Chart with 6 Advanced Indicators: Volume Bars, Volume Order Blocks, HTF Support/Resistance (3min, 5min, 10min, 15min levels), Volume Footprint (1D timeframe, 10 bins, Dynamic POC), Ultimate RSI, OM Indicator (Order Flow & Momentum)")
 
     # Chart controls
     col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
@@ -1260,21 +1260,18 @@ elif selected_tab == "📈 Advanced Chart Analysis":
     # Indicator toggles
     st.subheader("🔧 Indicator Settings")
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         show_vob = st.checkbox("📦 Volume Order Blocks", value=True, key="show_vob")
-
-    with col2:
         show_htf_sr = st.checkbox("📊 HTF Support/Resistance", value=True, key="show_htf_sr")
 
-    with col3:
+    with col2:
         show_footprint = st.checkbox("👣 Volume Footprint", value=True, key="show_footprint")
-
-    with col4:
         show_rsi = st.checkbox("📈 Ultimate RSI", value=True, key="show_rsi")
 
-    with col5:
+    with col3:
+        show_volume = st.checkbox("📊 Volume Bars", value=True, key="show_volume")
         show_om = st.checkbox("🎯 OM Indicator", value=False, key="show_om")
 
     st.divider()
@@ -1520,6 +1517,7 @@ elif selected_tab == "📈 Advanced Chart Analysis":
                     show_footprint=show_footprint,
                     show_rsi=show_rsi,
                     show_om=show_om,
+                    show_volume=show_volume,
                     vob_params=vob_params,
                     htf_params=htf_params,
                     footprint_params=footprint_params,
@@ -1643,7 +1641,13 @@ elif selected_tab == "📈 Advanced Chart Analysis":
         st.markdown("""
         ### About Advanced Chart Analysis
 
-        This advanced charting module provides professional-grade technical analysis with 5 powerful indicators:
+        This advanced charting module provides professional-grade technical analysis with 6 powerful indicators:
+
+        #### 📊 Volume Bars
+        - TradingView-style volume histogram
+        - Green bars for bullish candles (close > open)
+        - Red bars for bearish candles (close < open)
+        - Essential for confirming price movements and identifying volume spikes
 
         #### 📦 Volume Order Blocks (BigBeluga)
         - Detects institutional order blocks based on volume and EMA crossovers

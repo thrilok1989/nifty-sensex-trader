@@ -62,6 +62,7 @@ class AdvancedChartAnalysis:
 
     def create_advanced_chart(self, df, symbol, show_vob=True, show_htf_sr=True,
                              show_footprint=True, show_rsi=True, show_om=False,
+                             show_volume=True,
                              vob_params=None, htf_params=None, footprint_params=None,
                              rsi_params=None, om_params=None):
         """
@@ -75,6 +76,7 @@ class AdvancedChartAnalysis:
             show_footprint: Show HTF Volume Footprint
             show_rsi: Show Ultimate RSI
             show_om: Show OM Indicator (comprehensive order flow)
+            show_volume: Show Volume bars
             vob_params: Parameters for Volume Order Blocks indicator
             htf_params: Parameters for HTF Support/Resistance indicator
             footprint_params: Parameters for HTF Volume Footprint indicator
@@ -152,8 +154,21 @@ class AdvancedChartAnalysis:
         if show_footprint and htf_footprint:
             footprint_data = htf_footprint.calculate(df)
 
-        # Create subplots
-        if show_rsi:
+        # Create subplots based on what indicators are enabled
+        if show_rsi and show_volume:
+            # Price + Volume + RSI
+            fig = make_subplots(
+                rows=3, cols=1,
+                row_heights=[0.6, 0.2, 0.2],
+                vertical_spacing=0.03,
+                shared_xaxes=True,
+                subplot_titles=(f'{symbol} - 1 Minute Chart', 'Volume', 'Ultimate RSI')
+            )
+            price_row = 1
+            volume_row = 2
+            rsi_row = 3
+        elif show_rsi:
+            # Price + RSI (no volume)
             fig = make_subplots(
                 rows=2, cols=1,
                 row_heights=[0.7, 0.3],
@@ -161,11 +176,30 @@ class AdvancedChartAnalysis:
                 shared_xaxes=True,
                 subplot_titles=(f'{symbol} - 1 Minute Chart', 'Ultimate RSI')
             )
+            price_row = 1
+            volume_row = None
+            rsi_row = 2
+        elif show_volume:
+            # Price + Volume (no RSI)
+            fig = make_subplots(
+                rows=2, cols=1,
+                row_heights=[0.7, 0.3],
+                vertical_spacing=0.05,
+                shared_xaxes=True,
+                subplot_titles=(f'{symbol} - 1 Minute Chart', 'Volume')
+            )
+            price_row = 1
+            volume_row = 2
+            rsi_row = None
         else:
+            # Price only
             fig = make_subplots(
                 rows=1, cols=1,
                 subplot_titles=(f'{symbol} - 1 Minute Chart',)
             )
+            price_row = 1
+            volume_row = None
+            rsi_row = None
 
         # Add candlestick chart
         fig.add_trace(
@@ -179,36 +213,48 @@ class AdvancedChartAnalysis:
                 increasing_line_color='#26a69a',
                 decreasing_line_color='#ef5350'
             ),
-            row=1, col=1
+            row=price_row, col=1
         )
 
         # Add Volume Order Blocks
         if show_vob and vob_data:
-            self._add_volume_order_blocks(fig, df, vob_data, row=1, col=1)
+            self._add_volume_order_blocks(fig, df, vob_data, row=price_row, col=1)
 
         # Add HTF Support/Resistance
         if show_htf_sr and htf_levels:
-            self._add_htf_support_resistance(fig, df, htf_levels, row=1, col=1)
+            self._add_htf_support_resistance(fig, df, htf_levels, row=price_row, col=1)
 
         # Add HTF Volume Footprint
         if show_footprint and footprint_data and footprint_data['current_footprint']:
-            self._add_volume_footprint(fig, df, footprint_data, row=1, col=1)
+            self._add_volume_footprint(fig, df, footprint_data, row=price_row, col=1)
+
+        # Add Volume bars
+        if show_volume and volume_row is not None:
+            self._add_volume_bars(fig, df, row=volume_row, col=1)
 
         # Add Ultimate RSI
-        if show_rsi and rsi_data:
-            self._add_ultimate_rsi(fig, df, rsi_data, row=2, col=1)
+        if show_rsi and rsi_data and rsi_row is not None:
+            self._add_ultimate_rsi(fig, df, rsi_data, row=rsi_row, col=1)
 
         # Add OM Indicator
         if show_om and om_data:
-            self._add_om_indicator(fig, df, om_data, row=1, col=1)
+            self._add_om_indicator(fig, df, om_data, row=price_row, col=1)
 
         # Update layout
+        # Calculate height based on number of subplots
+        if show_rsi and show_volume:
+            chart_height = 900
+        elif show_rsi or show_volume:
+            chart_height = 800
+        else:
+            chart_height = 600
+
         fig.update_layout(
             title=f'{symbol} Advanced Chart Analysis',
             xaxis_title='Time',
             yaxis_title='Price',
             template='plotly_dark',
-            height=800 if show_rsi else 600,
+            height=chart_height,
             showlegend=True,
             xaxis_rangeslider_visible=False,
             hovermode='x unified'
@@ -312,6 +358,30 @@ class AdvancedChartAnalysis:
                         ),
                         row=row, col=col
                     )
+
+    def _add_volume_bars(self, fig, df, row, col):
+        """Add Volume bars to chart (TradingView style)"""
+        # Determine bar colors based on candle direction
+        colors = ['#26a69a' if close >= open else '#ef5350'
+                  for close, open in zip(df['close'], df['open'])]
+
+        # Add volume bars
+        fig.add_trace(
+            go.Bar(
+                x=df.index,
+                y=df['volume'],
+                name='Volume',
+                marker=dict(
+                    color=colors,
+                    line=dict(width=0)
+                ),
+                showlegend=False
+            ),
+            row=row, col=col
+        )
+
+        # Update volume y-axis
+        fig.update_yaxes(title_text="Volume", row=row, col=col)
 
     def _add_htf_support_resistance(self, fig, df, htf_levels, row, col):
         """Add HTF Support/Resistance levels to chart"""

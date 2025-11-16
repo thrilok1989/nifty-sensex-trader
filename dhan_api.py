@@ -169,8 +169,8 @@ class DhanAPI:
 def check_dhan_connection():
     """Check DhanHQ connection"""
     try:
-        api = DhanAPI()
-        return api.test_connection()
+        from dhan_data_fetcher import test_dhan_connection
+        return test_dhan_connection()
     except Exception as e:
         st.error(f"❌ DhanHQ Connection Failed: {e}")
         return False

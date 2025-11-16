@@ -53,8 +53,13 @@ VOB_TOUCH_TOLERANCE = 5  # Points
 # ═══════════════════════════════════════════════════════════════════════
 
 # Auto-refresh interval: 60 seconds (1 minute)
-# Data is fetched sequentially with 10-second intervals within each cycle:
-# 0-10s: Chart data, 10-20s: OHLC data, 20-30s: Expiry list, 30-40s: Option chain
+# Data Loading Strategy (OPTIMIZED):
+# - Background threading with smart caching
+# - Market data (NIFTY/SENSEX): Refreshes every 10 seconds in background
+# - Analysis data (Dashboard/Bias): Refreshes every 60 seconds in background
+# - UI updates: Page reloads every 60 seconds to display fresh cached data
+# - All tabs show pre-loaded data immediately (no waiting for button clicks)
+# - Manual refresh available via "Refresh Now" buttons
 AUTO_REFRESH_INTERVAL = 60  # seconds
 DEMO_MODE = False
 

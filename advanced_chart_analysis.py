@@ -260,6 +260,10 @@ class AdvancedChartAnalysis:
             hovermode='x unified'
         )
 
+        # Ensure volume y-axis is always visible (override template defaults)
+        if show_volume and volume_row is not None:
+            fig.update_yaxes(visible=True, row=volume_row, col=1)
+
         return fig
 
     def _add_volume_order_blocks(self, fig, df, vob_data, row, col):
@@ -380,8 +384,16 @@ class AdvancedChartAnalysis:
             row=row, col=col
         )
 
-        # Update volume y-axis
-        fig.update_yaxes(title_text="Volume", row=row, col=col)
+        # Update volume y-axis with explicit visibility
+        fig.update_yaxes(
+            title_text="Volume",
+            row=row, col=col,
+            visible=True,
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='rgba(128,128,128,0.2)',
+            zeroline=False
+        )
 
     def _add_htf_support_resistance(self, fig, df, htf_levels, row, col):
         """Add HTF Support/Resistance levels to chart"""

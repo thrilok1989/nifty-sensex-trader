@@ -858,8 +858,8 @@ elif selected_tab == "🎯 Bias Analysis Pro":
         symbol_code = bias_symbol.split()[0]
 
     with col2:
-        if st.button("🔄 Refresh Now", type="primary", use_container_width=True):
-            with st.spinner("Refreshing bias indicators..."):
+        if st.button("🔍 Analyze All Bias", type="primary", use_container_width=True):
+            with st.spinner("Analyzing bias indicators..."):
                 try:
                     results = st.session_state.bias_analyzer.analyze_all_bias_indicators(symbol_code)
                     st.session_state.bias_analysis_results = results
@@ -867,7 +867,7 @@ elif selected_tab == "🎯 Bias Analysis Pro":
                     cache_manager = get_cache_manager()
                     cache_manager.set('bias_analysis', results)
                     if results['success']:
-                        st.success("✅ Bias analysis refreshed!")
+                        st.success("✅ Bias analysis completed!")
                     else:
                         st.error(f"❌ Analysis failed: {results.get('error')}")
                 except Exception as e:

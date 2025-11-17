@@ -499,7 +499,7 @@ def _run_bias_analysis():
     try:
         # Initialize bias_analyzer if not exists
         if 'bias_analyzer' not in st.session_state:
-            from bias_analysis_pro import BiasAnalysisPro
+            from bias_analysis import BiasAnalysisPro
             st.session_state.bias_analyzer = BiasAnalysisPro()
 
         symbol = "^NSEI"  # NIFTY 50

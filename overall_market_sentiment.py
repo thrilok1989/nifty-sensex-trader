@@ -315,14 +315,28 @@ def calculate_option_chain_atm_sentiment(NSE_INSTRUMENTS):
         total_score += score
         instruments_analyzed += 1
 
-        # Collect detailed ATM zone information for this instrument
+        # Collect detailed ATM zone information for this instrument with ALL bias metrics
+        # Note: OI_Change_Bias is same as ChgOI_Bias (included for compatibility)
         atm_detail = {
             'Instrument': instrument,
+            'Strike': atm_row.get('Strike', 'N/A'),
             'Zone': atm_row.get('Zone', 'ATM'),
+            'Level': atm_row.get('Level', 'N/A'),
             'OI_Bias': atm_row.get('OI_Bias', 'N/A'),
-            'OI_Change_Bias': atm_row.get('OI_Change_Bias', 'N/A'),
+            'ChgOI_Bias': atm_row.get('ChgOI_Bias', 'N/A'),
             'Volume_Bias': atm_row.get('Volume_Bias', 'N/A'),
+            'Delta_Bias': atm_row.get('Delta_Bias', 'N/A'),
+            'Gamma_Bias': atm_row.get('Gamma_Bias', 'N/A'),
             'Premium_Bias': atm_row.get('Premium_Bias', 'N/A'),
+            'AskQty_Bias': atm_row.get('AskQty_Bias', 'N/A'),
+            'BidQty_Bias': atm_row.get('BidQty_Bias', 'N/A'),
+            'IV_Bias': atm_row.get('IV_Bias', 'N/A'),
+            'DVP_Bias': atm_row.get('DVP_Bias', 'N/A'),
+            'Delta_Exposure_Bias': atm_row.get('Delta_Exposure_Bias', 'N/A'),
+            'Gamma_Exposure_Bias': atm_row.get('Gamma_Exposure_Bias', 'N/A'),
+            'IV_Skew_Bias': atm_row.get('IV_Skew_Bias', 'N/A'),
+            'OI_Change_Bias': atm_row.get('ChgOI_Bias', atm_row.get('OI_Change_Bias', 'N/A')),  # Alias for ChgOI_Bias
+            'BiasScore': atm_row.get('BiasScore', 0),
             'Verdict': atm_row.get('Verdict', 'Neutral'),
             'Score': f"{score:+.0f}"
         }
@@ -970,13 +984,18 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
             # Display ATM Details Summary Table
             atm_details = source_data.get('atm_details', [])
             if atm_details:
-                st.markdown("#### 📊 ATM Zone Summary")
+                st.markdown("#### 📊 ATM Zone Summary - All Bias Metrics")
 
                 # Create DataFrame from atm_details
                 atm_df = pd.DataFrame(atm_details)
 
-                # Add emoji indicators for bias columns
-                bias_columns = ['OI_Bias', 'OI_Change_Bias', 'Volume_Bias', 'Premium_Bias', 'Verdict']
+                # Add emoji indicators for all bias columns
+                bias_columns = [
+                    'OI_Bias', 'ChgOI_Bias', 'Volume_Bias', 'Delta_Bias', 'Gamma_Bias',
+                    'Premium_Bias', 'AskQty_Bias', 'BidQty_Bias', 'IV_Bias', 'DVP_Bias',
+                    'Delta_Exposure_Bias', 'Gamma_Exposure_Bias', 'IV_Skew_Bias',
+                    'OI_Change_Bias', 'Verdict'
+                ]
 
                 for col in bias_columns:
                     if col in atm_df.columns:

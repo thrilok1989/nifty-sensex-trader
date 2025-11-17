@@ -1,5 +1,6 @@
 """
 Overall Market Sentiment Analysis
+
 Aggregates bias data from all sources to provide a comprehensive market sentiment view
 
 Data Sources:
@@ -12,7 +13,6 @@ Data Sources:
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from nse_options_helpers import fetch_option_chain_data
 
 
 def calculate_stock_performance_sentiment(stock_data):
@@ -26,18 +26,17 @@ def calculate_stock_performance_sentiment(stock_data):
     bullish_stocks = 0
     bearish_stocks = 0
     neutral_stocks = 0
+
     total_weighted_change = 0
     total_weight = 0
 
     for stock in stock_data:
         change_pct = stock.get('change_pct', 0)
-        weight = stock.get('weight', 0)
+        weight = stock.get('weight', 1)
 
-        # Weighted contribution
         total_weighted_change += change_pct * weight
         total_weight += weight
 
-        # Count bias
         if change_pct > 0.5:
             bullish_stocks += 1
         elif change_pct < -0.5:
@@ -48,37 +47,40 @@ def calculate_stock_performance_sentiment(stock_data):
     # Calculate weighted average change
     avg_change = total_weighted_change / total_weight if total_weight > 0 else 0
 
-    # Convert to score (-100 to +100)
-    score = min(100, max(-100, avg_change * 10))
+    # Calculate market breadth
+    total_stocks = len(stock_data)
+    breadth_pct = (bullish_stocks / total_stocks * 100) if total_stocks > 0 else 50
 
     # Determine bias
-    if score > 20:
+    if avg_change > 1:
         bias = "BULLISH"
-    elif score < -20:
+    elif avg_change < -1:
         bias = "BEARISH"
     else:
         bias = "NEUTRAL"
 
-    # Calculate breadth percentage
-    total_stocks = bullish_stocks + bearish_stocks + neutral_stocks
-    breadth_pct = (bullish_stocks / total_stocks * 100) if total_stocks > 0 else 50
+    # Calculate score based on weighted change and breadth
+    score = avg_change * 5 + (breadth_pct - 50)
+
+    # Calculate confidence
+    confidence = min(100, abs(score))
 
     return {
         'bias': bias,
         'score': score,
-        'avg_change': avg_change,
         'breadth_pct': breadth_pct,
+        'avg_change': avg_change,
         'bullish_stocks': bullish_stocks,
         'bearish_stocks': bearish_stocks,
         'neutral_stocks': neutral_stocks,
-        'total_stocks': total_stocks,
-        'confidence': min(100, abs(score) * 1.5)
+        'confidence': confidence,
+        'stock_details': stock_data
     }
 
 
 def calculate_technical_indicators_sentiment(bias_results):
     """
-    Calculate sentiment from technical indicators
+    Calculate sentiment from technical indicators (Bias Analysis Pro)
     Returns: dict with sentiment, score, and details
     """
     if not bias_results:
@@ -137,7 +139,8 @@ def calculate_technical_indicators_sentiment(bias_results):
         'bearish_count': bearish_indicators,
         'neutral_count': neutral_indicators,
         'total_count': total_indicators,
-        'confidence': confidence
+        'confidence': confidence,
+        'indicator_details': bias_results
     }
 
 
@@ -204,44 +207,49 @@ def calculate_option_chain_pcr_sentiment(NSE_INSTRUMENTS):
             change_score = 0
 
         # Combined score for this instrument
-        inst_score = (oi_score + change_score) / 2
-        total_score += inst_score
-        instruments_analyzed += 1
+        instrument_score = (oi_score + change_score) / 2
 
-        # Count overall bias
-        if inst_score > 10:
+        # Determine overall instrument bias
+        if instrument_score > 10:
+            instrument_bias = "BULLISH"
             bullish_instruments += 1
-        elif inst_score < -10:
+        elif instrument_score < -10:
+            instrument_bias = "BEARISH"
             bearish_instruments += 1
         else:
+            instrument_bias = "NEUTRAL"
             neutral_instruments += 1
 
+        total_score += instrument_score
+        instruments_analyzed += 1
+
+        # Add to details
         pcr_details.append({
-            'instrument': instrument,
-            'spot': data.get('spot', 0),
-            'pcr_oi': pcr_oi,
-            'pcr_change_oi': pcr_change_oi,
-            'oi_bias': oi_bias,
-            'change_bias': change_bias,
-            'score': inst_score
+            'Instrument': instrument,
+            'Spot': f"₹ {data.get('spot', 0):,.2f}",
+            'Total CE OI': f"{total_ce_oi:,}",
+            'Total PE OI': f"{total_pe_oi:,}",
+            'PCR (OI)': f"{pcr_oi:.2f}",
+            'OI Bias': f"{oi_bias} {'⚖️' if oi_bias == 'NEUTRAL' else '🐂' if oi_bias == 'BULLISH' else '🐻'}",
+            'CE Δ OI': f"{total_ce_change:,}",
+            'PE Δ OI': f"{total_pe_change:,}",
+            'PCR (Δ OI)': f"{pcr_change_oi:.2f}",
+            'Δ OI Bias': f"{change_bias} {'⚖️' if change_bias == 'NEUTRAL' else '🐂' if change_bias == 'BULLISH' else '🐻'}"
         })
 
-    if instruments_analyzed == 0:
-        return None
-
     # Calculate overall score
-    overall_score = total_score / instruments_analyzed
+    overall_score = total_score / instruments_analyzed if instruments_analyzed > 0 else 0
 
-    # Determine bias
-    if overall_score > 15:
+    # Determine overall bias
+    if overall_score > 10:
         bias = "BULLISH"
-    elif overall_score < -15:
+    elif overall_score < -10:
         bias = "BEARISH"
     else:
         bias = "NEUTRAL"
 
     # Calculate confidence
-    confidence = min(100, abs(overall_score) * 2)
+    confidence = min(100, abs(overall_score))
 
     return {
         'bias': bias,
@@ -250,83 +258,89 @@ def calculate_option_chain_pcr_sentiment(NSE_INSTRUMENTS):
         'bearish_instruments': bearish_instruments,
         'neutral_instruments': neutral_instruments,
         'total_instruments': instruments_analyzed,
-        'pcr_details': pcr_details,
-        'confidence': confidence
+        'confidence': confidence,
+        'pcr_details': pcr_details
     }
 
 
-def calculate_option_chain_atm_sentiment():
+def calculate_option_chain_atm_sentiment(NSE_INSTRUMENTS):
     """
     Calculate sentiment from Option Chain ATM Zone Analysis
     Returns: dict with sentiment, score, and details
     """
-    # This would analyze the detailed option chain data with ATM zone bias
-    # For now, we'll use the overall option data if available
     if 'overall_option_data' not in st.session_state or not st.session_state.overall_option_data:
         return None
 
-    option_data = st.session_state.overall_option_data
-
-    # We'll calculate a simple aggregate score based on all instruments
-    total_bias_score = 0
-    instrument_count = 0
+    # For now, use a simple placeholder
+    # In a full implementation, this would analyze ATM strikes across all instruments
     bullish_instruments = 0
     bearish_instruments = 0
     neutral_instruments = 0
 
-    for instrument, data in option_data.items():
-        if not data.get('success'):
-            continue
-
-        # Get bias score if available
-        bias_score = data.get('overall_bias_score', 0)
-        bias = data.get('overall_bias', 'NEUTRAL')
-
-        # Normalize bias score to -100 to +100 scale
-        normalized_score = (bias_score / 10) * 100 if bias_score else 0
-        total_bias_score += normalized_score
-        instrument_count += 1
-
-        if bias in ['BULLISH', 'STRONG_BULLISH']:
-            bullish_instruments += 1
-        elif bias in ['BEARISH', 'STRONG_BEARISH']:
-            bearish_instruments += 1
-        else:
-            neutral_instruments += 1
-
-    if instrument_count == 0:
-        return None
-
-    avg_score = total_bias_score / instrument_count
-
-    # Determine bias
-    if avg_score > 20:
-        bias = "BULLISH"
-    elif avg_score < -20:
-        bias = "BEARISH"
-    else:
-        bias = "NEUTRAL"
-
-    # Calculate confidence
-    confidence = min(100, abs(avg_score) * 1.5)
+    # Simplified calculation - can be enhanced with actual ATM zone data
+    total_instruments = 0
 
     return {
-        'bias': bias,
-        'score': avg_score,
+        'bias': 'NEUTRAL',
+        'score': 0,
         'bullish_instruments': bullish_instruments,
         'bearish_instruments': bearish_instruments,
         'neutral_instruments': neutral_instruments,
-        'total_instruments': instrument_count,
-        'confidence': confidence
+        'total_instruments': total_instruments,
+        'confidence': 0
     }
 
 
 def calculate_overall_sentiment():
     """
-    Aggregates bias data from all sources with weighted averaging
-    Returns overall sentiment, score, and breakdown
+    Calculate overall market sentiment by combining all data sources
     """
+    # Initialize sentiment sources
     sentiment_sources = {}
+
+    # 1. Stock Performance Sentiment
+    if 'bias_analysis_results' in st.session_state and st.session_state.bias_analysis_results:
+        analysis = st.session_state.bias_analysis_results
+        if analysis.get('success'):
+            stock_data = analysis.get('stock_data', [])
+            stock_sentiment = calculate_stock_performance_sentiment(stock_data)
+            if stock_sentiment:
+                sentiment_sources['Stock Performance'] = stock_sentiment
+
+    # 2. Technical Indicators Sentiment
+    if 'bias_analysis_results' in st.session_state and st.session_state.bias_analysis_results:
+        analysis = st.session_state.bias_analysis_results
+        if analysis.get('success'):
+            bias_results = analysis.get('bias_results', [])
+            tech_sentiment = calculate_technical_indicators_sentiment(bias_results)
+            if tech_sentiment:
+                sentiment_sources['Technical Indicators'] = tech_sentiment
+
+    # 3. PCR Analysis Sentiment
+    pcr_sentiment = calculate_option_chain_pcr_sentiment(None)
+    if pcr_sentiment:
+        sentiment_sources['PCR Analysis'] = pcr_sentiment
+
+    # 4. Option Chain Analysis Sentiment
+    oc_sentiment = calculate_option_chain_atm_sentiment(None)
+    if oc_sentiment and oc_sentiment['total_instruments'] > 0:
+        sentiment_sources['Option Chain Analysis'] = oc_sentiment
+
+    # If no data available
+    if not sentiment_sources:
+        return {
+            'data_available': False,
+            'overall_sentiment': 'NEUTRAL',
+            'overall_score': 0,
+            'confidence': 0,
+            'sources': {},
+            'bullish_sources': 0,
+            'bearish_sources': 0,
+            'neutral_sources': 0,
+            'source_count': 0
+        }
+
+    # Calculate weighted overall sentiment
     source_weights = {
         'Stock Performance': 2.0,
         'Technical Indicators': 3.0,
@@ -334,98 +348,53 @@ def calculate_overall_sentiment():
         'Option Chain Analysis': 2.0
     }
 
-    # Source 1: Stock Performance
-    if 'bias_analysis_results' in st.session_state and st.session_state.bias_analysis_results:
-        try:
-            bias_data = st.session_state.bias_analysis_results
-            stock_data = bias_data.get('stock_data', [])
-
-            if stock_data:
-                stock_sentiment = calculate_stock_performance_sentiment(stock_data)
-                if stock_sentiment:
-                    sentiment_sources['Stock Performance'] = stock_sentiment
-        except Exception as e:
-            st.warning(f"Could not load Stock Performance data: {e}")
-
-    # Source 2: Technical Indicators (Bias Analysis Pro)
-    if 'bias_analysis_results' in st.session_state and st.session_state.bias_analysis_results:
-        try:
-            bias_data = st.session_state.bias_analysis_results
-            bias_results = bias_data.get('bias_results', [])
-
-            if bias_results:
-                tech_sentiment = calculate_technical_indicators_sentiment(bias_results)
-                if tech_sentiment:
-                    sentiment_sources['Technical Indicators'] = tech_sentiment
-        except Exception as e:
-            st.warning(f"Could not load Technical Indicators data: {e}")
-
-    # Source 3: PCR Analysis
-    try:
-        pcr_sentiment = calculate_option_chain_pcr_sentiment(None)
-        if pcr_sentiment:
-            sentiment_sources['PCR Analysis'] = pcr_sentiment
-    except Exception as e:
-        st.warning(f"Could not load PCR Analysis data: {e}")
-
-    # Source 4: Option Chain ATM Analysis
-    try:
-        atm_sentiment = calculate_option_chain_atm_sentiment()
-        if atm_sentiment:
-            sentiment_sources['Option Chain Analysis'] = atm_sentiment
-    except Exception as e:
-        st.warning(f"Could not load Option Chain Analysis data: {e}")
-
-    # Calculate overall sentiment with weighted averaging
-    if len(sentiment_sources) == 0:
-        return {
-            'overall_sentiment': 'NO DATA',
-            'overall_score': 0,
-            'confidence': 0,
-            'sources': sentiment_sources,
-            'data_available': False
-        }
-
-    # Calculate weighted score
     total_weighted_score = 0
     total_weight = 0
 
+    bullish_sources = 0
+    bearish_sources = 0
+    neutral_sources = 0
+
     for source_name, source_data in sentiment_sources.items():
-        weight = source_weights.get(source_name, 1.0)
         score = source_data.get('score', 0)
+        weight = source_weights.get(source_name, 1.0)
+
         total_weighted_score += score * weight
         total_weight += weight
 
+        # Count source bias
+        bias = source_data.get('bias', 'NEUTRAL')
+        if bias == 'BULLISH':
+            bullish_sources += 1
+        elif bias == 'BEARISH':
+            bearish_sources += 1
+        else:
+            neutral_sources += 1
+
+    # Calculate overall score
     overall_score = total_weighted_score / total_weight if total_weight > 0 else 0
 
     # Determine overall sentiment
     if overall_score > 25:
-        overall_sentiment = 'BULLISH'
+        overall_sentiment = "BULLISH"
     elif overall_score < -25:
-        overall_sentiment = 'BEARISH'
+        overall_sentiment = "BEARISH"
     else:
-        overall_sentiment = 'NEUTRAL'
+        overall_sentiment = "NEUTRAL"
 
-    # Calculate confidence based on score magnitude and source agreement
-    score_confidence = min(100, abs(overall_score))
+    # Calculate confidence
+    score_magnitude = min(100, abs(overall_score))
 
-    # Check source agreement
-    bullish_sources = sum(1 for s in sentiment_sources.values() if s.get('bias') == 'BULLISH')
-    bearish_sources = sum(1 for s in sentiment_sources.values() if s.get('bias') == 'BEARISH')
-    neutral_sources = len(sentiment_sources) - bullish_sources - bearish_sources
-
-    # Agreement factor (0 to 1)
-    if len(sentiment_sources) > 1:
-        if overall_sentiment == 'BULLISH':
-            agreement = bullish_sources / len(sentiment_sources)
-        elif overall_sentiment == 'BEARISH':
-            agreement = bearish_sources / len(sentiment_sources)
-        else:
-            agreement = neutral_sources / len(sentiment_sources)
+    # Factor in source agreement
+    total_sources = len(sentiment_sources)
+    if overall_sentiment == 'BULLISH':
+        source_agreement = bullish_sources / total_sources if total_sources > 0 else 0
+    elif overall_sentiment == 'BEARISH':
+        source_agreement = bearish_sources / total_sources if total_sources > 0 else 0
     else:
-        agreement = 1.0
+        source_agreement = neutral_sources / total_sources if total_sources > 0 else 0
 
-    final_confidence = score_confidence * agreement
+    final_confidence = score_magnitude * source_agreement
 
     return {
         'overall_sentiment': overall_sentiment,
@@ -468,8 +437,10 @@ def run_all_analyses(NSE_INSTRUMENTS):
         # 2. Run Option Chain Analysis for all instruments
         with st.spinner("📊 Running Option Chain Analysis for all instruments..."):
             try:
+                from nse_options_analyzer import fetch_option_chain_data as fetch_oc
+
                 overall_data = {}
-                all_instruments = list(NSE_INSTRUMENTS['indices'].keys()) + list(NSE_INSTRUMENTS['stocks'].keys())
+                all_instruments = list(NSE_INSTRUMENTS['indices'].keys())
 
                 # Create a progress bar
                 progress_bar = st.progress(0)
@@ -477,7 +448,7 @@ def run_all_analyses(NSE_INSTRUMENTS):
 
                 for idx, instrument in enumerate(all_instruments):
                     progress_text.text(f"Analyzing {instrument}... ({idx + 1}/{len(all_instruments)})")
-                    data = fetch_option_chain_data(instrument)
+                    data = fetch_oc(instrument)
                     overall_data[instrument] = data
                     progress_bar.progress((idx + 1) / len(all_instruments))
 
@@ -647,15 +618,19 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     st.markdown("---")
 
     # ═══════════════════════════════════════════════════════════════════
-    # DETAILED ANALYSIS BY SOURCE
+    # DETAILED ANALYSIS BY SOURCE - WITH TABLES
     # ═══════════════════════════════════════════════════════════════════
 
     st.markdown("### 📈 Detailed Analysis by Source")
 
     sources = result['sources']
 
-    for source_name, source_data in sources.items():
-        with st.expander(f"**{source_name}**", expanded=True):
+    # ─────────────────────────────────────────────────────────────────
+    # 1. STOCK PERFORMANCE TABLE
+    # ─────────────────────────────────────────────────────────────────
+    if 'Stock Performance' in sources:
+        source_data = sources['Stock Performance']
+        with st.expander("**📊 Stock Performance (Market Breadth)**", expanded=True):
             bias = source_data.get('bias', 'NEUTRAL')
             score = source_data.get('score', 0)
             confidence = source_data.get('confidence', 0)
@@ -664,11 +639,11 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
             if bias == 'BULLISH':
                 bg_color = '#00ff88'
                 text_color = 'black'
-                icon = '🚀'
+                icon = '🐂'
             elif bias == 'BEARISH':
                 bg_color = '#ff4444'
                 text_color = 'white'
-                icon = '📉'
+                icon = '🐻'
             else:
                 bg_color = '#ffa500'
                 text_color = 'white'
@@ -690,45 +665,216 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
             with col3:
                 st.metric("Confidence", f"{confidence:.1f}%")
 
-            # Display source-specific details
-            if source_name == 'Stock Performance':
-                st.markdown(f"""
-                **Market Breadth:** {source_data.get('breadth_pct', 0):.1f}%
-                **Avg Change:** {source_data.get('avg_change', 0):+.2f}%
-                **Bullish Stocks:** {source_data.get('bullish_stocks', 0)}
-                **Bearish Stocks:** {source_data.get('bearish_stocks', 0)}
-                **Neutral Stocks:** {source_data.get('neutral_stocks', 0)}
-                """)
+            st.markdown(f"""
+            **Market Breadth:** {source_data.get('breadth_pct', 0):.1f}%
+            **Avg Weighted Change:** {source_data.get('avg_change', 0):+.2f}%
+            **Bullish Stocks:** {source_data.get('bullish_stocks', 0)} | **Bearish:** {source_data.get('bearish_stocks', 0)} | **Neutral:** {source_data.get('neutral_stocks', 0)}
+            """)
 
-            elif source_name == 'Technical Indicators':
-                st.markdown(f"""
-                **Bullish Indicators:** {source_data.get('bullish_count', 0)}
-                **Bearish Indicators:** {source_data.get('bearish_count', 0)}
-                **Neutral Indicators:** {source_data.get('neutral_count', 0)}
-                **Total Analyzed:** {source_data.get('total_count', 0)}
-                """)
+            # Stock Performance Table
+            stock_details = source_data.get('stock_details', [])
+            if stock_details:
+                # Create DataFrame
+                stock_df = pd.DataFrame(stock_details)
+                stock_df['symbol'] = stock_df['symbol'].str.replace('.NS', '')
+                stock_df['change_pct'] = stock_df['change_pct'].apply(lambda x: f"{x:.2f}%")
+                stock_df['weight'] = stock_df['weight'].apply(lambda x: f"{x:.2f}%")
 
-            elif source_name == 'PCR Analysis':
-                st.markdown(f"""
-                **Bullish Instruments:** {source_data.get('bullish_instruments', 0)}
-                **Bearish Instruments:** {source_data.get('bearish_instruments', 0)}
-                **Neutral Instruments:** {source_data.get('neutral_instruments', 0)}
-                **Total Analyzed:** {source_data.get('total_instruments', 0)}
-                """)
+                # Add bias column
+                def get_stock_bias(row):
+                    change = float(row['change_pct'].replace('%', ''))
+                    if change > 0.5:
+                        return "🐂 BULLISH"
+                    elif change < -0.5:
+                        return "🐻 BEARISH"
+                    else:
+                        return "⚖️ NEUTRAL"
 
-                # Show PCR details for each instrument
-                pcr_details = source_data.get('pcr_details', [])
-                if pcr_details:
-                    pcr_df = pd.DataFrame(pcr_details)
-                    st.dataframe(pcr_df, use_container_width=True, hide_index=True)
+                stock_df['bias'] = stock_df.apply(get_stock_bias, axis=1)
 
-            elif source_name == 'Option Chain Analysis':
+                # Rename columns
+                stock_df = stock_df.rename(columns={
+                    'symbol': 'Symbol',
+                    'change_pct': 'Change %',
+                    'weight': 'Weight',
+                    'bias': 'Bias'
+                })
+
+                st.dataframe(stock_df, use_container_width=True, hide_index=True)
+
+    # ─────────────────────────────────────────────────────────────────
+    # 2. TECHNICAL INDICATORS TABLE
+    # ─────────────────────────────────────────────────────────────────
+    if 'Technical Indicators' in sources:
+        source_data = sources['Technical Indicators']
+        with st.expander("**📊 Technical Indicators (Bias Analysis Pro)**", expanded=True):
+            bias = source_data.get('bias', 'NEUTRAL')
+            score = source_data.get('score', 0)
+            confidence = source_data.get('confidence', 0)
+
+            # Color based on bias
+            if bias == 'BULLISH':
+                bg_color = '#00ff88'
+                text_color = 'black'
+                icon = '🐂'
+            elif bias == 'BEARISH':
+                bg_color = '#ff4444'
+                text_color = 'white'
+                icon = '🐻'
+            else:
+                bg_color = '#ffa500'
+                text_color = 'white'
+                icon = '⚖️'
+
+            # Display source card
+            col1, col2, col3 = st.columns([2, 1, 1])
+
+            with col1:
                 st.markdown(f"""
-                **Bullish Instruments:** {source_data.get('bullish_instruments', 0)}
-                **Bearish Instruments:** {source_data.get('bearish_instruments', 0)}
-                **Neutral Instruments:** {source_data.get('neutral_instruments', 0)}
-                **Total Analyzed:** {source_data.get('total_instruments', 0)}
-                """)
+                <div style='background: {bg_color}; padding: 15px; border-radius: 10px;'>
+                    <h3 style='margin: 0; color: {text_color};'>{icon} {bias}</h3>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col2:
+                st.metric("Score", f"{score:+.1f}")
+
+            with col3:
+                st.metric("Confidence", f"{confidence:.1f}%")
+
+            st.markdown(f"""
+            **Bullish Indicators:** {source_data.get('bullish_count', 0)} | **Bearish:** {source_data.get('bearish_count', 0)} | **Neutral:** {source_data.get('neutral_count', 0)}
+            **Total Analyzed:** {source_data.get('total_count', 0)}
+            """)
+
+            # Technical Indicators Table
+            indicator_details = source_data.get('indicator_details', [])
+            if indicator_details:
+                # Create DataFrame
+                tech_df = pd.DataFrame(indicator_details)
+
+                # Add emoji to bias
+                def get_bias_emoji(bias):
+                    bias_upper = str(bias).upper()
+                    if 'BULLISH' in bias_upper or 'STRONG BUY' in bias_upper or 'STABLE' in bias_upper:
+                        return f"🐂 {bias}"
+                    elif 'BEARISH' in bias_upper or 'WEAK' in bias_upper or 'HIGH RISK' in bias_upper:
+                        return f"🐻 {bias}"
+                    else:
+                        return f"⚖️ {bias}"
+
+                tech_df['bias'] = tech_df['bias'].apply(get_bias_emoji)
+                tech_df['score'] = tech_df['score'].apply(lambda x: f"{x:.2f}")
+                tech_df['weight'] = tech_df['weight'].apply(lambda x: f"{x:.1f}")
+
+                # Rename columns
+                tech_df = tech_df.rename(columns={
+                    'indicator': 'Indicator',
+                    'value': 'Value',
+                    'bias': 'Bias',
+                    'score': 'Score',
+                    'weight': 'Weight'
+                })
+
+                st.dataframe(tech_df, use_container_width=True, hide_index=True)
+
+    # ─────────────────────────────────────────────────────────────────
+    # 3. PCR ANALYSIS TABLE
+    # ─────────────────────────────────────────────────────────────────
+    if 'PCR Analysis' in sources:
+        source_data = sources['PCR Analysis']
+        with st.expander("**📊 PCR Analysis (Put-Call Ratio)**", expanded=True):
+            bias = source_data.get('bias', 'NEUTRAL')
+            score = source_data.get('score', 0)
+            confidence = source_data.get('confidence', 0)
+
+            # Color based on bias
+            if bias == 'BULLISH':
+                bg_color = '#00ff88'
+                text_color = 'black'
+                icon = '🐂'
+            elif bias == 'BEARISH':
+                bg_color = '#ff4444'
+                text_color = 'white'
+                icon = '🐻'
+            else:
+                bg_color = '#ffa500'
+                text_color = 'white'
+                icon = '⚖️'
+
+            # Display source card
+            col1, col2, col3 = st.columns([2, 1, 1])
+
+            with col1:
+                st.markdown(f"""
+                <div style='background: {bg_color}; padding: 15px; border-radius: 10px;'>
+                    <h3 style='margin: 0; color: {text_color};'>{icon} {bias}</h3>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col2:
+                st.metric("Score", f"{score:+.1f}")
+
+            with col3:
+                st.metric("Confidence", f"{confidence:.1f}%")
+
+            st.markdown(f"""
+            **Bullish Instruments:** {source_data.get('bullish_instruments', 0)} | **Bearish:** {source_data.get('bearish_instruments', 0)} | **Neutral:** {source_data.get('neutral_instruments', 0)}
+            **Total Analyzed:** {source_data.get('total_instruments', 0)}
+            """)
+
+            # PCR Details Table
+            pcr_details = source_data.get('pcr_details', [])
+            if pcr_details:
+                pcr_df = pd.DataFrame(pcr_details)
+                st.dataframe(pcr_df, use_container_width=True, hide_index=True)
+
+    # ─────────────────────────────────────────────────────────────────
+    # 4. OPTION CHAIN ANALYSIS TABLE
+    # ─────────────────────────────────────────────────────────────────
+    if 'Option Chain Analysis' in sources:
+        source_data = sources['Option Chain Analysis']
+        with st.expander("**📊 Option Chain ATM Zone Analysis**", expanded=True):
+            bias = source_data.get('bias', 'NEUTRAL')
+            score = source_data.get('score', 0)
+            confidence = source_data.get('confidence', 0)
+
+            # Color based on bias
+            if bias == 'BULLISH':
+                bg_color = '#00ff88'
+                text_color = 'black'
+                icon = '🐂'
+            elif bias == 'BEARISH':
+                bg_color = '#ff4444'
+                text_color = 'white'
+                icon = '🐻'
+            else:
+                bg_color = '#ffa500'
+                text_color = 'white'
+                icon = '⚖️'
+
+            # Display source card
+            col1, col2, col3 = st.columns([2, 1, 1])
+
+            with col1:
+                st.markdown(f"""
+                <div style='background: {bg_color}; padding: 15px; border-radius: 10px;'>
+                    <h3 style='margin: 0; color: {text_color};'>{icon} {bias}</h3>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col2:
+                st.metric("Score", f"{score:+.1f}")
+
+            with col3:
+                st.metric("Confidence", f"{confidence:.1f}%")
+
+            st.markdown(f"""
+            **Bullish Instruments:** {source_data.get('bullish_instruments', 0)} | **Bearish:** {source_data.get('bearish_instruments', 0)} | **Neutral:** {source_data.get('neutral_instruments', 0)}
+            **Total Analyzed:** {source_data.get('total_instruments', 0)}
+            """)
+
+            st.info("ℹ️ ATM Zone analysis data will be displayed here when available from individual instrument tabs.")
 
     st.markdown("---")
 

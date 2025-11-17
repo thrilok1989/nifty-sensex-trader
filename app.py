@@ -384,10 +384,10 @@ st.divider()
 # ═══════════════════════════════════════════════════════════════════════
 # VOB TRADING SIGNALS DISPLAY
 # ═══════════════════════════════════════════════════════════════════════
-if st.session_state.active_vob_signals:
-    st.markdown("### 🎯 NIFTY/SENSEX Manual Trader")
-    st.markdown("**VOB-Based Trading | Manual Signal Entry**")
+st.markdown("### 🎯 NIFTY/SENSEX Manual Trader")
+st.markdown("**VOB-Based Trading | Manual Signal Entry**")
 
+if st.session_state.active_vob_signals:
     for signal in st.session_state.active_vob_signals:
         signal_emoji = "🟢" if signal['direction'] == 'CALL' else "🔴"
         direction_label = "BULLISH" if signal['direction'] == 'CALL' else "BEARISH"
@@ -434,8 +434,11 @@ if st.session_state.active_vob_signals:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+else:
+    st.info("⏳ Monitoring market for VOB-based entry signals... No active signals at the moment.")
+    st.caption("Signals are generated when spot price is within 8 points of a Volume Order Block and aligned with overall market sentiment.")
 
-    st.divider()
+st.divider()
 
 # ═══════════════════════════════════════════════════════════════════════
 # TABS WITH PERSISTENT STATE

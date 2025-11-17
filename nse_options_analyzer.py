@@ -822,6 +822,10 @@ def analyze_instrument(instrument):
             bias_results.append(row_data)
 
         df_summary = pd.DataFrame(bias_results)
+
+        # Store df_summary in session state for access from Overall Market Sentiment tab
+        st.session_state[f'{instrument}_atm_zone_bias'] = df_summary.copy()
+
         atm_row = df_summary[df_summary["Zone"] == "ATM"].iloc[0] if not df_summary[df_summary["Zone"] == "ATM"].empty else None
         market_view = atm_row['Verdict'] if atm_row is not None else "Neutral"
 

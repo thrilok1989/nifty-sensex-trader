@@ -874,7 +874,33 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
             **Total Analyzed:** {source_data.get('total_instruments', 0)}
             """)
 
-            st.info("ℹ️ ATM Zone analysis data will be displayed here when available from individual instrument tabs.")
+            # Display ATM Zone tables for each instrument
+            instruments = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY']
+
+            atm_data_available = False
+            for instrument in instruments:
+                if f'{instrument}_atm_zone_bias' in st.session_state:
+                    atm_data_available = True
+                    df_atm = st.session_state[f'{instrument}_atm_zone_bias']
+
+                    st.markdown(f"#### {instrument} ATM Zone Bias")
+
+                    # Add emoji indicators for bias columns
+                    df_display = df_atm.copy()
+                    bias_columns = [col for col in df_display.columns if '_Bias' in col or col == 'Verdict']
+
+                    for col in bias_columns:
+                        df_display[col] = df_display[col].apply(lambda x:
+                            f"🐂 {x}" if str(x).upper() == "BULLISH" else
+                            f"🐻 {x}" if str(x).upper() == "BEARISH" else
+                            f"⚖️ {x}" if str(x).upper() == "NEUTRAL" else
+                            x
+                        )
+
+                    st.dataframe(df_display, use_container_width=True, hide_index=True)
+
+            if not atm_data_available:
+                st.info("ℹ️ ATM Zone analysis data will be displayed here when available. Please run bias analysis from individual instrument tabs (NIFTY, BANKNIFTY, SENSEX, etc.) first.")
 
     st.markdown("---")
 

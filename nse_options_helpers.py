@@ -471,8 +471,17 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
             ce_gamma_exp = row['Gamma_CE'] * row['openInterest_CE']
             pe_gamma_exp = row['Gamma_PE'] * row['openInterest_PE']
 
+            # Calculate net exposures
+            net_delta_exp = ce_delta_exp + pe_delta_exp
+            net_gamma_exp = ce_gamma_exp + pe_gamma_exp
+
             # Calculate per-strike IV skew
             strike_iv_skew = row['impliedVolatility_PE'] - row['impliedVolatility_CE']
+
+            # Determine bias for each metric
+            delta_exp_bias = "Bullish" if net_delta_exp > 0 else "Bearish" if net_delta_exp < 0 else "Neutral"
+            gamma_exp_bias = "Bullish" if net_gamma_exp > 0 else "Bearish" if net_gamma_exp < 0 else "Neutral"
+            iv_skew_bias = "Bullish" if strike_iv_skew > 0 else "Bearish" if strike_iv_skew < 0 else "Neutral"
 
             row_data = {
                 "Strike": row['strikePrice'],
@@ -490,9 +499,9 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
                     row['totalTradedVolume_CE'] - row['totalTradedVolume_PE'],
                     row['changeinOpenInterest_CE'] - row['changeinOpenInterest_PE']
                 ),
-                "Delta_Exposure": round(ce_delta_exp + pe_delta_exp, 2),
-                "Gamma_Exposure": round(ce_gamma_exp + pe_gamma_exp, 4),
-                "IV_Skew": round(strike_iv_skew, 2)
+                "Delta_Exposure_Bias": delta_exp_bias,
+                "Gamma_Exposure_Bias": gamma_exp_bias,
+                "IV_Skew_Bias": iv_skew_bias
             }
 
             for k in row_data:

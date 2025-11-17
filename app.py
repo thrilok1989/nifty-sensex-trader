@@ -22,7 +22,7 @@ from bias_analysis import BiasAnalysisPro
 from option_chain_analysis import OptionChainAnalyzer
 from nse_options_helpers import *
 from advanced_chart_analysis import AdvancedChartAnalysis
-from overall_market_sentiment import render_overall_market_sentiment
+from overall_market_sentiment import render_overall_market_sentiment, calculate_overall_sentiment
 from data_cache_manager import (
     get_cache_manager,
     preload_all_data,
@@ -30,6 +30,7 @@ from data_cache_manager import (
     get_cached_sensex_data,
     get_cached_bias_analysis_results
 )
+from vob_signal_generator import VOBSignalGenerator
 
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE CONFIG
@@ -48,6 +49,15 @@ st.set_page_config(
 
 if 'signal_manager' not in st.session_state:
     st.session_state.signal_manager = SignalManager()
+
+if 'vob_signal_generator' not in st.session_state:
+    st.session_state.vob_signal_generator = VOBSignalGenerator(proximity_threshold=8.0)
+
+if 'active_vob_signals' not in st.session_state:
+    st.session_state.active_vob_signals = []
+
+if 'last_vob_check_time' not in st.session_state:
+    st.session_state.last_vob_check_time = 0
 
 if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = time.time()
@@ -219,6 +229,103 @@ if not nifty_data or not nifty_data.get('success'):
         st.error(f"❌ Failed to fetch NIFTY data: {nifty_data.get('error')}")
         st.stop()
 
+# ═══════════════════════════════════════════════════════════════════════
+# VOB-BASED SIGNAL MONITORING
+# ═══════════════════════════════════════════════════════════════════════
+# Check for VOB signals every 10 seconds
+current_time = time.time()
+if current_time - st.session_state.last_vob_check_time > 10:
+    st.session_state.last_vob_check_time = current_time
+
+    try:
+        # Get overall market sentiment
+        sentiment_result = calculate_overall_sentiment()
+        overall_sentiment = sentiment_result.get('overall_sentiment', 'NEUTRAL')
+
+        # Fetch chart data and calculate VOB for NIFTY
+        chart_analyzer = AdvancedChartAnalysis()
+        df = chart_analyzer.fetch_intraday_data('^NSEI', period='1d', interval='1m')
+
+        if df is not None and len(df) > 0:
+            # Calculate VOB blocks
+            from indicators.volume_order_blocks import VolumeOrderBlocks
+            vob_indicator = VolumeOrderBlocks(sensitivity=5)
+            vob_data = vob_indicator.calculate(df)
+
+            # Check for NIFTY signal
+            nifty_signal = st.session_state.vob_signal_generator.check_for_signal(
+                spot_price=nifty_data['spot_price'],
+                market_sentiment=overall_sentiment,
+                bullish_blocks=vob_data['bullish_blocks'],
+                bearish_blocks=vob_data['bearish_blocks'],
+                index='NIFTY'
+            )
+
+            if nifty_signal:
+                # Check if this is a new signal (not already in active signals)
+                is_new = True
+                for existing_signal in st.session_state.active_vob_signals:
+                    if (existing_signal['index'] == nifty_signal['index'] and
+                        existing_signal['direction'] == nifty_signal['direction'] and
+                        abs(existing_signal['entry_price'] - nifty_signal['entry_price']) < 5):
+                        is_new = False
+                        break
+
+                if is_new:
+                    # Add to active signals
+                    st.session_state.active_vob_signals.append(nifty_signal)
+
+                    # Send telegram notification
+                    telegram_bot = TelegramBot()
+                    telegram_bot.send_vob_entry_signal(nifty_signal)
+
+        # Fetch chart data and calculate VOB for SENSEX
+        df_sensex = chart_analyzer.fetch_intraday_data('^BSESN', period='1d', interval='1m')
+
+        if df_sensex is not None and len(df_sensex) > 0:
+            # Calculate VOB blocks for SENSEX
+            vob_indicator_sensex = VolumeOrderBlocks(sensitivity=5)
+            vob_data_sensex = vob_indicator_sensex.calculate(df_sensex)
+
+            # Get SENSEX spot price
+            sensex_data = get_cached_sensex_data()
+            if sensex_data:
+                sensex_signal = st.session_state.vob_signal_generator.check_for_signal(
+                    spot_price=sensex_data['spot_price'],
+                    market_sentiment=overall_sentiment,
+                    bullish_blocks=vob_data_sensex['bullish_blocks'],
+                    bearish_blocks=vob_data_sensex['bearish_blocks'],
+                    index='SENSEX'
+                )
+
+                if sensex_signal:
+                    # Check if this is a new signal
+                    is_new = True
+                    for existing_signal in st.session_state.active_vob_signals:
+                        if (existing_signal['index'] == sensex_signal['index'] and
+                            existing_signal['direction'] == sensex_signal['direction'] and
+                            abs(existing_signal['entry_price'] - sensex_signal['entry_price']) < 5):
+                            is_new = False
+                            break
+
+                    if is_new:
+                        # Add to active signals
+                        st.session_state.active_vob_signals.append(sensex_signal)
+
+                        # Send telegram notification
+                        telegram_bot = TelegramBot()
+                        telegram_bot.send_vob_entry_signal(sensex_signal)
+
+        # Clean up old signals (older than 30 minutes)
+        st.session_state.active_vob_signals = [
+            sig for sig in st.session_state.active_vob_signals
+            if (current_time - sig['timestamp'].timestamp()) < 1800
+        ]
+
+    except Exception as e:
+        # Silently fail - don't disrupt the app
+        pass
+
 # Display market data
 col1, col2, col3, col4 = st.columns(4)
 
@@ -257,6 +364,62 @@ with col4:
         st.info("📅 Loading...")
 
 st.divider()
+
+# ═══════════════════════════════════════════════════════════════════════
+# VOB TRADING SIGNALS DISPLAY
+# ═══════════════════════════════════════════════════════════════════════
+if st.session_state.active_vob_signals:
+    st.markdown("### 🎯 NIFTY/SENSEX Manual Trader")
+    st.markdown("**VOB-Based Trading | Manual Signal Entry**")
+
+    for signal in st.session_state.active_vob_signals:
+        signal_emoji = "🟢" if signal['direction'] == 'CALL' else "🔴"
+        direction_label = "BULLISH" if signal['direction'] == 'CALL' else "BEARISH"
+        sentiment_color = "#26ba9f" if signal['market_sentiment'] == 'BULLISH' else "#ba2646"
+
+        with st.container():
+            st.markdown(f"""
+            <div style='border: 2px solid {sentiment_color}; border-radius: 10px; padding: 15px; margin: 10px 0; background-color: rgba(38, 186, 159, 0.1);'>
+                <h3 style='margin: 0;'>{signal_emoji} {signal['index']} {direction_label} ENTRY SIGNAL</h3>
+                <p style='margin: 5px 0;'><b>Market Sentiment:</b> {signal['market_sentiment']}</p>
+                <hr style='margin: 10px 0;'>
+                <div style='display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;'>
+                    <div>
+                        <p style='margin: 0; font-size: 12px; color: #888;'>Entry Price</p>
+                        <p style='margin: 0; font-size: 18px; font-weight: bold;'>₹{signal['entry_price']}</p>
+                    </div>
+                    <div>
+                        <p style='margin: 0; font-size: 12px; color: #888;'>Stop Loss</p>
+                        <p style='margin: 0; font-size: 18px; font-weight: bold; color: #ff5252;'>₹{signal['stop_loss']}</p>
+                    </div>
+                    <div>
+                        <p style='margin: 0; font-size: 12px; color: #888;'>Target</p>
+                        <p style='margin: 0; font-size: 18px; font-weight: bold; color: #4caf50;'>₹{signal['target']}</p>
+                    </div>
+                    <div>
+                        <p style='margin: 0; font-size: 12px; color: #888;'>Risk:Reward</p>
+                        <p style='margin: 0; font-size: 18px; font-weight: bold;'>{signal['risk_reward']}</p>
+                    </div>
+                </div>
+                <hr style='margin: 10px 0;'>
+                <div style='display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;'>
+                    <div>
+                        <p style='margin: 0; font-size: 12px; color: #888;'>VOB Level</p>
+                        <p style='margin: 0; font-size: 14px;'>₹{signal['vob_level']}</p>
+                    </div>
+                    <div>
+                        <p style='margin: 0; font-size: 12px; color: #888;'>Distance from VOB</p>
+                        <p style='margin: 0; font-size: 14px;'>{signal['distance_from_vob']} points</p>
+                    </div>
+                    <div>
+                        <p style='margin: 0; font-size: 12px; color: #888;'>Signal Time</p>
+                        <p style='margin: 0; font-size: 14px;'>{signal['timestamp'].strftime('%H:%M:%S')}</p>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.divider()
 
 # ═══════════════════════════════════════════════════════════════════════
 # TABS WITH PERSISTENT STATE

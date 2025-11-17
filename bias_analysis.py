@@ -12,6 +12,14 @@ import yfinance as yf
 import warnings
 warnings.filterwarnings('ignore')
 
+# Import Dhan API for Indian indices volume data
+try:
+    from dhan_data_fetcher import DhanDataFetcher
+    DHAN_AVAILABLE = True
+except ImportError:
+    DHAN_AVAILABLE = False
+    print("Warning: Dhan API not available. Volume data may be missing for Indian indices.")
+
 
 class BiasAnalysisPro:
     """
@@ -102,14 +110,72 @@ class BiasAnalysisPro:
     # =========================================================================
 
     def fetch_data(self, symbol: str, period: str = '7d', interval: str = '5m') -> pd.DataFrame:
-        """Fetch data from Yahoo Finance
+        """Fetch data from Dhan API (for Indian indices) or Yahoo Finance (for others)
         Note: Yahoo Finance limits intraday data - use 7d max for 5m interval
         """
+        # Check if this is an Indian index that needs Dhan API
+        indian_indices = {'^NSEI': 'NIFTY', '^BSESN': 'SENSEX', '^NSEBANK': 'BANKNIFTY'}
+
+        if symbol in indian_indices and DHAN_AVAILABLE:
+            try:
+                # Use Dhan API for Indian indices to get proper volume data
+                dhan_instrument = indian_indices[symbol]
+                fetcher = DhanDataFetcher()
+
+                # Convert interval to Dhan API format (1, 5, 15, 25, 60)
+                interval_map = {'1m': '1', '5m': '5', '15m': '15', '1h': '60'}
+                dhan_interval = interval_map.get(interval, '5')
+
+                # Fetch intraday data
+                result = fetcher.fetch_intraday_data(dhan_instrument, interval=dhan_interval)
+
+                if result.get('success') and result.get('data') is not None:
+                    df = result['data']
+
+                    # Ensure column names match yfinance format (capitalized)
+                    df.columns = [col.capitalize() for col in df.columns]
+
+                    # Set timestamp as index
+                    if 'Timestamp' in df.columns:
+                        df.set_index('Timestamp', inplace=True)
+
+                    # Ensure volume column exists and has valid data
+                    if 'Volume' not in df.columns:
+                        df['Volume'] = 0
+                    else:
+                        # Replace NaN volumes with 0
+                        df['Volume'] = df['Volume'].fillna(0)
+
+                    if not df.empty:
+                        print(f"✅ Fetched {len(df)} candles for {symbol} from Dhan API with volume data")
+                        return df
+                    else:
+                        print(f"Warning: Empty data from Dhan API for {symbol}, falling back to yfinance")
+                else:
+                    print(f"Warning: Dhan API failed for {symbol}: {result.get('error')}, falling back to yfinance")
+            except Exception as e:
+                print(f"Error fetching from Dhan API for {symbol}: {e}, falling back to yfinance")
+
+        # Fallback to Yahoo Finance for non-Indian indices or if Dhan fails
         try:
             ticker = yf.Ticker(symbol)
             df = ticker.history(period=period, interval=interval)
+
             if df.empty:
                 print(f"Warning: No data for {symbol}")
+                return pd.DataFrame()
+
+            # Ensure volume column exists (even if it's zeros for indices)
+            if 'Volume' not in df.columns:
+                df['Volume'] = 0
+            else:
+                # Replace NaN volumes with 0
+                df['Volume'] = df['Volume'].fillna(0)
+
+            # Warn if volume is all zeros (common for Yahoo Finance indices)
+            if df['Volume'].sum() == 0 and symbol in indian_indices:
+                print(f"⚠️  Warning: Volume data is zero for {symbol} from Yahoo Finance")
+
             return df
         except Exception as e:
             print(f"Error fetching {symbol}: {e}")
@@ -129,7 +195,12 @@ class BiasAnalysisPro:
         return rsi
 
     def calculate_mfi(self, df: pd.DataFrame, period: int = 10) -> pd.Series:
-        """Calculate Money Flow Index"""
+        """Calculate Money Flow Index with NaN/zero handling"""
+        # Check if volume data is available
+        if df['Volume'].sum() == 0:
+            # Return neutral MFI (50) if no volume data
+            return pd.Series([50.0] * len(df), index=df.index)
+
         typical_price = (df['High'] + df['Low'] + df['Close']) / 3
         money_flow = typical_price * df['Volume']
 
@@ -139,8 +210,13 @@ class BiasAnalysisPro:
         positive_mf = positive_flow.rolling(window=period).sum()
         negative_mf = negative_flow.rolling(window=period).sum()
 
-        mfi_ratio = positive_mf / negative_mf
+        # Avoid division by zero
+        mfi_ratio = positive_mf / negative_mf.replace(0, np.nan)
         mfi = 100 - (100 / (1 + mfi_ratio))
+
+        # Fill NaN with neutral value (50)
+        mfi = mfi.fillna(50)
+
         return mfi
 
     def calculate_dmi(self, df: pd.DataFrame, period: int = 13, smoothing: int = 8):
@@ -174,9 +250,22 @@ class BiasAnalysisPro:
         return plus_di, minus_di, adx
 
     def calculate_vwap(self, df: pd.DataFrame) -> pd.Series:
-        """Calculate VWAP"""
+        """Calculate VWAP with NaN/zero handling"""
+        # Check if volume data is available
+        if df['Volume'].sum() == 0:
+            # Return typical price as fallback if no volume data
+            return (df['High'] + df['Low'] + df['Close']) / 3
+
         typical_price = (df['High'] + df['Low'] + df['Close']) / 3
-        vwap = (typical_price * df['Volume']).cumsum() / df['Volume'].cumsum()
+        cumulative_volume = df['Volume'].cumsum()
+
+        # Avoid division by zero
+        cumulative_volume_safe = cumulative_volume.replace(0, np.nan)
+        vwap = (typical_price * df['Volume']).cumsum() / cumulative_volume_safe
+
+        # Fill NaN with typical price
+        vwap = vwap.fillna(typical_price)
+
         return vwap
 
     def calculate_atr(self, df: pd.DataFrame, period: int = 14) -> pd.Series:
@@ -212,36 +301,81 @@ class BiasAnalysisPro:
         return volatility_ratio, high_volatility, low_volatility
 
     def calculate_volume_roc(self, df: pd.DataFrame, length: int = 14) -> Tuple[pd.Series, bool, bool]:
-        """Calculate Volume Rate of Change"""
-        volume_roc = ((df['Volume'] - df['Volume'].shift(length)) / df['Volume'].shift(length)) * 100
+        """Calculate Volume Rate of Change with NaN/zero handling"""
+        # Check if volume data is available
+        if df['Volume'].sum() == 0:
+            # Return neutral volume ROC if no volume data
+            neutral_roc = pd.Series([0.0] * len(df), index=df.index)
+            return neutral_roc, False, False
 
-        strong_volume = volume_roc.iloc[-1] > self.config['volume_threshold']
-        weak_volume = volume_roc.iloc[-1] < -self.config['volume_threshold']
+        # Avoid division by zero
+        volume_shifted = df['Volume'].shift(length).replace(0, np.nan)
+        volume_roc = ((df['Volume'] - df['Volume'].shift(length)) / volume_shifted) * 100
+
+        # Fill NaN with 0
+        volume_roc = volume_roc.fillna(0)
+
+        # Check for strong/weak volume (handle NaN gracefully)
+        last_value = volume_roc.iloc[-1] if not np.isnan(volume_roc.iloc[-1]) else 0
+        strong_volume = last_value > self.config['volume_threshold']
+        weak_volume = last_value < -self.config['volume_threshold']
 
         return volume_roc, strong_volume, weak_volume
 
     def calculate_obv(self, df: pd.DataFrame, smoothing: int = 21):
-        """Calculate On Balance Volume"""
+        """Calculate On Balance Volume with NaN/zero handling"""
+        # Check if volume data is available
+        if df['Volume'].sum() == 0:
+            # Return neutral OBV if no volume data
+            neutral_obv = pd.Series([0.0] * len(df), index=df.index)
+            neutral_obv_ma = pd.Series([0.0] * len(df), index=df.index)
+            return neutral_obv, neutral_obv_ma, False, False
+
         obv = (np.sign(df['Close'].diff()) * df['Volume']).fillna(0).cumsum()
         obv_ma = obv.rolling(window=smoothing).mean()
 
-        obv_rising = obv.iloc[-1] > obv.iloc[-2]
-        obv_falling = obv.iloc[-1] < obv.iloc[-2]
-        obv_bullish = obv.iloc[-1] > obv_ma.iloc[-1] and obv_rising
-        obv_bearish = obv.iloc[-1] < obv_ma.iloc[-1] and obv_falling
+        # Handle potential NaN or missing values
+        obv = obv.fillna(0)
+        obv_ma = obv_ma.fillna(0)
+
+        # Safe comparison with fallback
+        try:
+            obv_rising = obv.iloc[-1] > obv.iloc[-2] if len(obv) >= 2 else False
+            obv_falling = obv.iloc[-1] < obv.iloc[-2] if len(obv) >= 2 else False
+            obv_bullish = obv.iloc[-1] > obv_ma.iloc[-1] and obv_rising
+            obv_bearish = obv.iloc[-1] < obv_ma.iloc[-1] and obv_falling
+        except:
+            obv_bullish = False
+            obv_bearish = False
 
         return obv, obv_ma, obv_bullish, obv_bearish
 
     def calculate_force_index(self, df: pd.DataFrame, length: int = 13, smoothing: int = 2):
-        """Calculate Force Index"""
+        """Calculate Force Index with NaN/zero handling"""
+        # Check if volume data is available
+        if df['Volume'].sum() == 0:
+            # Return neutral force index if no volume data
+            neutral_force = pd.Series([0.0] * len(df), index=df.index)
+            return neutral_force, False, False
+
         force_index = (df['Close'] - df['Close'].shift(1)) * df['Volume']
+        force_index = force_index.fillna(0)
+
         force_index_ma = force_index.ewm(span=length, adjust=False).mean()
         force_index_smoothed = force_index_ma.ewm(span=smoothing, adjust=False).mean()
 
-        force_rising = force_index_smoothed.iloc[-1] > force_index_smoothed.iloc[-2]
-        force_falling = force_index_smoothed.iloc[-1] < force_index_smoothed.iloc[-2]
-        force_bullish = force_index_smoothed.iloc[-1] > 0 and force_rising
-        force_bearish = force_index_smoothed.iloc[-1] < 0 and force_falling
+        # Handle potential NaN
+        force_index_smoothed = force_index_smoothed.fillna(0)
+
+        # Safe comparison with fallback
+        try:
+            force_rising = force_index_smoothed.iloc[-1] > force_index_smoothed.iloc[-2] if len(force_index_smoothed) >= 2 else False
+            force_falling = force_index_smoothed.iloc[-1] < force_index_smoothed.iloc[-2] if len(force_index_smoothed) >= 2 else False
+            force_bullish = force_index_smoothed.iloc[-1] > 0 and force_rising
+            force_bearish = force_index_smoothed.iloc[-1] < 0 and force_falling
+        except:
+            force_bullish = False
+            force_bearish = False
 
         return force_index_smoothed, force_bullish, force_bearish
 
@@ -396,6 +530,11 @@ class BiasAnalysisPro:
         # =====================================================================
         mfi = self.calculate_mfi(df, self.config['mfi_period'])
         mfi_value = mfi.iloc[-1]
+
+        # Handle NaN values in display
+        if np.isnan(mfi_value):
+            mfi_value = 50.0  # Neutral default
+
         if mfi_value > 60:
             mfi_bias = "BULLISH"
             mfi_score = min(100, (mfi_value - 50) * 2)
@@ -446,12 +585,16 @@ class BiasAnalysisPro:
         vwap = self.calculate_vwap(df)
         vwap_value = vwap.iloc[-1]
 
+        # Handle NaN values in display
+        if np.isnan(vwap_value):
+            vwap_value = current_price  # Use current price as fallback
+
         if current_price > vwap_value:
             vwap_bias = "BULLISH"
-            vwap_score = min(100, ((current_price - vwap_value) / vwap_value) * 1000)
+            vwap_score = min(100, ((current_price - vwap_value) / vwap_value) * 1000) if vwap_value != 0 else 0
         elif current_price < vwap_value:
             vwap_bias = "BEARISH"
-            vwap_score = -min(100, ((vwap_value - current_price) / vwap_value) * 1000)
+            vwap_score = -min(100, ((vwap_value - current_price) / vwap_value) * 1000) if vwap_value != 0 else 0
         else:
             vwap_bias = "NEUTRAL"
             vwap_score = 0
@@ -498,6 +641,10 @@ class BiasAnalysisPro:
         )
         vol_roc_value = volume_roc.iloc[-1]
 
+        # Handle NaN values in display
+        if np.isnan(vol_roc_value):
+            vol_roc_value = 0.0  # Neutral default
+
         if strong_volume:
             vol_roc_bias = "STRONG BUY/SELL"
             vol_roc_score = 70
@@ -521,6 +668,10 @@ class BiasAnalysisPro:
         # =====================================================================
         obv, obv_ma, obv_bullish, obv_bearish = self.calculate_obv(df, self.config['obv_smoothing'])
         obv_value = obv.iloc[-1]
+
+        # Handle NaN values in display
+        if np.isnan(obv_value):
+            obv_value = 0.0  # Neutral default
 
         if obv_bullish:
             obv_bias = "BULLISH"
@@ -547,6 +698,10 @@ class BiasAnalysisPro:
             df, self.config['force_index_length'], self.config['force_index_smoothing']
         )
         force_value = force_index.iloc[-1]
+
+        # Handle NaN values in display
+        if np.isnan(force_value):
+            force_value = 0.0  # Neutral default
 
         if force_bullish:
             force_bias = "BULLISH"
@@ -717,19 +872,31 @@ class BiasAnalysisPro:
         # =====================================================================
         # 15. VOLUME TREND BIAS
         # =====================================================================
-        volume_sma = df['Volume'].rolling(window=20).mean()
-        current_volume = df['Volume'].iloc[-1]
-        volume_sma_value = volume_sma.iloc[-1]
-
-        if current_volume > volume_sma_value * 1.5:
-            volume_trend_bias = "HIGH VOLUME"
-            volume_trend_score = 60
-        elif current_volume < volume_sma_value * 0.5:
-            volume_trend_bias = "LOW VOLUME"
-            volume_trend_score = -30
-        else:
-            volume_trend_bias = "NORMAL"
+        # Check if volume data is available
+        if df['Volume'].sum() == 0:
+            # No volume data available
+            volume_trend_bias = "NO DATA"
             volume_trend_score = 0
+            current_volume = 0
+            volume_sma_value = 0
+        else:
+            volume_sma = df['Volume'].rolling(window=20).mean()
+            current_volume = df['Volume'].iloc[-1]
+            volume_sma_value = volume_sma.iloc[-1]
+
+            # Handle NaN in volume_sma_value
+            if np.isnan(volume_sma_value) or volume_sma_value == 0:
+                volume_trend_bias = "NORMAL"
+                volume_trend_score = 0
+            elif current_volume > volume_sma_value * 1.5:
+                volume_trend_bias = "HIGH VOLUME"
+                volume_trend_score = 60
+            elif current_volume < volume_sma_value * 0.5:
+                volume_trend_bias = "LOW VOLUME"
+                volume_trend_score = -30
+            else:
+                volume_trend_bias = "NORMAL"
+                volume_trend_score = 0
 
         bias_results.append({
             'indicator': 'Volume Trend',

@@ -15,6 +15,8 @@ from indicators.htf_support_resistance import HTFSupportResistance
 from indicators.htf_volume_footprint import HTFVolumeFootprint
 from indicators.ultimate_rsi import UltimateRSI
 from indicators.om_indicator import OMIndicator
+from dhan_data_fetcher import DhanDataFetcher
+from config import get_dhan_credentials
 
 
 class AdvancedChartAnalysis:
@@ -27,18 +29,99 @@ class AdvancedChartAnalysis:
         # Indicators will be created with custom parameters when needed
         self.htf_sr_indicator = HTFSupportResistance()
 
+        # Initialize Dhan data fetcher for Indian indices
+        try:
+            self.dhan_fetcher = DhanDataFetcher()
+            self.use_dhan = True
+        except Exception as e:
+            print(f"Warning: Could not initialize Dhan API: {e}")
+            self.dhan_fetcher = None
+            self.use_dhan = False
+
     def fetch_intraday_data(self, symbol, period='1d', interval='1m'):
         """
-        Fetch intraday data using yfinance
+        Fetch intraday data using Dhan API for Indian indices or yfinance for others
 
         Args:
-            symbol: Stock symbol (e.g., '^NSEI' for NIFTY)
+            symbol: Stock symbol (e.g., '^NSEI' for NIFTY, '^BSESN' for SENSEX, '^DJI' for DOW)
             period: Period to fetch ('1d', '5d', '1mo')
             interval: Interval ('1m', '5m', '15m', '1h')
 
         Returns:
-            DataFrame: OHLCV data
+            DataFrame: OHLCV data with volume
         """
+        # Map Yahoo Finance symbols to Dhan instruments
+        symbol_map = {
+            '^NSEI': 'NIFTY',
+            '^BSESN': 'SENSEX'
+        }
+
+        # Check if this is an Indian index
+        if symbol in symbol_map and self.use_dhan and self.dhan_fetcher:
+            return self._fetch_from_dhan(symbol_map[symbol], period, interval)
+        else:
+            return self._fetch_from_yfinance(symbol, period, interval)
+
+    def _fetch_from_dhan(self, instrument, period, interval):
+        """Fetch data from Dhan API for Indian indices"""
+        try:
+            # Map yfinance interval to Dhan interval
+            interval_map = {
+                '1m': '1',
+                '5m': '5',
+                '15m': '15',
+                '1h': '60',
+                '60m': '60'
+            }
+            dhan_interval = interval_map.get(interval, '1')
+
+            # Calculate date range based on period
+            to_date = datetime.now()
+            if period == '1d':
+                from_date = to_date - timedelta(days=1)
+            elif period == '5d':
+                from_date = to_date - timedelta(days=5)
+            elif period == '1mo':
+                from_date = to_date - timedelta(days=30)
+            else:
+                from_date = to_date - timedelta(days=1)
+
+            # Format dates for Dhan API
+            from_date_str = from_date.strftime('%Y-%m-%d')
+            to_date_str = to_date.strftime('%Y-%m-%d')
+
+            # Fetch data from Dhan
+            result = self.dhan_fetcher.fetch_intraday_data(
+                instrument=instrument,
+                interval=dhan_interval,
+                from_date=from_date_str,
+                to_date=to_date_str
+            )
+
+            if result.get('success') and result.get('data') is not None:
+                df = result['data']
+
+                # Ensure index is datetime
+                if 'timestamp' in df.columns:
+                    df.set_index('timestamp', inplace=True)
+
+                # Ensure required columns exist
+                required_cols = ['open', 'high', 'low', 'close', 'volume']
+                if all(col in df.columns for col in required_cols):
+                    return df
+                else:
+                    print(f"Warning: Dhan data missing required columns. Falling back to yfinance.")
+                    return None
+            else:
+                print(f"Warning: Dhan API failed. Falling back to yfinance.")
+                return None
+
+        except Exception as e:
+            print(f"Error fetching from Dhan: {e}. Falling back to yfinance.")
+            return None
+
+    def _fetch_from_yfinance(self, symbol, period, interval):
+        """Fetch data from Yahoo Finance"""
         try:
             ticker = yf.Ticker(symbol)
             df = ticker.history(period=period, interval=interval)
@@ -57,7 +140,7 @@ class AdvancedChartAnalysis:
             return df
 
         except Exception as e:
-            print(f"Error fetching data: {e}")
+            print(f"Error fetching data from yfinance: {e}")
             return None
 
     def create_advanced_chart(self, df, symbol, show_vob=True, show_htf_sr=True,

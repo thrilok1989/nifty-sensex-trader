@@ -14,6 +14,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import time
+from market_hours_scheduler import is_within_trading_hours, scheduler
 
 
 def calculate_stock_performance_sentiment(stock_data):
@@ -489,63 +490,117 @@ def calculate_overall_sentiment():
     }
 
 
-def run_all_analyses(NSE_INSTRUMENTS):
+def _run_bias_analysis():
+    """
+    Helper function to run bias analysis
+    Returns: (success, errors)
+    """
+    errors = []
+    try:
+        # Initialize bias_analyzer if not exists
+        if 'bias_analyzer' not in st.session_state:
+            from bias_analysis_pro import BiasAnalysisPro
+            st.session_state.bias_analyzer = BiasAnalysisPro()
+
+        symbol = "^NSEI"  # NIFTY 50
+        results = st.session_state.bias_analyzer.analyze_all_bias_indicators(symbol)
+        st.session_state.bias_analysis_results = results
+        if results.get('success'):
+            return True, []
+        else:
+            errors.append(f"Bias Analysis Pro: {results.get('error', 'Unknown error')}")
+            return False, errors
+    except Exception as e:
+        errors.append(f"Bias Analysis Pro: {str(e)}")
+        return False, errors
+
+
+def _run_option_chain_analysis(NSE_INSTRUMENTS, show_progress=True):
+    """
+    Helper function to run option chain analysis
+    Returns: (success, errors)
+    """
+    errors = []
+    try:
+        from nse_options_helpers import calculate_and_store_atm_zone_bias_silent
+        from nse_options_analyzer import fetch_option_chain_data as fetch_oc
+
+        overall_data = {}
+        all_instruments = list(NSE_INSTRUMENTS['indices'].keys())
+
+        # Create progress indicators only if show_progress is True
+        if show_progress:
+            progress_bar = st.progress(0)
+            progress_text = st.empty()
+
+        for idx, instrument in enumerate(all_instruments):
+            if show_progress:
+                progress_text.text(f"Analyzing {instrument}... ({idx + 1}/{len(all_instruments)})")
+
+            # Fetch basic option chain data
+            data = fetch_oc(instrument)
+            overall_data[instrument] = data
+
+            # Calculate and store ATM zone bias data silently
+            calculate_and_store_atm_zone_bias_silent(instrument, NSE_INSTRUMENTS)
+
+            if show_progress:
+                progress_bar.progress((idx + 1) / len(all_instruments))
+
+        st.session_state['overall_option_data'] = overall_data
+
+        if show_progress:
+            progress_bar.progress(1.0)
+            progress_text.empty()
+
+        return True, []
+    except Exception as e:
+        errors.append(f"Option Chain Analysis: {str(e)}")
+        return False, errors
+
+
+def run_all_analyses(NSE_INSTRUMENTS, show_progress=True):
     """
     Runs all analyses and stores results in session state:
     1. Bias Analysis Pro (includes stock data and technical indicators)
     2. Option Chain Analysis (includes PCR and ATM zone analysis)
+
+    Args:
+        NSE_INSTRUMENTS: Instrument configuration
+        show_progress: Whether to show progress bars (default True, set False for silent auto-refresh)
     """
     success = True
     errors = []
 
     try:
         # 1. Run Bias Analysis Pro
-        with st.spinner("🎯 Running Bias Analysis Pro..."):
-            try:
-                symbol = "^NSEI"  # NIFTY 50
-                results = st.session_state.bias_analyzer.analyze_all_bias_indicators(symbol)
-                st.session_state.bias_analysis_results = results
-                if results.get('success'):
-                    st.success("✅ Bias Analysis Pro completed!")
-                else:
-                    errors.append(f"Bias Analysis Pro: {results.get('error', 'Unknown error')}")
-                    success = False
-            except Exception as e:
-                errors.append(f"Bias Analysis Pro: {str(e)}")
-                success = False
+        spinner_text = "🎯 Running Bias Analysis Pro..."
+        if show_progress:
+            with st.spinner(spinner_text):
+                success_bias, errors_bias = _run_bias_analysis()
+                success = success and success_bias
+                errors.extend(errors_bias)
+        else:
+            success_bias, errors_bias = _run_bias_analysis()
+            success = success and success_bias
+            errors.extend(errors_bias)
 
-        # 2. Run Option Chain Analysis for all instruments
-        with st.spinner("📊 Running Option Chain Analysis for all instruments..."):
-            try:
-                from nse_options_helpers import calculate_and_store_atm_zone_bias_silent
-                from nse_options_analyzer import fetch_option_chain_data as fetch_oc
-
-                overall_data = {}
-                all_instruments = list(NSE_INSTRUMENTS['indices'].keys())
-
-                # Create a progress bar
-                progress_bar = st.progress(0)
-                progress_text = st.empty()
-
-                for idx, instrument in enumerate(all_instruments):
-                    progress_text.text(f"Analyzing {instrument}... ({idx + 1}/{len(all_instruments)})")
-
-                    # Fetch basic option chain data
-                    data = fetch_oc(instrument)
-                    overall_data[instrument] = data
-
-                    # Calculate and store ATM zone bias data silently
-                    calculate_and_store_atm_zone_bias_silent(instrument, NSE_INSTRUMENTS)
-
-                    progress_bar.progress((idx + 1) / len(all_instruments))
-
-                st.session_state['overall_option_data'] = overall_data
-                progress_bar.progress(1.0)
-                progress_text.empty()
-                st.success("✅ Option Chain Analysis completed!")
-            except Exception as e:
-                errors.append(f"Option Chain Analysis: {str(e)}")
-                success = False
+        # 2. Run Option Chain Analysis for all instruments (only during trading hours for performance)
+        if is_within_trading_hours():
+            spinner_text = "📊 Running Option Chain Analysis for all instruments..."
+            if show_progress:
+                with st.spinner(spinner_text):
+                    success_oc, errors_oc = _run_option_chain_analysis(NSE_INSTRUMENTS, show_progress)
+                    success = success and success_oc
+                    errors.extend(errors_oc)
+            else:
+                success_oc, errors_oc = _run_option_chain_analysis(NSE_INSTRUMENTS, show_progress)
+                success = success and success_oc
+                errors.extend(errors_oc)
+        else:
+            # When market is closed, skip option chain analysis to save API quota
+            if show_progress:
+                st.info("ℹ️ Option chain analysis skipped (market closed). Using cached data.")
 
     except Exception as e:
         errors.append(f"Overall error: {str(e)}")
@@ -560,7 +615,16 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     Auto-refreshes every 60 seconds
     """
     st.markdown("## 🌟 Overall Market Sentiment")
-    st.caption("🔄 Auto-refreshing every 60 seconds")
+
+    # Show refresh interval based on market session
+    market_session = scheduler.get_market_session()
+    refresh_interval = scheduler.get_refresh_interval(market_session)
+
+    if is_within_trading_hours():
+        st.caption(f"🔄 Auto-refreshing every {refresh_interval} seconds during trading hours")
+    else:
+        st.caption("⏸️ Auto-refresh paused (market closed). Using cached data.")
+
     st.markdown("---")
 
     # Initialize auto-refresh timestamp
@@ -581,16 +645,21 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
                 for error in errors:
                     st.warning(f"⚠️ {error}")
 
-    # Auto-refresh every 60 seconds
+    # Auto-refresh based on market session (skip when market is closed for performance)
     current_time = time.time()
     time_since_refresh = current_time - st.session_state.sentiment_last_refresh
 
-    if time_since_refresh >= 60 and NSE_INSTRUMENTS is not None:
-        with st.spinner("🔄 Auto-refreshing analyses..."):
-            success, errors = run_all_analyses(NSE_INSTRUMENTS)
-            st.session_state.sentiment_last_refresh = time.time()
-            if success:
-                st.rerun()
+    # Get recommended refresh interval based on market session
+    market_session = scheduler.get_market_session()
+    refresh_interval = scheduler.get_refresh_interval(market_session)
+
+    # Only auto-refresh during trading hours to conserve resources
+    if time_since_refresh >= refresh_interval and NSE_INSTRUMENTS is not None and is_within_trading_hours():
+        # Use show_progress=False for faster background refresh
+        success, errors = run_all_analyses(NSE_INSTRUMENTS, show_progress=False)
+        st.session_state.sentiment_last_refresh = time.time()
+        if success:
+            st.rerun()
 
     # Calculate overall sentiment
     result = calculate_overall_sentiment()
@@ -1042,7 +1111,7 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
         # ═══════════════════════════════════════════════════════════════════
         # COMPREHENSIVE OPTION CHAIN METRICS
         # ═══════════════════════════════════════════════════════════════════
-        if result['option_chain_atm']:
+        if 'Option Chain Analysis' in result.get('sources', {}):
             st.markdown("---")
             st.markdown("### 🌐 Comprehensive Option Chain Analysis")
             st.caption("Advanced metrics: Max Pain, Synthetic Future, Vega Bias, Buildup Patterns, and more")

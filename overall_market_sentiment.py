@@ -156,7 +156,7 @@ def calculate_option_chain_pcr_sentiment(NSE_INSTRUMENTS):
     option_data = st.session_state.overall_option_data
 
     # Focus on main indices
-    main_indices = ['NIFTY', 'BANKNIFTY', 'SENSEX']
+    main_indices = ['NIFTY', 'SENSEX']
 
     bullish_instruments = 0
     bearish_instruments = 0
@@ -270,7 +270,7 @@ def calculate_option_chain_atm_sentiment(NSE_INSTRUMENTS):
     Returns: dict with sentiment, score, and details
     """
     # Check if ATM zone bias data exists in session state
-    instruments = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY']
+    instruments = ['NIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY']
 
     bullish_instruments = 0
     bearish_instruments = 0
@@ -1012,7 +1012,7 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
                 st.markdown("#### 📋 Detailed ATM Zone Bias Tables")
 
             # Display detailed ATM Zone tables for each instrument
-            instruments = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY']
+            instruments = ['NIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY']
 
             atm_data_available = False
             for instrument in instruments:

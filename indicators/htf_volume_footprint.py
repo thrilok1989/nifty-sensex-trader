@@ -50,8 +50,11 @@ class HTFVolumeFootprint:
 
         # Calculate volume footprint for each period
         footprints = []
+        historical_pocs = []  # Track historical POC lines for completed periods
 
-        for period_start in df_resampled.index:
+        current_time = df.index[-1]
+
+        for i, period_start in enumerate(df_resampled.index):
             # Ensure period_start is a Timestamp
             period_start = pd.Timestamp(period_start)
 
@@ -71,7 +74,17 @@ class HTFVolumeFootprint:
 
             if len(period_data) > 0:
                 footprint = self._calculate_period_footprint(period_data, period_start)
+                footprint['period_end'] = period_end
+                footprint['is_current'] = (current_time >= period_start and current_time < period_end)
                 footprints.append(footprint)
+
+                # Add to historical POCs if this is a completed period (not current)
+                if not footprint['is_current']:
+                    historical_pocs.append({
+                        'period_start': period_start,
+                        'period_end': min(period_end, current_time),
+                        'poc_price': footprint['poc']
+                    })
 
         # Get the most recent footprint
         current_footprint = footprints[-1] if len(footprints) > 0 else None
@@ -79,7 +92,9 @@ class HTFVolumeFootprint:
         return {
             'footprints': footprints,
             'current_footprint': current_footprint,
-            'timeframe': self.timeframe
+            'historical_pocs': historical_pocs,
+            'timeframe': self.timeframe,
+            'dynamic_poc': self.dynamic_poc
         }
 
     def _resample_to_htf(self, df):

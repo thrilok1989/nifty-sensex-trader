@@ -29,6 +29,28 @@ def get_telegram_credentials():
         return {'enabled': False}
 
 # ═══════════════════════════════════════════════════════════════════════
+# MARKET HOURS SETTINGS (All times in IST - Indian Standard Time)
+# ═══════════════════════════════════════════════════════════════════════
+
+MARKET_HOURS_ENABLED = True  # Set to False to disable market hours checking
+
+# Market session timings (IST)
+MARKET_HOURS = {
+    'pre_market_open': '08:30',    # 8:30 AM IST
+    'market_open': '09:15',        # 9:15 AM IST
+    'market_close': '15:30',       # 3:30 PM IST
+    'post_market_close': '15:45'   # 3:45 PM IST (App will run until this time)
+}
+
+# Session-based refresh intervals (seconds)
+REFRESH_INTERVALS = {
+    'pre_market': 30,      # 30 seconds during pre-market
+    'regular': 10,         # 10 seconds during regular trading
+    'post_market': 60,     # 60 seconds during post-market
+    'closed': 300          # 5 minutes when market is closed (minimal activity)
+}
+
+# ═══════════════════════════════════════════════════════════════════════
 # TRADING SETTINGS
 # ═══════════════════════════════════════════════════════════════════════
 

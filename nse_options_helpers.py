@@ -13,6 +13,7 @@ from pytz import timezone
 import plotly.graph_objects as go
 import io
 import requests
+from market_hours_scheduler import scheduler, is_within_trading_hours
 
 # === Telegram Config ===
 TELEGRAM_BOT_TOKEN = "8133685842:AAGdHCpi9QRIsS-fWW5Y1AJvS95QL9xU"
@@ -356,14 +357,10 @@ def fetch_option_chain_data(instrument, NSE_INSTRUMENTS):
 
 def analyze_instrument(instrument, NSE_INSTRUMENTS):
     try:
-        now = datetime.now(timezone("Asia/Kolkata"))
-        current_day = now.weekday()
-        current_time = now.time()
-        market_start = datetime.strptime("08:00", "%H:%M").time()
-        market_end = datetime.strptime("15:40", "%H:%M").time()
-
-        if current_day >= 5 or not (market_start <= current_time <= market_end):
-            st.warning("⏳ Market Closed (Mon-Fri 8:00-15:40)")
+        # Check if market is within trading hours using centralized scheduler
+        if not is_within_trading_hours():
+            status = scheduler.get_market_status()
+            st.warning(f"⏳ Market Closed - Trading Hours: 8:30 AM - 3:45 PM IST (Mon-Fri)")
             return
 
         headers = {"User-Agent": "Mozilla/5.0"}

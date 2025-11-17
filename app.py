@@ -13,6 +13,7 @@ import requests
 # Import modules
 from config import *
 from market_data import *
+from market_hours_scheduler import scheduler, is_within_trading_hours, should_run_app
 from signal_manager import SignalManager
 from strike_calculator import calculate_strike, calculate_levels
 from trade_executor import TradeExecutor
@@ -154,6 +155,41 @@ if 'overall_option_data' not in st.session_state:
 
 st.title(APP_TITLE)
 st.caption(APP_SUBTITLE)
+
+# ═══════════════════════════════════════════════════════════════════════
+# MARKET HOURS WARNING BANNER
+# ═══════════════════════════════════════════════════════════════════════
+
+if MARKET_HOURS_ENABLED:
+    should_run, reason = should_run_app()
+
+    if not should_run:
+        # Display prominent warning banner when market is closed
+        st.error(f"""
+        ⚠️ **MARKET CLOSED - APP RUNNING IN LIMITED MODE**
+
+        **Reason:** {reason}
+
+        **Trading Hours:** 8:30 AM - 3:45 PM IST (Monday - Friday, excluding holidays)
+
+        The app will automatically resume full operation during market hours.
+        Background data refresh is paused to conserve API quota.
+        """)
+
+        # Show next market open time if available
+        market_status = get_market_status()
+        if 'next_open' in market_status:
+            st.info(f"📅 **Next Market Open:** {market_status['next_open']}")
+    else:
+        # Show market session info when market is open
+        market_status = get_market_status()
+        session = market_status.get('session', 'unknown')
+
+        if session == 'pre_market':
+            st.info(f"⏰ **{reason}** - Limited liquidity expected")
+        elif session == 'post_market':
+            st.warning(f"⏰ **{reason}** - Trading session ending soon")
+        # Don't show banner during regular market hours to save space
 
 # ═══════════════════════════════════════════════════════════════════════
 # SIDEBAR - SYSTEM STATUS

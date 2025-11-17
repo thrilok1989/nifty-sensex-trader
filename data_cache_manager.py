@@ -23,6 +23,8 @@ from typing import Any, Dict, Optional, Callable
 import streamlit as st
 import pandas as pd
 from functools import wraps
+from market_hours_scheduler import scheduler, is_within_trading_hours
+import config
 
 
 class DataCacheManager:
@@ -49,10 +51,14 @@ class DataCacheManager:
         }
 
         # Background refresh intervals (in seconds)
+        # Note: These are dynamically adjusted based on market session
         self.refresh_intervals = {
-            'market_data': 10,      # NIFTY/SENSEX every 10 seconds
-            'analysis_data': 60,    # All analysis every 60 seconds
+            'market_data': 10,      # NIFTY/SENSEX (adjusted by market session)
+            'analysis_data': 60,    # All analysis (adjusted by market session)
         }
+
+        # Market hours awareness
+        self.market_hours_enabled = getattr(config, 'MARKET_HOURS_ENABLED', True)
 
     def _get_lock(self, cache_key: str) -> threading.Lock:
         """Get or create a lock for a cache key"""
@@ -183,17 +189,37 @@ class DataCacheManager:
             return  # Already running
 
         def refresh_loop():
-            """Background refresh loop"""
+            """Background refresh loop with market hours awareness"""
             while not self._stop_threads.is_set():
                 try:
-                    # Load data
-                    value = loader_func(*args, **kwargs)
-                    self.set(cache_key, value)
+                    # Check if market hours validation is enabled
+                    if self.market_hours_enabled:
+                        # Only fetch data during trading hours
+                        if is_within_trading_hours():
+                            # Load data
+                            value = loader_func(*args, **kwargs)
+                            self.set(cache_key, value)
+
+                            # Use session-based refresh interval
+                            session = scheduler.get_market_session()
+                            actual_interval = scheduler.get_refresh_interval(session)
+                        else:
+                            # Market closed - use minimal refresh interval
+                            actual_interval = config.REFRESH_INTERVALS.get('closed', 300)
+                            # Optionally update cache with "market closed" status
+                            # (only if needed by the application)
+                    else:
+                        # Market hours checking disabled - always refresh
+                        value = loader_func(*args, **kwargs)
+                        self.set(cache_key, value)
+                        actual_interval = interval
+
                 except Exception as e:
                     print(f"Background refresh error for {cache_key}: {e}")
+                    actual_interval = interval  # Use default on error
 
                 # Wait for interval or stop event
-                self._stop_threads.wait(interval)
+                self._stop_threads.wait(actual_interval)
 
         # Start thread
         thread = threading.Thread(target=refresh_loop, daemon=True)

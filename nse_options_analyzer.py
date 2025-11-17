@@ -8,6 +8,7 @@ from scipy.stats import norm
 from pytz import timezone
 import plotly.graph_objects as go
 import io
+from market_hours_scheduler import scheduler, is_within_trading_hours
 
 # === Streamlit Config ===
 st.set_page_config(page_title="NSE Options Analyzer", layout="wide")
@@ -669,14 +670,10 @@ def display_overall_option_chain_analysis():
 
 def analyze_instrument(instrument):
     try:
-        now = datetime.now(timezone("Asia/Kolkata"))
-        current_day = now.weekday()
-        current_time = now.time()
-        market_start = datetime.strptime("08:00", "%H:%M").time()
-        market_end = datetime.strptime("15:40", "%H:%M").time()
-
-        if current_day >= 5 or not (market_start <= current_time <= market_end):
-            st.warning("⏳ Market Closed (Mon-Fri 8:00-15:40)")
+        # Check if market is within trading hours using centralized scheduler
+        if not is_within_trading_hours():
+            status = scheduler.get_market_status()
+            st.warning(f"⏳ Market Closed - Trading Hours: 8:30 AM - 3:45 PM IST (Mon-Fri)")
             return
 
         headers = {"User-Agent": "Mozilla/5.0"}

@@ -13,6 +13,7 @@ Data Sources:
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import time
 
 
 def calculate_stock_performance_sentiment(stock_data):
@@ -268,26 +269,77 @@ def calculate_option_chain_atm_sentiment(NSE_INSTRUMENTS):
     Calculate sentiment from Option Chain ATM Zone Analysis
     Returns: dict with sentiment, score, and details
     """
-    if 'overall_option_data' not in st.session_state or not st.session_state.overall_option_data:
-        return None
+    # Check if ATM zone bias data exists in session state
+    instruments = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY']
 
-    # For now, use a simple placeholder
-    # In a full implementation, this would analyze ATM strikes across all instruments
     bullish_instruments = 0
     bearish_instruments = 0
     neutral_instruments = 0
+    total_score = 0
+    instruments_analyzed = 0
 
-    # Simplified calculation - can be enhanced with actual ATM zone data
-    total_instruments = 0
+    atm_details = []
+
+    for instrument in instruments:
+        atm_key = f'{instrument}_atm_zone_bias'
+        if atm_key not in st.session_state:
+            continue
+
+        df_atm = st.session_state[atm_key]
+
+        # Get ATM zone data (Zone == "ATM")
+        atm_row = df_atm[df_atm["Zone"] == "ATM"]
+        if atm_row.empty:
+            continue
+
+        atm_row = atm_row.iloc[0]
+        verdict = str(atm_row.get('Verdict', 'Neutral')).upper()
+
+        # Calculate score based on verdict
+        if 'STRONG BULLISH' in verdict:
+            score = 75
+            bullish_instruments += 1
+        elif 'BULLISH' in verdict:
+            score = 40
+            bullish_instruments += 1
+        elif 'STRONG BEARISH' in verdict:
+            score = -75
+            bearish_instruments += 1
+        elif 'BEARISH' in verdict:
+            score = -40
+            bearish_instruments += 1
+        else:
+            score = 0
+            neutral_instruments += 1
+
+        total_score += score
+        instruments_analyzed += 1
+
+    # Calculate overall score and bias
+    if instruments_analyzed == 0:
+        return None
+
+    overall_score = total_score / instruments_analyzed
+
+    # Determine overall bias
+    if overall_score > 30:
+        bias = "BULLISH"
+    elif overall_score < -30:
+        bias = "BEARISH"
+    else:
+        bias = "NEUTRAL"
+
+    # Calculate confidence
+    confidence = min(100, abs(overall_score))
 
     return {
-        'bias': 'NEUTRAL',
-        'score': 0,
+        'bias': bias,
+        'score': overall_score,
         'bullish_instruments': bullish_instruments,
         'bearish_instruments': bearish_instruments,
         'neutral_instruments': neutral_instruments,
-        'total_instruments': total_instruments,
-        'confidence': 0
+        'total_instruments': instruments_analyzed,
+        'confidence': confidence
     }
 
 
@@ -469,42 +521,61 @@ def run_all_analyses(NSE_INSTRUMENTS):
 def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     """
     Renders the Overall Market Sentiment tab with comprehensive analysis
+    Auto-refreshes every 60 seconds
     """
     st.markdown("## 🌟 Overall Market Sentiment")
+    st.caption("🔄 Auto-refreshing every 60 seconds")
     st.markdown("---")
+
+    # Initialize auto-refresh timestamp
+    if 'sentiment_last_refresh' not in st.session_state:
+        st.session_state.sentiment_last_refresh = 0
+
+    # Initialize auto-run flag
+    if 'sentiment_auto_run_done' not in st.session_state:
+        st.session_state.sentiment_auto_run_done = False
+
+    # Auto-run analyses on first load
+    if not st.session_state.sentiment_auto_run_done and NSE_INSTRUMENTS is not None:
+        with st.spinner("🔄 Running initial analyses..."):
+            success, errors = run_all_analyses(NSE_INSTRUMENTS)
+            st.session_state.sentiment_auto_run_done = True
+            st.session_state.sentiment_last_refresh = time.time()
+            if not success:
+                for error in errors:
+                    st.warning(f"⚠️ {error}")
+
+    # Auto-refresh every 60 seconds
+    current_time = time.time()
+    time_since_refresh = current_time - st.session_state.sentiment_last_refresh
+
+    if time_since_refresh >= 60 and NSE_INSTRUMENTS is not None:
+        with st.spinner("🔄 Auto-refreshing analyses..."):
+            success, errors = run_all_analyses(NSE_INSTRUMENTS)
+            st.session_state.sentiment_last_refresh = time.time()
+            if success:
+                st.rerun()
 
     # Calculate overall sentiment
     result = calculate_overall_sentiment()
 
     if not result['data_available']:
-        st.warning("⚠️ No data available. Please click 'Show Bias' to generate comprehensive market analysis.")
+        st.warning("⚠️ No data available. Running analyses...")
 
-        # Add "Show Bias" button
+        # Automatically run analyses
         if NSE_INSTRUMENTS is not None:
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
-                if st.button("🎯 Show Bias", type="primary", use_container_width=True, key="show_bias_button"):
-                    success, errors = run_all_analyses(NSE_INSTRUMENTS)
+            with st.spinner("🔄 Running all analyses..."):
+                success, errors = run_all_analyses(NSE_INSTRUMENTS)
 
-                    if success:
-                        st.balloons()
-                        st.success("🎉 All analyses completed successfully! Refreshing results...")
-                        st.rerun()
-                    else:
-                        st.error("❌ Some analyses failed:")
-                        for error in errors:
-                            st.error(f"  - {error}")
+                if success:
+                    st.session_state.sentiment_last_refresh = time.time()
+                    st.success("✅ Analyses completed! Refreshing...")
+                    st.rerun()
+                else:
+                    st.error("❌ Some analyses failed:")
+                    for error in errors:
+                        st.error(f"  - {error}")
 
-        st.info("""
-        **How to use this tab:**
-
-        **Option 1 (Recommended):** Click the **"Show Bias"** button above to automatically run all analyses and display the aggregated market sentiment.
-
-        **Option 2 (Manual):**
-        1. Visit the **Bias Analysis Pro** tab to analyze technical indicators
-        2. Visit the **Option Chain Analysis** tab to analyze options data
-        3. Return to this tab to see the aggregated overall market sentiment
-        """)
         return
 
     # ═══════════════════════════════════════════════════════════════════
@@ -948,21 +1019,38 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     - Consider fundamental factors, news events, and market conditions
     """)
 
-    # Last Updated
+    # Last Updated and Next Refresh
     st.markdown("---")
-    st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Calculate time until next refresh
+    time_since_refresh = time.time() - st.session_state.sentiment_last_refresh
+    time_until_refresh = max(0, 60 - time_since_refresh)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        last_update_time = datetime.fromtimestamp(st.session_state.sentiment_last_refresh)
+        st.caption(f"📅 Last updated: {last_update_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    with col2:
+        if time_until_refresh > 0:
+            st.caption(f"⏱️ Next refresh in: {int(time_until_refresh)} seconds")
+        else:
+            st.caption(f"⏱️ Refreshing now...")
 
     # Action buttons
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("🔄 Refresh Analysis", use_container_width=True):
+        if st.button("🔄 Refresh Now", use_container_width=True):
+            st.session_state.sentiment_last_refresh = 0  # Force immediate refresh
             st.rerun()
 
     with col2:
         if NSE_INSTRUMENTS is not None:
             if st.button("🎯 Re-run All Analyses", type="primary", use_container_width=True, key="rerun_bias_button"):
                 success, errors = run_all_analyses(NSE_INSTRUMENTS)
+                st.session_state.sentiment_last_refresh = time.time()
 
                 if success:
                     st.balloons()
@@ -972,3 +1060,8 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
                     st.error("❌ Some analyses failed:")
                     for error in errors:
                         st.error(f"  - {error}")
+
+    # Use st.empty() to trigger rerun for countdown
+    if time_until_refresh > 0:
+        time.sleep(min(1, time_until_refresh))
+        st.rerun()

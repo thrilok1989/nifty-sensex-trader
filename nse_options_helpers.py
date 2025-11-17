@@ -464,6 +464,16 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
                 continue
 
             score = 0
+
+            # Calculate per-strike delta and gamma exposure
+            ce_delta_exp = row['Delta_CE'] * row['openInterest_CE']
+            pe_delta_exp = row['Delta_PE'] * row['openInterest_PE']
+            ce_gamma_exp = row['Gamma_CE'] * row['openInterest_CE']
+            pe_gamma_exp = row['Gamma_PE'] * row['openInterest_PE']
+
+            # Calculate per-strike IV skew
+            strike_iv_skew = row['impliedVolatility_PE'] - row['impliedVolatility_CE']
+
             row_data = {
                 "Strike": row['strikePrice'],
                 "Zone": row['Zone'],
@@ -479,7 +489,10 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
                     row['lastPrice_CE'] - row['lastPrice_PE'],
                     row['totalTradedVolume_CE'] - row['totalTradedVolume_PE'],
                     row['changeinOpenInterest_CE'] - row['changeinOpenInterest_PE']
-                )
+                ),
+                "Delta_Exposure": round(ce_delta_exp + pe_delta_exp, 2),
+                "Gamma_Exposure": round(ce_gamma_exp + pe_gamma_exp, 4),
+                "IV_Skew": round(strike_iv_skew, 2)
             }
 
             for k in row_data:

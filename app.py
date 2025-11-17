@@ -88,6 +88,7 @@ NSE_INSTRUMENTS = {
     'indices': {
         'NIFTY': {'lot_size': 75, 'zone_size': 20, 'atm_range': 200},
         'BANKNIFTY': {'lot_size': 25, 'zone_size': 100, 'atm_range': 500},
+        'SENSEX': {'lot_size': 10, 'zone_size': 50, 'atm_range': 300},
         'NIFTY IT': {'lot_size': 50, 'zone_size': 50, 'atm_range': 300},
         'NIFTY AUTO': {'lot_size': 50, 'zone_size': 50, 'atm_range': 300}
     },
@@ -946,13 +947,16 @@ elif selected_tab == "📊 Option Chain Analysis":
     with tab_indices:
         st.header("NSE Indices Analysis")
         # Create subtabs for each index
-        nifty_tab, banknifty_tab, it_tab, auto_tab = st.tabs(["NIFTY", "BANKNIFTY", "NIFTY IT", "NIFTY AUTO"])
+        nifty_tab, banknifty_tab, sensex_tab, it_tab, auto_tab = st.tabs(["NIFTY", "BANKNIFTY", "SENSEX", "NIFTY IT", "NIFTY AUTO"])
 
         with nifty_tab:
             analyze_instrument('NIFTY', NSE_INSTRUMENTS)
 
         with banknifty_tab:
             analyze_instrument('BANKNIFTY', NSE_INSTRUMENTS)
+
+        with sensex_tab:
+            analyze_instrument('SENSEX', NSE_INSTRUMENTS)
 
         with it_tab:
             analyze_instrument('NIFTY IT', NSE_INSTRUMENTS)
@@ -1051,6 +1055,7 @@ elif selected_tab == "📈 Advanced Chart Analysis":
     with col3:
         show_volume = st.checkbox("📊 Volume Bars", value=True, key="show_volume")
         show_om = st.checkbox("🎯 OM Indicator", value=False, key="show_om")
+        show_liquidity_profile = st.checkbox("💧 Liquidity Sentiment Profile", value=False, key="show_liquidity_profile")
 
     st.divider()
 
@@ -1190,6 +1195,68 @@ elif selected_tab == "📈 Advanced Chart Analysis":
                     key="rsi_os_level"
                 )
 
+    # Liquidity Sentiment Profile Settings
+    if show_liquidity_profile:
+        with st.expander("💧 Liquidity Sentiment Profile Settings", expanded=False):
+            st.markdown("**Profile Configuration**")
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                lsp_anchor_period = st.selectbox(
+                    "Anchor Period",
+                    options=["Auto", "Session", "Day", "Week", "Month", "Quarter", "Year"],
+                    index=0,
+                    key="lsp_anchor_period"
+                )
+                lsp_num_rows = st.slider(
+                    "Number of Rows",
+                    min_value=10,
+                    max_value=100,
+                    value=25,
+                    step=5,
+                    key="lsp_num_rows"
+                )
+
+            with col2:
+                lsp_profile_width = st.slider(
+                    "Profile Width %",
+                    min_value=10,
+                    max_value=50,
+                    value=50,
+                    step=5,
+                    key="lsp_profile_width"
+                ) / 100.0
+                lsp_show_liquidity = st.checkbox("Show Liquidity Profile", value=True, key="lsp_show_liquidity")
+                lsp_show_sentiment = st.checkbox("Show Sentiment Profile", value=True, key="lsp_show_sentiment")
+
+            with col3:
+                lsp_show_poc = st.checkbox("Show Level of Significance", value=False, key="lsp_show_poc")
+                lsp_show_price_levels = st.checkbox("Show Price Levels", value=False, key="lsp_show_price_levels")
+                lsp_show_range_bg = st.checkbox("Show Range Background", value=True, key="lsp_show_range_bg")
+
+            st.markdown("**Volume Thresholds**")
+            col1, col2 = st.columns(2)
+
+            with col1:
+                lsp_hv_threshold = st.slider(
+                    "High Volume Threshold %",
+                    min_value=50,
+                    max_value=99,
+                    value=73,
+                    step=1,
+                    key="lsp_hv_threshold"
+                ) / 100.0
+
+            with col2:
+                lsp_lv_threshold = st.slider(
+                    "Low Volume Threshold %",
+                    min_value=10,
+                    max_value=40,
+                    value=21,
+                    step=1,
+                    key="lsp_lv_threshold"
+                ) / 100.0
+
     # OM Indicator Settings
     if show_om:
         with st.expander("🎯 OM Indicator Settings", expanded=False):
@@ -1286,6 +1353,19 @@ elif selected_tab == "📈 Advanced Chart Analysis":
                     'show_hvp': om_show_hvp if show_om else True
                 } if show_om else None
 
+                liquidity_params = {
+                    'anchor_period': lsp_anchor_period if show_liquidity_profile else 'Auto',
+                    'num_rows': lsp_num_rows if show_liquidity_profile else 25,
+                    'profile_width': lsp_profile_width if show_liquidity_profile else 0.50,
+                    'show_liquidity_profile': lsp_show_liquidity if show_liquidity_profile else True,
+                    'show_sentiment_profile': lsp_show_sentiment if show_liquidity_profile else True,
+                    'show_poc': lsp_show_poc if show_liquidity_profile else False,
+                    'show_price_levels': lsp_show_price_levels if show_liquidity_profile else False,
+                    'show_range_bg': lsp_show_range_bg if show_liquidity_profile else True,
+                    'hv_threshold': lsp_hv_threshold if show_liquidity_profile else 0.73,
+                    'lv_threshold': lsp_lv_threshold if show_liquidity_profile else 0.21
+                } if show_liquidity_profile else None
+
                 # Create chart with selected indicators
                 fig = st.session_state.advanced_chart_analyzer.create_advanced_chart(
                     st.session_state.chart_data,
@@ -1296,11 +1376,13 @@ elif selected_tab == "📈 Advanced Chart Analysis":
                     show_rsi=show_rsi,
                     show_om=show_om,
                     show_volume=show_volume,
+                    show_liquidity_profile=show_liquidity_profile,
                     vob_params=vob_params,
                     htf_params=htf_params,
                     footprint_params=footprint_params,
                     rsi_params=rsi_params,
-                    om_params=om_params
+                    om_params=om_params,
+                    liquidity_params=liquidity_params
                 )
 
                 # Display chart

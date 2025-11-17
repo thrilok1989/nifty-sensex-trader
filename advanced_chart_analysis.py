@@ -15,6 +15,7 @@ from indicators.htf_support_resistance import HTFSupportResistance
 from indicators.htf_volume_footprint import HTFVolumeFootprint
 from indicators.ultimate_rsi import UltimateRSI
 from indicators.om_indicator import OMIndicator
+from indicators.liquidity_sentiment_profile import LiquiditySentimentProfile
 from dhan_data_fetcher import DhanDataFetcher
 from config import get_dhan_credentials
 
@@ -145,9 +146,9 @@ class AdvancedChartAnalysis:
 
     def create_advanced_chart(self, df, symbol, show_vob=True, show_htf_sr=True,
                              show_footprint=True, show_rsi=True, show_om=False,
-                             show_volume=True,
+                             show_volume=True, show_liquidity_profile=False,
                              vob_params=None, htf_params=None, footprint_params=None,
-                             rsi_params=None, om_params=None):
+                             rsi_params=None, om_params=None, liquidity_params=None):
         """
         Create advanced chart with all indicators
 
@@ -160,11 +161,13 @@ class AdvancedChartAnalysis:
             show_rsi: Show Ultimate RSI
             show_om: Show OM Indicator (comprehensive order flow)
             show_volume: Show Volume bars
+            show_liquidity_profile: Show Liquidity Sentiment Profile
             vob_params: Parameters for Volume Order Blocks indicator
             htf_params: Parameters for HTF Support/Resistance indicator
             footprint_params: Parameters for HTF Volume Footprint indicator
             rsi_params: Parameters for Ultimate RSI indicator
             om_params: Parameters for OM Indicator
+            liquidity_params: Parameters for Liquidity Sentiment Profile indicator
 
         Returns:
             plotly Figure object
@@ -210,10 +213,18 @@ class AdvancedChartAnalysis:
                 else:
                     htf_footprint = HTFVolumeFootprint(bins=10, timeframe='D', dynamic_poc=True)
 
+            lsp_indicator = None
+            if show_liquidity_profile:
+                if liquidity_params:
+                    lsp_indicator = LiquiditySentimentProfile(**liquidity_params)
+                else:
+                    lsp_indicator = LiquiditySentimentProfile()
+
             # Calculate all indicators
             vob_data = vob_indicator.calculate(df) if vob_indicator else None
             rsi_data = ultimate_rsi.get_signals(df) if ultimate_rsi else None
             om_data = om_indicator.calculate(df) if om_indicator else None
+            lsp_data = lsp_indicator.calculate(df) if lsp_indicator else None
         except Exception as e:
             raise Exception(f"Error calculating indicators: {str(e)}")
 
@@ -322,6 +333,10 @@ class AdvancedChartAnalysis:
         # Add OM Indicator
         if show_om and om_data:
             self._add_om_indicator(fig, df, om_data, row=price_row, col=1)
+
+        # Add Liquidity Sentiment Profile
+        if show_liquidity_profile and lsp_data and lsp_data.get('success'):
+            fig = lsp_indicator.add_to_chart(fig, df, lsp_data)
 
         # Update layout
         # Calculate height based on number of subplots

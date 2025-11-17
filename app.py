@@ -232,15 +232,31 @@ if not nifty_data or not nifty_data.get('success'):
 # ═══════════════════════════════════════════════════════════════════════
 # VOB-BASED SIGNAL MONITORING
 # ═══════════════════════════════════════════════════════════════════════
-# Check for VOB signals every 10 seconds
+# Initialize sentiment cache in session state
+if 'cached_sentiment' not in st.session_state:
+    st.session_state.cached_sentiment = None
+if 'sentiment_cache_time' not in st.session_state:
+    st.session_state.sentiment_cache_time = 0
+
+# Calculate sentiment once every 60 seconds and cache it (avoid redundant calculations)
 current_time = time.time()
+if current_time - st.session_state.sentiment_cache_time > 60:
+    try:
+        st.session_state.cached_sentiment = calculate_overall_sentiment()
+        st.session_state.sentiment_cache_time = current_time
+    except:
+        pass
+
+# Check for VOB signals every 10 seconds using cached sentiment
 if current_time - st.session_state.last_vob_check_time > 10:
     st.session_state.last_vob_check_time = current_time
 
     try:
-        # Get overall market sentiment
-        sentiment_result = calculate_overall_sentiment()
-        overall_sentiment = sentiment_result.get('overall_sentiment', 'NEUTRAL')
+        # Use cached sentiment (calculated once per minute to avoid redundancy)
+        if st.session_state.cached_sentiment:
+            overall_sentiment = st.session_state.cached_sentiment.get('overall_sentiment', 'NEUTRAL')
+        else:
+            overall_sentiment = 'NEUTRAL'
 
         # Fetch chart data and calculate VOB for NIFTY
         chart_analyzer = AdvancedChartAnalysis()

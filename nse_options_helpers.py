@@ -921,3 +921,151 @@ def display_overall_option_chain_analysis(NSE_INSTRUMENTS):
         3. Check overall market bias
         4. Use the insights for trading decisions
         """)
+
+
+def calculate_and_store_atm_zone_bias_silent(instrument, NSE_INSTRUMENTS):
+    """
+    Silently calculate and store ATM zone bias data without any Streamlit display
+    Used for background analysis in Overall Market Sentiment tab
+    Returns: True if successful, False otherwise
+    """
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        session = requests.Session()
+        session.headers.update(headers)
+        session.get("https://www.nseindia.com", timeout=5)
+
+        # Handle spaces in instrument names
+        url_instrument = instrument.replace(' ', '%20')
+        url = f"https://www.nseindia.com/api/option-chain-indices?symbol={url_instrument}" if instrument in NSE_INSTRUMENTS['indices'] else \
+              f"https://www.nseindia.com/api/option-chain-equities?symbol={url_instrument}"
+
+        response = session.get(url, timeout=10)
+        data = response.json()
+
+        records = data['records']['data']
+        expiry = data['records']['expiryDates'][0]
+        underlying = data['records']['underlyingValue']
+
+        today = datetime.now(timezone("Asia/Kolkata"))
+        expiry_date = timezone("Asia/Kolkata").localize(datetime.strptime(expiry, "%d-%b-%Y"))
+
+        # Calculate time to expiry
+        T = max((expiry_date - today).days, 1) / 365
+        r = 0.06
+
+        calls, puts = [], []
+
+        for item in records:
+            if 'CE' in item and item['CE']['expiryDate'] == expiry:
+                ce = item['CE']
+                if ce['impliedVolatility'] > 0:
+                    greeks = calculate_greeks('CE', underlying, ce['strikePrice'], T, r, ce['impliedVolatility'] / 100)
+                    ce.update(dict(zip(['Delta', 'Gamma', 'Vega', 'Theta', 'Rho'], greeks)))
+                calls.append(ce)
+
+            if 'PE' in item and item['PE']['expiryDate'] == expiry:
+                pe = item['PE']
+                if pe['impliedVolatility'] > 0:
+                    greeks = calculate_greeks('PE', underlying, pe['strikePrice'], T, r, pe['impliedVolatility'] / 100)
+                    pe.update(dict(zip(['Delta', 'Gamma', 'Vega', 'Theta', 'Rho'], greeks)))
+                puts.append(pe)
+
+        df_ce = pd.DataFrame(calls)
+        df_pe = pd.DataFrame(puts)
+        df = pd.merge(df_ce, df_pe, on='strikePrice', suffixes=('_CE', '_PE')).sort_values('strikePrice')
+
+        # Get instrument-specific parameters
+        atm_range = NSE_INSTRUMENTS['indices'].get(instrument, {}).get('atm_range', 200) or \
+                    NSE_INSTRUMENTS['stocks'].get(instrument, {}).get('atm_range', 200)
+
+        atm_strike = min(df['strikePrice'], key=lambda x: abs(x - underlying))
+        df = df[df['strikePrice'].between(atm_strike - atm_range, atm_strike + atm_range)]
+        df['Zone'] = df['strikePrice'].apply(lambda x: 'ATM' if x == atm_strike else 'ITM' if x < underlying else 'OTM')
+        df['Level'] = df.apply(determine_level, axis=1)
+
+        bias_results, total_score = [], 0
+        # Calculate Delta and Gamma Exposures
+        total_delta_exposure = 0
+        total_gamma_exposure = 0
+
+        for _, row in df.iterrows():
+            # Calculate exposures for all strikes
+            ce_delta_exp = row['Delta_CE'] * row['openInterest_CE']
+            pe_delta_exp = row['Delta_PE'] * row['openInterest_PE']
+            ce_gamma_exp = row['Gamma_CE'] * row['openInterest_CE']
+            pe_gamma_exp = row['Gamma_PE'] * row['openInterest_PE']
+
+            total_delta_exposure += (ce_delta_exp + pe_delta_exp)
+            total_gamma_exposure += (ce_gamma_exp + pe_gamma_exp)
+
+        weights = {"ChgOI_Bias": 1.5, "Volume_Bias": 1.0, "Delta_Bias": 2.0, "Gamma_Bias": 1.5,
+                   "AskQty_Bias": 0.8, "BidQty_Bias": 0.8, "IV_Bias": 1.2, "DVP_Bias": 1.8,
+                   "Delta_Exposure_Bias": 2.0, "Gamma_Exposure_Bias": 1.5, "IV_Skew_Bias": 1.0}
+
+        for _, row in df.iterrows():
+            if abs(row['strikePrice'] - atm_strike) > (atm_range/2):
+                continue
+
+            score = 0
+
+            # Calculate per-strike delta and gamma exposure
+            ce_delta_exp = row['Delta_CE'] * row['openInterest_CE']
+            pe_delta_exp = row['Delta_PE'] * row['openInterest_PE']
+            ce_gamma_exp = row['Gamma_CE'] * row['openInterest_CE']
+            pe_gamma_exp = row['Gamma_PE'] * row['openInterest_PE']
+
+            net_delta_exp = ce_delta_exp + pe_delta_exp
+            net_gamma_exp = ce_gamma_exp + pe_gamma_exp
+            strike_iv_skew = row['impliedVolatility_PE'] - row['impliedVolatility_CE']
+
+            delta_exp_bias = "Bullish" if net_delta_exp > 0 else "Bearish" if net_delta_exp < 0 else "Neutral"
+            gamma_exp_bias = "Bullish" if net_gamma_exp > 0 else "Bearish" if net_gamma_exp < 0 else "Neutral"
+            iv_skew_bias = "Bullish" if strike_iv_skew > 0 else "Bearish" if strike_iv_skew < 0 else "Neutral"
+
+            row_data = {
+                "Strike": row['strikePrice'],
+                "Zone": row['Zone'],
+                "Level": row['Level'],
+                "OI_Bias": "Bullish" if row['openInterest_CE'] < row['openInterest_PE'] else "Bearish",
+                "ChgOI_Bias": "Bullish" if row['changeinOpenInterest_CE'] < row['changeinOpenInterest_PE'] else "Bearish",
+                "Volume_Bias": "Bullish" if row['totalTradedVolume_CE'] < row['totalTradedVolume_PE'] else "Bearish",
+                "Delta_Bias": "Bullish" if abs(row['Delta_PE']) > abs(row['Delta_CE']) else "Bearish",
+                "Gamma_Bias": "Bullish" if row['Gamma_CE'] < row['Gamma_PE'] else "Bearish",
+                "Premium_Bias": "Bullish" if row['lastPrice_CE'] < row['lastPrice_PE'] else "Bearish",
+                "AskQty_Bias": "Bullish" if row['askQty_PE'] > row['askQty_CE'] else "Bearish",
+                "BidQty_Bias": "Bearish" if row['bidQty_PE'] > row['bidQty_CE'] else "Bullish",
+                "IV_Bias": "Bullish" if row['impliedVolatility_CE'] > row['impliedVolatility_PE'] else "Bearish",
+                "DVP_Bias": delta_volume_bias(
+                    row['lastPrice_CE'] - row['lastPrice_PE'],
+                    row['totalTradedVolume_CE'] - row['totalTradedVolume_PE'],
+                    row['changeinOpenInterest_CE'] - row['changeinOpenInterest_PE']
+                ),
+                "Delta_Exposure_Bias": delta_exp_bias,
+                "Gamma_Exposure_Bias": gamma_exp_bias,
+                "IV_Skew_Bias": iv_skew_bias
+            }
+
+            # Add OI_Change_Bias for compatibility (same as ChgOI_Bias)
+            row_data["OI_Change_Bias"] = row_data["ChgOI_Bias"]
+
+            for k in row_data:
+                if "_Bias" in k and k in weights:
+                    bias = row_data[k]
+                    score += weights.get(k, 1) if bias == "Bullish" else -weights.get(k, 1)
+
+            row_data["BiasScore"] = score
+            row_data["Verdict"] = final_verdict(score)
+            total_score += score
+            bias_results.append(row_data)
+
+        df_summary = pd.DataFrame(bias_results)
+
+        # Store df_summary in session state for access from Overall Market Sentiment tab
+        st.session_state[f'{instrument}_atm_zone_bias'] = df_summary.copy()
+
+        return True
+
+    except Exception as e:
+        # Silent failure - just return False
+        return False

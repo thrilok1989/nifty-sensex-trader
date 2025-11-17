@@ -503,6 +503,7 @@ def run_all_analyses(NSE_INSTRUMENTS):
         # 2. Run Option Chain Analysis for all instruments
         with st.spinner("📊 Running Option Chain Analysis for all instruments..."):
             try:
+                from nse_options_helpers import calculate_and_store_atm_zone_bias_silent
                 from nse_options_analyzer import fetch_option_chain_data as fetch_oc
 
                 overall_data = {}
@@ -514,11 +515,18 @@ def run_all_analyses(NSE_INSTRUMENTS):
 
                 for idx, instrument in enumerate(all_instruments):
                     progress_text.text(f"Analyzing {instrument}... ({idx + 1}/{len(all_instruments)})")
+
+                    # Fetch basic option chain data
                     data = fetch_oc(instrument)
                     overall_data[instrument] = data
+
+                    # Calculate and store ATM zone bias data silently
+                    calculate_and_store_atm_zone_bias_silent(instrument, NSE_INSTRUMENTS)
+
                     progress_bar.progress((idx + 1) / len(all_instruments))
 
                 st.session_state['overall_option_data'] = overall_data
+                progress_bar.progress(1.0)
                 progress_text.empty()
                 st.success("✅ Option Chain Analysis completed!")
             except Exception as e:

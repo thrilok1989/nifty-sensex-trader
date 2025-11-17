@@ -11,7 +11,6 @@ This module provides:
 
 Cache Strategy:
 - NIFTY/SENSEX data: 60-second TTL, background refresh every 10 seconds
-- Smart Dashboard: 60-second TTL, background refresh
 - Bias Analysis: 60-second TTL, background refresh
 - Option Chain: 60-second TTL, background refresh
 - Advanced Charts: 60-second TTL, background refresh
@@ -44,7 +43,6 @@ class DataCacheManager:
         self.ttl_config = {
             'nifty_data': 60,
             'sensex_data': 60,
-            'smart_dashboard': 60,
             'bias_analysis': 60,
             'option_chain': 60,
             'advanced_chart': 60,
@@ -273,7 +271,6 @@ def preload_all_data():
 
     This function should be called on app startup to pre-load:
     - NIFTY/SENSEX data
-    - Smart Trading Dashboard data
     - Bias Analysis data
     - Option Chain data (for main instruments)
     - Advanced Chart data (for main symbols)
@@ -282,7 +279,6 @@ def preload_all_data():
 
     # Import here to avoid circular imports
     from market_data import fetch_nifty_data, fetch_sensex_data
-    from smart_trading_dashboard import SmartTradingDashboard
     from bias_analysis import BiasAnalysisPro
 
     def load_market_data():
@@ -297,20 +293,6 @@ def preload_all_data():
             cache_manager.set('sensex_data', sensex_data)
         except Exception as e:
             print(f"Error loading market data: {e}")
-
-    def load_dashboard_data():
-        """Load dashboard data in background"""
-        try:
-            if 'smart_dashboard' in st.session_state:
-                dashboard = st.session_state.smart_dashboard
-            else:
-                dashboard = SmartTradingDashboard()
-
-            # Default to NIFTY analysis
-            results = dashboard.analyze_market("^NSEI")
-            cache_manager.set('smart_dashboard', results)
-        except Exception as e:
-            print(f"Error loading dashboard data: {e}")
 
     def load_bias_analysis_data():
         """Load bias analysis data in background"""
@@ -333,13 +315,6 @@ def preload_all_data():
         'market_data_refresh',
         load_market_data,
         interval=10
-    )
-
-    # Dashboard data: refresh every 60 seconds
-    cache_manager.start_background_refresh(
-        'dashboard_refresh',
-        load_dashboard_data,
-        interval=60
     )
 
     # Bias analysis: refresh every 60 seconds
@@ -392,17 +367,6 @@ def get_cached_sensex_data():
     data = fetch_sensex_data()
     cache_manager.set('sensex_data', data)
     return data
-
-
-def get_cached_dashboard_results():
-    """
-    Get cached Smart Dashboard results
-
-    Returns:
-        Dashboard results dict or None
-    """
-    cache_manager = get_cache_manager()
-    return cache_manager.get('smart_dashboard')
 
 
 def get_cached_bias_analysis_results():

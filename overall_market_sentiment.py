@@ -18,35 +18,7 @@ def calculate_overall_sentiment():
     sentiment_scores = []
     sentiment_details = {}
 
-    # Source 1: Smart Trading Dashboard
-    if 'dashboard_results' in st.session_state and st.session_state.dashboard_results:
-        try:
-            dashboard_data = st.session_state.dashboard_results
-            bias = dashboard_data.get('market_bias', 'NEUTRAL')
-            bullish_pct = dashboard_data.get('bullish_bias_pct', 0)
-            bearish_pct = dashboard_data.get('bearish_bias_pct', 0)
-
-            # Convert to score: -100 to +100
-            if bias == 'BULLISH':
-                score = bullish_pct
-            elif bias == 'BEARISH':
-                score = -bearish_pct
-            else:
-                score = bullish_pct - bearish_pct
-
-            sentiment_sources.append('Smart Trading Dashboard')
-            sentiment_scores.append(score)
-            sentiment_details['Smart Trading Dashboard'] = {
-                'bias': bias,
-                'score': score,
-                'bullish_pct': bullish_pct,
-                'bearish_pct': bearish_pct,
-                'reversal_mode': dashboard_data.get('reversal_mode', False)
-            }
-        except Exception as e:
-            st.warning(f"Could not load Smart Trading Dashboard data: {e}")
-
-    # Source 2: Bias Analysis Pro
+    # Source 1: Bias Analysis Pro
     if 'bias_analysis_results' in st.session_state and st.session_state.bias_analysis_results:
         try:
             bias_data = st.session_state.bias_analysis_results
@@ -67,7 +39,7 @@ def calculate_overall_sentiment():
         except Exception as e:
             st.warning(f"Could not load Bias Analysis Pro data: {e}")
 
-    # Source 3: Option Chain Analysis
+    # Source 2: Option Chain Analysis
     if 'overall_option_data' in st.session_state and st.session_state.overall_option_data:
         try:
             option_data = st.session_state.overall_option_data
@@ -182,27 +154,15 @@ def calculate_overall_sentiment():
 
 def run_all_analyses(NSE_INSTRUMENTS):
     """
-    Runs all three analyses and stores results in session state:
-    1. Smart Trading Dashboard
-    2. Bias Analysis Pro
-    3. Option Chain Analysis
+    Runs all analyses and stores results in session state:
+    1. Bias Analysis Pro
+    2. Option Chain Analysis
     """
     success = True
     errors = []
 
     try:
-        # 1. Run Smart Trading Dashboard Analysis
-        with st.spinner("📊 Running Smart Trading Dashboard analysis..."):
-            try:
-                symbol = "^NSEI"  # NIFTY 50
-                results = st.session_state.smart_dashboard.analyze_market(symbol)
-                st.session_state.dashboard_results = results
-                st.success("✅ Smart Trading Dashboard analysis completed!")
-            except Exception as e:
-                errors.append(f"Smart Trading Dashboard: {str(e)}")
-                success = False
-
-        # 2. Run Bias Analysis Pro
+        # 1. Run Bias Analysis Pro
         with st.spinner("🎯 Running Bias Analysis Pro..."):
             try:
                 symbol = "^NSEI"  # NIFTY 50
@@ -217,7 +177,7 @@ def run_all_analyses(NSE_INSTRUMENTS):
                 errors.append(f"Bias Analysis Pro: {str(e)}")
                 success = False
 
-        # 3. Run Option Chain Analysis for all instruments
+        # 2. Run Option Chain Analysis for all instruments
         with st.spinner("📊 Running Option Chain Analysis for all instruments..."):
             try:
                 overall_data = {}
@@ -282,10 +242,9 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
         **Option 1 (Recommended):** Click the **"Show Bias"** button above to automatically run all analyses and display the aggregated market sentiment.
 
         **Option 2 (Manual):**
-        1. Visit the **Smart Trading Dashboard** tab to generate trading signals
-        2. Visit the **Bias Analysis Pro** tab to analyze technical indicators
-        3. Visit the **Option Chain Analysis** tab to analyze options data
-        4. Return to this tab to see the aggregated overall market sentiment
+        1. Visit the **Bias Analysis Pro** tab to analyze technical indicators
+        2. Visit the **Option Chain Analysis** tab to analyze options data
+        3. Return to this tab to see the aggregated overall market sentiment
         """)
         return
 
@@ -426,14 +385,7 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
             """, unsafe_allow_html=True)
 
             # Additional details based on source
-            if source_name == 'Smart Trading Dashboard':
-                st.markdown(f"""
-                **Bullish:** {source_data['bullish_pct']:.1f}%
-                **Bearish:** {source_data['bearish_pct']:.1f}%
-                **Reversal Mode:** {'🔄 Yes' if source_data['reversal_mode'] else '❌ No'}
-                """)
-
-            elif source_name == 'Bias Analysis Pro':
+            if source_name == 'Bias Analysis Pro':
                 st.markdown(f"""
                 **Confidence:** {source_data['confidence']:.1f}%
                 **Bullish Indicators:** {source_data['bullish_count']}

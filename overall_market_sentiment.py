@@ -176,6 +176,17 @@ def calculate_option_chain_pcr_sentiment(NSE_INSTRUMENTS):
         if not data.get('success'):
             continue
 
+        # Get spot price and records
+        spot_price = data.get('spot', 0)
+        records = data.get('records', [])
+
+        # Find ATM strike (closest to spot price)
+        atm_strike = None
+        if records:
+            strikes = [record.get('strikePrice') for record in records if 'strikePrice' in record]
+            if strikes:
+                atm_strike = min(strikes, key=lambda x: abs(x - spot_price))
+
         # Calculate PCR for Total OI
         total_ce_oi = data.get('total_ce_oi', 0)
         total_pe_oi = data.get('total_pe_oi', 0)
@@ -185,6 +196,18 @@ def calculate_option_chain_pcr_sentiment(NSE_INSTRUMENTS):
         total_ce_change = data.get('total_ce_change', 0)
         total_pe_change = data.get('total_pe_change', 0)
         pcr_change_oi = abs(total_pe_change) / abs(total_ce_change) if abs(total_ce_change) > 0 else 1
+
+        # Calculate PCR for Volume
+        total_ce_volume = 0
+        total_pe_volume = 0
+        if records:
+            for record in records:
+                if 'CE' in record and 'totalTradedVolume' in record['CE']:
+                    total_ce_volume += record['CE']['totalTradedVolume']
+                if 'PE' in record and 'totalTradedVolume' in record['PE']:
+                    total_pe_volume += record['PE']['totalTradedVolume']
+
+        pcr_volume = total_pe_volume / total_ce_volume if total_ce_volume > 0 else 1
 
         # Determine OI bias
         if pcr_oi > 1.2:
@@ -208,18 +231,52 @@ def calculate_option_chain_pcr_sentiment(NSE_INSTRUMENTS):
             change_bias = "NEUTRAL"
             change_score = 0
 
-        # Combined score for this instrument
-        instrument_score = (oi_score + change_score) / 2
+        # Determine Volume bias
+        if pcr_volume > 1.2:
+            volume_bias = "BULLISH"
+            volume_score = min(50, (pcr_volume - 1) * 50)
+        elif pcr_volume < 0.8:
+            volume_bias = "BEARISH"
+            volume_score = -min(50, (1 - pcr_volume) * 50)
+        else:
+            volume_bias = "NEUTRAL"
+            volume_score = 0
 
-        # Determine overall instrument bias
-        if instrument_score > 10:
-            instrument_bias = "BULLISH"
+        # Calculate overall bias score (weighted)
+        # OI bias weight: 3, Change in OI bias weight: 5, Volume bias weight: 2
+        bias_score = 0
+        if oi_bias == "BULLISH":
+            bias_score += 3
+        elif oi_bias == "BEARISH":
+            bias_score -= 3
+
+        if change_bias == "BULLISH":
+            bias_score += 5
+        elif change_bias == "BEARISH":
+            bias_score -= 5
+
+        if volume_bias == "BULLISH":
+            bias_score += 2
+        elif volume_bias == "BEARISH":
+            bias_score -= 2
+
+        # Determine overall bias
+        if bias_score >= 5:
+            overall_bias = "BULLISH"
+        elif bias_score <= -5:
+            overall_bias = "BEARISH"
+        else:
+            overall_bias = "NEUTRAL"
+
+        # Combined score for this instrument (using weighted average)
+        instrument_score = (oi_score * 0.3 + change_score * 0.5 + volume_score * 0.2)
+
+        # Count instrument bias
+        if overall_bias == "BULLISH":
             bullish_instruments += 1
-        elif instrument_score < -10:
-            instrument_bias = "BEARISH"
+        elif overall_bias == "BEARISH":
             bearish_instruments += 1
         else:
-            instrument_bias = "NEUTRAL"
             neutral_instruments += 1
 
         total_score += instrument_score
@@ -228,7 +285,8 @@ def calculate_option_chain_pcr_sentiment(NSE_INSTRUMENTS):
         # Add to details
         pcr_details.append({
             'Instrument': instrument,
-            'Spot': f"₹ {data.get('spot', 0):,.2f}",
+            'Spot': f"₹ {spot_price:,.2f}",
+            'ATM Strike': f"{atm_strike:,.0f}" if atm_strike else "N/A",
             'Total CE OI': f"{total_ce_oi:,}",
             'Total PE OI': f"{total_pe_oi:,}",
             'PCR (OI)': f"{pcr_oi:.2f}",
@@ -236,7 +294,13 @@ def calculate_option_chain_pcr_sentiment(NSE_INSTRUMENTS):
             'CE Δ OI': f"{total_ce_change:,}",
             'PE Δ OI': f"{total_pe_change:,}",
             'PCR (Δ OI)': f"{pcr_change_oi:.2f}",
-            'Δ OI Bias': f"{change_bias} {'⚖️' if change_bias == 'NEUTRAL' else '🐂' if change_bias == 'BULLISH' else '🐻'}"
+            'Δ OI Bias': f"{change_bias} {'⚖️' if change_bias == 'NEUTRAL' else '🐂' if change_bias == 'BULLISH' else '🐻'}",
+            'CE Volume': f"{total_ce_volume:,}",
+            'PE Volume': f"{total_pe_volume:,}",
+            'PCR (Vol)': f"{pcr_volume:.2f}",
+            'Vol Bias': f"{volume_bias} {'⚖️' if volume_bias == 'NEUTRAL' else '🐂' if volume_bias == 'BULLISH' else '🐻'}",
+            'Overall Bias': f"{overall_bias} {'⚖️' if overall_bias == 'NEUTRAL' else '🐂' if overall_bias == 'BULLISH' else '🐻'}",
+            'Bias Score': f"{bias_score:+d}"
         })
 
     # Calculate overall score

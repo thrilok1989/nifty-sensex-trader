@@ -53,16 +53,12 @@ CRITICAL_FILES = [
     "trade_executor.py",
     "telegram_alerts.py",
     "dhan_api.py",
-    "smart_trading_dashboard.py",
     "bias_analysis.py",
     "option_chain_analysis.py",
     "nse_options_helpers.py",
     "nse_options_analyzer.py",
     "advanced_chart_analysis.py",
-    "run_dashboard.py",
-    "example_usage.py",
     "requirements.txt",
-    "requirements_dashboard.txt",
     "trading_signals.json"
 ]
 

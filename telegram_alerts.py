@@ -120,6 +120,35 @@ class TelegramBot:
         """
         return self.send_message(message.strip())
 
+    def send_vob_entry_signal(self, signal: dict):
+        """Send VOB-based entry signal alert"""
+        signal_emoji = "🟢" if signal['direction'] == 'CALL' else "🔴"
+        direction_label = "BULLISH" if signal['direction'] == 'CALL' else "BEARISH"
+
+        message = f"""
+{signal_emoji} <b>VOB ENTRY SIGNAL - {direction_label}</b>
+
+<b>Index:</b> {signal['index']}
+<b>Direction:</b> {signal['direction']}
+<b>Market Sentiment:</b> {signal['market_sentiment']}
+
+💰 <b>ENTRY LEVELS</b>
+<b>Entry Price:</b> {signal['entry_price']}
+<b>Stop Loss:</b> {signal['stop_loss']}
+<b>Target:</b> {signal['target']}
+<b>Risk:Reward:</b> {signal['risk_reward']}
+
+📊 <b>VOB DETAILS</b>
+<b>VOB Level:</b> {signal['vob_level']}
+<b>Distance from VOB:</b> {signal['distance_from_vob']} points
+<b>VOB Volume:</b> {signal['vob_volume']:,.0f}
+
+<b>Time:</b> {signal['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}
+
+⚡ <b>Execute trade NOW!</b>
+        """
+        return self.send_message(message.strip())
+
 
 def send_test_message():
     """Send test message to verify Telegram setup"""

@@ -123,11 +123,9 @@ if 'overall_option_data' not in st.session_state:
 # ═══════════════════════════════════════════════════════════════════════
 # AUTO REFRESH
 # ═══════════════════════════════════════════════════════════════════════
-
-current_time = time.time()
-if current_time - st.session_state.last_refresh > AUTO_REFRESH_INTERVAL:
-    st.session_state.last_refresh = current_time
-    st.rerun()
+# Disabled aggressive auto-refresh to prevent tab clicking issues
+# Data is now cached for 30 seconds and fetched on-demand
+# This improves user experience and reduces unnecessary API calls
 
 # ═══════════════════════════════════════════════════════════════════════
 # HEADER

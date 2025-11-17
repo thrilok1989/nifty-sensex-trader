@@ -93,6 +93,7 @@ class BiasAnalysisPro:
 
             # Stocks with weights
             'stocks': {
+                '^NSEBANK': 10.0,  # BANKNIFTY Index
                 'RELIANCE.NS': 9.98,
                 'HDFCBANK.NS': 9.67,
                 'BHARTIARTL.NS': 9.97,

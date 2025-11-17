@@ -126,8 +126,12 @@ class BiasAnalysisPro:
                 interval_map = {'1m': '1', '5m': '5', '15m': '15', '1h': '60'}
                 dhan_interval = interval_map.get(interval, '5')
 
-                # Fetch intraday data
-                result = fetcher.fetch_intraday_data(dhan_instrument, interval=dhan_interval)
+                # Calculate date range for historical data (7 days)
+                to_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                from_date = (datetime.now() - timedelta(days=7)).replace(hour=9, minute=15, second=0).strftime('%Y-%m-%d %H:%M:%S')
+
+                # Fetch intraday data with 7 days historical range
+                result = fetcher.fetch_intraday_data(dhan_instrument, interval=dhan_interval, from_date=from_date, to_date=to_date)
 
                 if result.get('success') and result.get('data') is not None:
                     df = result['data']
@@ -147,10 +151,10 @@ class BiasAnalysisPro:
                         df['Volume'] = df['Volume'].fillna(0)
 
                     if not df.empty:
-                        print(f"✅ Fetched {len(df)} candles for {symbol} from Dhan API with volume data")
+                        print(f"✅ Fetched {len(df)} candles for {symbol} from Dhan API with volume data (from {from_date} to {to_date})")
                         return df
                     else:
-                        print(f"Warning: Empty data from Dhan API for {symbol}, falling back to yfinance")
+                        print(f"⚠️  Warning: Empty data from Dhan API for {symbol}, falling back to yfinance")
                 else:
                     print(f"Warning: Dhan API failed for {symbol}: {result.get('error')}, falling back to yfinance")
             except Exception as e:
@@ -492,9 +496,11 @@ class BiasAnalysisPro:
         df = self.fetch_data(symbol, period='7d', interval='5m')
 
         if df.empty or len(df) < 100:
+            error_msg = f'Insufficient data (fetched {len(df)} candles, need at least 100)'
+            print(f"❌ {error_msg}")
             return {
                 'success': False,
-                'error': 'Insufficient data'
+                'error': error_msg
             }
 
         current_price = df['Close'].iloc[-1]

@@ -18,6 +18,7 @@ INSTRUMENTS = {
     'indices': {
         'NIFTY': {'lot_size': 75, 'zone_size': 20, 'atm_range': 200},
         'BANKNIFTY': {'lot_size': 25, 'zone_size': 100, 'atm_range': 500},
+        'SENSEX': {'lot_size': 10, 'zone_size': 50, 'atm_range': 300},
         'NIFTY IT': {'lot_size': 50, 'zone_size': 50, 'atm_range': 300},
         'NIFTY AUTO': {'lot_size': 50, 'zone_size': 50, 'atm_range': 300}
     },
@@ -949,13 +950,16 @@ if __name__ == "__main__":
     with tab_indices:
         st.header("NSE Indices Analysis")
         # Create subtabs for each index
-        nifty_tab, banknifty_tab, it_tab, auto_tab = st.tabs(["NIFTY", "BANKNIFTY", "NIFTY IT", "NIFTY AUTO"])
+        nifty_tab, banknifty_tab, sensex_tab, it_tab, auto_tab = st.tabs(["NIFTY", "BANKNIFTY", "SENSEX", "NIFTY IT", "NIFTY AUTO"])
 
         with nifty_tab:
             analyze_instrument('NIFTY')
 
         with banknifty_tab:
             analyze_instrument('BANKNIFTY')
+
+        with sensex_tab:
+            analyze_instrument('SENSEX')
 
         with it_tab:
             analyze_instrument('NIFTY IT')

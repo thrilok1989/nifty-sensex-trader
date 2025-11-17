@@ -989,12 +989,13 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
                 # Create DataFrame from atm_details
                 atm_df = pd.DataFrame(atm_details)
 
-                # Add emoji indicators for all bias columns
+                # Add emoji indicators for all bias columns including new ATM metrics
                 bias_columns = [
                     'OI_Bias', 'ChgOI_Bias', 'Volume_Bias', 'Delta_Bias', 'Gamma_Bias',
                     'Premium_Bias', 'AskQty_Bias', 'BidQty_Bias', 'IV_Bias', 'DVP_Bias',
                     'Delta_Exposure_Bias', 'Gamma_Exposure_Bias', 'IV_Skew_Bias',
-                    'OI_Change_Bias', 'Verdict'
+                    'OI_Change_Bias', 'Synthetic_Future_Bias', 'ATM_Buildup_Pattern',
+                    'ATM_Vega_Bias', 'Verdict'
                 ]
 
                 for col in bias_columns:
@@ -1038,6 +1039,97 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
 
             if not atm_data_available:
                 st.info("ℹ️ ATM Zone analysis data will be displayed here when available. Please run bias analysis from individual instrument tabs (NIFTY, BANKNIFTY, SENSEX, etc.) first.")
+
+            # Display Overall Market Analysis (Max Pain, Support/Resistance, etc.)
+            st.markdown("---")
+            st.markdown("#### 🎯 Overall Market Analysis (Full Option Chain)")
+
+            market_analysis_available = False
+            for instrument in instruments:
+                if f'{instrument}_market_analysis' in st.session_state:
+                    market_analysis_available = True
+                    market_data = st.session_state[f'{instrument}_market_analysis']
+
+                    st.markdown(f"##### {instrument} Market Analysis")
+
+                    # Create metrics display
+                    col1, col2, col3, col4 = st.columns(4)
+
+                    with col1:
+                        max_pain = market_data.get('Max_Pain_Strike', 'N/A')
+                        st.metric("🎯 Max Pain Strike", f"{max_pain:,.0f}" if isinstance(max_pain, (int, float)) else max_pain)
+
+                    with col2:
+                        max_pain_dist = market_data.get('Max_Pain_Distance', 0)
+                        st.metric("📏 Distance from Max Pain", f"{max_pain_dist:+.0f}" if isinstance(max_pain_dist, (int, float)) else "N/A")
+
+                    with col3:
+                        total_vega_bias = market_data.get('Total_Vega_Bias', 'Neutral')
+                        bias_emoji = "🐂" if "BULLISH" in str(total_vega_bias).upper() else "🐻" if "BEARISH" in str(total_vega_bias).upper() else "⚖️"
+                        st.metric("💨 Total Vega Bias", f"{bias_emoji} {total_vega_bias}")
+
+                    with col4:
+                        buildup = market_data.get('Overall_Buildup_Pattern', 'Neutral')
+                        buildup_emoji = "🐂" if "BULLISH" in str(buildup).upper() else "🐻" if "BEARISH" in str(buildup).upper() else "⚖️"
+                        st.metric("📊 Overall Buildup", f"{buildup_emoji} {buildup}")
+
+                    # Support and Resistance strikes
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        st.markdown("**🛡️ Put Support Strikes (High PE OI)**")
+                        support_strikes = market_data.get('Put_Support_Strikes', [])
+                        if support_strikes:
+                            support_df = pd.DataFrame(support_strikes)
+                            support_df.columns = ['Strike', 'PE OI']
+                            support_df['PE OI'] = support_df['PE OI'].apply(lambda x: f"{x:,.0f}")
+                            st.dataframe(support_df, hide_index=True, use_container_width=True)
+                        else:
+                            st.info("No data available")
+
+                    with col2:
+                        st.markdown("**⚔️ Call Resistance Strikes (High CE OI)**")
+                        resistance_strikes = market_data.get('Call_Resistance_Strikes', [])
+                        if resistance_strikes:
+                            resistance_df = pd.DataFrame(resistance_strikes)
+                            resistance_df.columns = ['Strike', 'CE OI']
+                            resistance_df['CE OI'] = resistance_df['CE OI'].apply(lambda x: f"{x:,.0f}")
+                            st.dataframe(resistance_df, hide_index=True, use_container_width=True)
+                        else:
+                            st.info("No data available")
+
+                    # Unusual Activity
+                    unusual_activity = market_data.get('Unusual_Activity', [])
+                    if unusual_activity:
+                        st.markdown("**🚨 Unusual Activity Alerts**")
+                        unusual_df = pd.DataFrame(unusual_activity)
+                        st.dataframe(unusual_df, hide_index=True, use_container_width=True)
+
+                    # Buildup Breakdown
+                    buildup_breakdown = market_data.get('Buildup_Breakdown', {})
+                    if buildup_breakdown:
+                        st.markdown("**📈 Buildup Breakdown (ITM/ATM/OTM)**")
+                        breakdown_col1, breakdown_col2, breakdown_col3 = st.columns(3)
+
+                        with breakdown_col1:
+                            itm_bias = buildup_breakdown.get('ITM', 'N/A')
+                            itm_emoji = "🐂" if "BULLISH" in str(itm_bias).upper() else "🐻" if "BEARISH" in str(itm_bias).upper() else "⚖️"
+                            st.metric("ITM", f"{itm_emoji} {itm_bias}")
+
+                        with breakdown_col2:
+                            atm_bias = buildup_breakdown.get('ATM', 'N/A')
+                            atm_emoji = "🐂" if "BULLISH" in str(atm_bias).upper() else "🐻" if "BEARISH" in str(atm_bias).upper() else "⚖️"
+                            st.metric("ATM", f"{atm_emoji} {atm_bias}")
+
+                        with breakdown_col3:
+                            otm_bias = buildup_breakdown.get('OTM', 'N/A')
+                            otm_emoji = "🐂" if "BULLISH" in str(otm_bias).upper() else "🐻" if "BEARISH" in str(otm_bias).upper() else "⚖️"
+                            st.metric("OTM", f"{otm_emoji} {otm_bias}")
+
+                    st.markdown("---")
+
+            if not market_analysis_available:
+                st.info("ℹ️ Overall market analysis will be displayed here when available. Please run bias analysis from individual instrument tabs first.")
 
     st.markdown("---")
 

@@ -606,6 +606,88 @@ def display_overall_option_chain_analysis():
 
         st.divider()
 
+        # === OVERALL MARKET ANALYSIS ===
+        st.subheader("🎯 Overall Market Analysis (Max Pain, Support/Resistance)")
+
+        # Display market analysis for all instruments
+        market_analysis_data = []
+        for instrument in list(INSTRUMENTS['indices'].keys()) + list(INSTRUMENTS['stocks'].keys()):
+            if f'{instrument}_market_analysis' in st.session_state:
+                market_data = st.session_state[f'{instrument}_market_analysis']
+
+                analysis_row = {
+                    'Instrument': instrument,
+                    'Spot': f"₹{market_data.get('Spot_Price', 0):,.2f}",
+                    'Max Pain': f"{market_data.get('Max_Pain_Strike', 'N/A'):,.0f}" if isinstance(market_data.get('Max_Pain_Strike'), (int, float)) else 'N/A',
+                    'Distance': f"{market_data.get('Max_Pain_Distance', 0):+.0f}" if isinstance(market_data.get('Max_Pain_Distance'), (int, float)) else 'N/A',
+                    'Total Vega Bias': market_data.get('Total_Vega_Bias', 'Neutral'),
+                    'Overall Buildup': market_data.get('Overall_Buildup_Pattern', 'Neutral')
+                }
+
+                # Add emoji indicators
+                vega_bias = analysis_row['Total Vega Bias']
+                if 'BULLISH' in str(vega_bias).upper():
+                    analysis_row['Total Vega Bias'] = f"🐂 {vega_bias}"
+                elif 'BEARISH' in str(vega_bias).upper():
+                    analysis_row['Total Vega Bias'] = f"🐻 {vega_bias}"
+                else:
+                    analysis_row['Total Vega Bias'] = f"⚖️ {vega_bias}"
+
+                buildup = analysis_row['Overall Buildup']
+                if 'BULLISH' in str(buildup).upper():
+                    analysis_row['Overall Buildup'] = f"🐂 {buildup}"
+                elif 'BEARISH' in str(buildup).upper():
+                    analysis_row['Overall Buildup'] = f"🐻 {buildup}"
+                else:
+                    analysis_row['Overall Buildup'] = f"⚖️ {buildup}"
+
+                market_analysis_data.append(analysis_row)
+
+        if market_analysis_data:
+            market_analysis_df = pd.DataFrame(market_analysis_data)
+            st.dataframe(market_analysis_df, use_container_width=True, hide_index=True)
+
+            # Expandable section for detailed analysis
+            with st.expander("📊 View Detailed Support/Resistance & Unusual Activity"):
+                for instrument in list(INSTRUMENTS['indices'].keys()) + list(INSTRUMENTS['stocks'].keys()):
+                    if f'{instrument}_market_analysis' in st.session_state:
+                        market_data = st.session_state[f'{instrument}_market_analysis']
+
+                        st.markdown(f"#### {instrument}")
+
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            st.markdown("**🛡️ Put Support Strikes**")
+                            support_strikes = market_data.get('Put_Support_Strikes', [])
+                            if support_strikes:
+                                support_df = pd.DataFrame(support_strikes)
+                                support_df.columns = ['Strike', 'PE OI']
+                                support_df['PE OI'] = support_df['PE OI'].apply(lambda x: f"{x:,.0f}")
+                                st.dataframe(support_df, hide_index=True, use_container_width=True)
+
+                        with col2:
+                            st.markdown("**⚔️ Call Resistance Strikes**")
+                            resistance_strikes = market_data.get('Call_Resistance_Strikes', [])
+                            if resistance_strikes:
+                                resistance_df = pd.DataFrame(resistance_strikes)
+                                resistance_df.columns = ['Strike', 'CE OI']
+                                resistance_df['CE OI'] = resistance_df['CE OI'].apply(lambda x: f"{x:,.0f}")
+                                st.dataframe(resistance_df, hide_index=True, use_container_width=True)
+
+                        # Unusual Activity
+                        unusual_activity = market_data.get('Unusual_Activity', [])
+                        if unusual_activity:
+                            st.markdown("**🚨 Unusual Activity**")
+                            unusual_df = pd.DataFrame(unusual_activity)
+                            st.dataframe(unusual_df, hide_index=True, use_container_width=True)
+
+                        st.markdown("---")
+        else:
+            st.info("ℹ️ Overall market analysis will be available after running bias analysis for instruments.")
+
+        st.divider()
+
         # === TRADING RECOMMENDATION ===
         st.subheader("💡 Trading Recommendation")
 

@@ -430,13 +430,44 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
 
         df_ce = pd.DataFrame(calls)
         df_pe = pd.DataFrame(puts)
-        df = pd.merge(df_ce, df_pe, on='strikePrice', suffixes=('_CE', '_PE')).sort_values('strikePrice')
+        df_full = pd.merge(df_ce, df_pe, on='strikePrice', suffixes=('_CE', '_PE')).sort_values('strikePrice')
+
+        # Calculate Max Pain for the full option chain
+        max_pain_strike, max_pain_value = calculate_max_pain(df_full)
+
+        # Find resistance and support strikes
+        resistance_strikes, support_strikes = find_resistance_support_strikes(df_full, underlying, top_n=3)
+
+        # Calculate unusual activity
+        unusual_activity = calculate_unusual_activity(df_full, threshold_percentile=90)
+
+        # Calculate overall buildup pattern
+        overall_buildup_pattern, buildup_breakdown = calculate_overall_buildup_pattern(df_full, underlying)
+
+        # Calculate total vega bias
+        total_ce_vega = df_full['Vega_CE'].sum() * df_full['openInterest_CE'].sum() / len(df_full)
+        total_pe_vega = df_full['Vega_PE'].sum() * df_full['openInterest_PE'].sum() / len(df_full)
+        total_vega_bias = "Bullish" if total_pe_vega > total_ce_vega else "Bearish" if total_ce_vega > total_pe_vega else "Neutral"
+
+        # Store overall market analysis in session state
+        st.session_state[f'{instrument}_market_analysis'] = {
+            'Max_Pain_Strike': max_pain_strike,
+            'Max_Pain_Distance': underlying - max_pain_strike if max_pain_strike else 0,
+            'Call_Resistance_Strikes': resistance_strikes,
+            'Put_Support_Strikes': support_strikes,
+            'Total_Vega_Bias': total_vega_bias,
+            'Unusual_Activity': unusual_activity,
+            'Overall_Buildup_Pattern': overall_buildup_pattern,
+            'Buildup_Breakdown': buildup_breakdown,
+            'Spot_Price': underlying
+        }
 
         # Get instrument-specific parameters
         atm_range = NSE_INSTRUMENTS['indices'].get(instrument, {}).get('atm_range', 200) or \
                     NSE_INSTRUMENTS['stocks'].get(instrument, {}).get('atm_range', 200)
 
-        atm_strike = min(df['strikePrice'], key=lambda x: abs(x - underlying))
+        atm_strike = min(df_full['strikePrice'], key=lambda x: abs(x - underlying))
+        df = df_full[df_full['strikePrice'].between(atm_strike - atm_range, atm_strike + atm_range)].copy()
         df = df[df['strikePrice'].between(atm_strike - atm_range, atm_strike + atm_range)]
         df['Zone'] = df['strikePrice'].apply(lambda x: 'ATM' if x == atm_strike else 'ITM' if x < underlying else 'OTM')
         df['Level'] = df.apply(determine_level, axis=1)
@@ -480,6 +511,34 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
             gamma_exp_bias = "Bullish" if net_gamma_exp > 0 else "Bearish" if net_gamma_exp < 0 else "Neutral"
             iv_skew_bias = "Bullish" if strike_iv_skew > 0 else "Bearish" if strike_iv_skew < 0 else "Neutral"
 
+            # Calculate ATM-specific metrics
+            synthetic_future_price = None
+            synthetic_future_bias = "Neutral"
+            atm_buildup_pattern = "N/A"
+            atm_vega_bias = "Neutral"
+            distance_from_max_pain = 0
+
+            if row['Zone'] == 'ATM':
+                # Synthetic Future Bias (ATM specific)
+                synthetic_future_price, synthetic_future_bias = calculate_synthetic_future(
+                    row['lastPrice_CE'], row['lastPrice_PE'], row['strikePrice'], underlying
+                )
+
+                # ATM Buildup Pattern (ATM specific)
+                atm_buildup_pattern = determine_buildup_pattern(
+                    row['changeinOpenInterest_CE'],
+                    row['changeinOpenInterest_PE'],
+                    row['lastPrice_CE'] - row.get('pChange_CE', 0),  # Price change approximation
+                    row['lastPrice_PE'] - row.get('pChange_PE', 0)
+                )
+
+                # ATM Vega Bias (ATM specific)
+                atm_vega_bias = "Bullish" if row['Vega_PE'] > row['Vega_CE'] else "Bearish" if row['Vega_CE'] > row['Vega_PE'] else "Neutral"
+
+                # Distance from Max Pain (ATM specific display)
+                if max_pain_strike:
+                    distance_from_max_pain = row['strikePrice'] - max_pain_strike
+
             row_data = {
                 "Strike": row['strikePrice'],
                 "Zone": row['Zone'],
@@ -498,7 +557,12 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
                 ),
                 "Delta_Exposure_Bias": delta_exp_bias,
                 "Gamma_Exposure_Bias": gamma_exp_bias,
-                "IV_Skew_Bias": iv_skew_bias
+                "IV_Skew_Bias": iv_skew_bias,
+                # New ATM-specific metrics
+                "Synthetic_Future_Bias": synthetic_future_bias,
+                "ATM_Buildup_Pattern": atm_buildup_pattern,
+                "ATM_Vega_Bias": atm_vega_bias,
+                "Distance_from_MaxPain": distance_from_max_pain
             }
 
             for k in row_data:
@@ -920,6 +984,207 @@ def display_overall_option_chain_analysis(NSE_INSTRUMENTS):
         """)
 
 
+def calculate_max_pain(df_full):
+    """
+    Calculate Max Pain strike - the strike price where option writers lose the least money
+    Returns: max_pain_strike, max_pain_value
+    """
+    try:
+        pain_values = {}
+
+        for strike in df_full['strikePrice'].unique():
+            ce_pain = 0
+            pe_pain = 0
+
+            # Calculate pain for all strikes
+            for _, row in df_full.iterrows():
+                current_strike = row['strikePrice']
+
+                # For CE writers: pain when spot > strike
+                if strike > current_strike:
+                    ce_pain += (strike - current_strike) * row['openInterest_CE']
+
+                # For PE writers: pain when spot < strike
+                if strike < current_strike:
+                    pe_pain += (current_strike - strike) * row['openInterest_PE']
+
+            pain_values[strike] = ce_pain + pe_pain
+
+        # Find strike with minimum pain
+        max_pain_strike = min(pain_values, key=pain_values.get)
+        max_pain_value = pain_values[max_pain_strike]
+
+        return max_pain_strike, max_pain_value
+    except Exception as e:
+        return None, None
+
+def calculate_synthetic_future(ce_price, pe_price, strike, spot):
+    """
+    Calculate synthetic future price from put-call parity
+    Synthetic Future = Strike + (Call Premium - Put Premium)
+    Returns: synthetic_future_price, bias
+    """
+    try:
+        synthetic_future = strike + (ce_price - pe_price)
+
+        # Calculate bias
+        if synthetic_future > spot:
+            bias = "Bullish"  # Market expects higher prices
+        elif synthetic_future < spot:
+            bias = "Bearish"  # Market expects lower prices
+        else:
+            bias = "Neutral"
+
+        return synthetic_future, bias
+    except Exception as e:
+        return None, "Neutral"
+
+def determine_buildup_pattern(ce_oi_change, pe_oi_change, ce_price_change, pe_price_change):
+    """
+    Determine buildup pattern based on OI change and price change
+    Returns: buildup_pattern
+    """
+    try:
+        # Long Call Buildup: Price ↑, OI ↑ (Bullish)
+        if ce_oi_change > 0 and ce_price_change > 0:
+            call_pattern = "Long Call Buildup"
+        # Short Call Buildup: Price ↓, OI ↑ (Bearish - resistance)
+        elif ce_oi_change > 0 and ce_price_change < 0:
+            call_pattern = "Short Call Buildup"
+        else:
+            call_pattern = "No Pattern"
+
+        # Long Put Buildup: Price ↑, OI ↑ (Bearish)
+        if pe_oi_change > 0 and pe_price_change > 0:
+            put_pattern = "Long Put Buildup"
+        # Short Put Buildup: Price ↓, OI ↑ (Bullish - support)
+        elif pe_oi_change > 0 and pe_price_change < 0:
+            put_pattern = "Short Put Buildup"
+        else:
+            put_pattern = "No Pattern"
+
+        # Combine patterns
+        if "Long Call" in call_pattern and "Short Put" in put_pattern:
+            return "Strong Bullish Buildup"
+        elif "Short Call" in call_pattern and "Long Put" in put_pattern:
+            return "Strong Bearish Buildup"
+        elif "Long Call" in call_pattern:
+            return "Bullish (Long Call)"
+        elif "Short Put" in put_pattern:
+            return "Bullish (Short Put)"
+        elif "Short Call" in call_pattern:
+            return "Bearish (Short Call)"
+        elif "Long Put" in put_pattern:
+            return "Bearish (Long Put)"
+        else:
+            return "Neutral"
+    except Exception as e:
+        return "Neutral"
+
+def calculate_unusual_activity(df_full, threshold_percentile=90):
+    """
+    Detect unusual activity in strikes based on OI change and volume
+    Returns: list of strikes with unusual activity
+    """
+    try:
+        unusual_strikes = []
+
+        # Calculate thresholds
+        oi_change_threshold = df_full['changeinOpenInterest_CE'].abs().quantile(threshold_percentile / 100)
+        volume_threshold = df_full['totalTradedVolume_CE'].quantile(threshold_percentile / 100)
+
+        for _, row in df_full.iterrows():
+            strike = row['strikePrice']
+
+            # Check CE activity
+            ce_unusual = (abs(row['changeinOpenInterest_CE']) > oi_change_threshold or
+                         row['totalTradedVolume_CE'] > volume_threshold)
+
+            # Check PE activity
+            pe_unusual = (abs(row['changeinOpenInterest_PE']) > oi_change_threshold or
+                         row['totalTradedVolume_PE'] > volume_threshold)
+
+            if ce_unusual or pe_unusual:
+                activity_type = []
+                if ce_unusual:
+                    activity_type.append("CE")
+                if pe_unusual:
+                    activity_type.append("PE")
+
+                unusual_strikes.append({
+                    'Strike': strike,
+                    'Type': '+'.join(activity_type),
+                    'CE_OI_Change': row['changeinOpenInterest_CE'],
+                    'PE_OI_Change': row['changeinOpenInterest_PE'],
+                    'CE_Volume': row['totalTradedVolume_CE'],
+                    'PE_Volume': row['totalTradedVolume_PE']
+                })
+
+        return unusual_strikes
+    except Exception as e:
+        return []
+
+def find_resistance_support_strikes(df_full, spot, top_n=3):
+    """
+    Find key resistance and support strikes based on OI concentration
+    Returns: resistance_strikes, support_strikes
+    """
+    try:
+        # Sort by CE OI for resistance (high CE OI indicates resistance)
+        resistance_df = df_full[df_full['strikePrice'] >= spot].nlargest(top_n, 'openInterest_CE')
+        resistance_strikes = resistance_df[['strikePrice', 'openInterest_CE']].to_dict('records')
+
+        # Sort by PE OI for support (high PE OI indicates support)
+        support_df = df_full[df_full['strikePrice'] <= spot].nlargest(top_n, 'openInterest_PE')
+        support_strikes = support_df[['strikePrice', 'openInterest_PE']].to_dict('records')
+
+        return resistance_strikes, support_strikes
+    except Exception as e:
+        return [], []
+
+def calculate_overall_buildup_pattern(df_full, spot):
+    """
+    Calculate overall buildup pattern across ITM, ATM, and OTM strikes
+    Returns: overall_pattern, breakdown
+    """
+    try:
+        # Categorize strikes
+        itm_calls = df_full[df_full['strikePrice'] < spot]
+        atm_strikes = df_full[df_full['strikePrice'] == spot]
+        otm_calls = df_full[df_full['strikePrice'] > spot]
+
+        # Calculate net OI changes
+        itm_net_oi = (itm_calls['changeinOpenInterest_PE'].sum() -
+                     itm_calls['changeinOpenInterest_CE'].sum())
+
+        atm_net_oi = 0
+        if len(atm_strikes) > 0:
+            atm_net_oi = (atm_strikes['changeinOpenInterest_PE'].sum() -
+                         atm_strikes['changeinOpenInterest_CE'].sum())
+
+        otm_net_oi = (otm_calls['changeinOpenInterest_PE'].sum() -
+                     otm_calls['changeinOpenInterest_CE'].sum())
+
+        # Determine pattern
+        breakdown = {
+            'ITM': 'Bullish' if itm_net_oi > 0 else 'Bearish' if itm_net_oi < 0 else 'Neutral',
+            'ATM': 'Bullish' if atm_net_oi > 0 else 'Bearish' if atm_net_oi < 0 else 'Neutral',
+            'OTM': 'Bullish' if otm_net_oi > 0 else 'Bearish' if otm_net_oi < 0 else 'Neutral'
+        }
+
+        total_net_oi = itm_net_oi + atm_net_oi + otm_net_oi
+
+        if total_net_oi > 0:
+            overall_pattern = "Bullish"
+        elif total_net_oi < 0:
+            overall_pattern = "Bearish"
+        else:
+            overall_pattern = "Neutral"
+
+        return overall_pattern, breakdown
+    except Exception as e:
+        return "Neutral", {'ITM': 'N/A', 'ATM': 'N/A', 'OTM': 'N/A'}
+
 def calculate_and_store_atm_zone_bias_silent(instrument, NSE_INSTRUMENTS):
     """
     Silently calculate and store ATM zone bias data without any Streamlit display
@@ -970,13 +1235,44 @@ def calculate_and_store_atm_zone_bias_silent(instrument, NSE_INSTRUMENTS):
 
         df_ce = pd.DataFrame(calls)
         df_pe = pd.DataFrame(puts)
-        df = pd.merge(df_ce, df_pe, on='strikePrice', suffixes=('_CE', '_PE')).sort_values('strikePrice')
+        df_full = pd.merge(df_ce, df_pe, on='strikePrice', suffixes=('_CE', '_PE')).sort_values('strikePrice')
+
+        # Calculate Max Pain for the full option chain
+        max_pain_strike, max_pain_value = calculate_max_pain(df_full)
+
+        # Find resistance and support strikes
+        resistance_strikes, support_strikes = find_resistance_support_strikes(df_full, underlying, top_n=3)
+
+        # Calculate unusual activity
+        unusual_activity = calculate_unusual_activity(df_full, threshold_percentile=90)
+
+        # Calculate overall buildup pattern
+        overall_buildup_pattern, buildup_breakdown = calculate_overall_buildup_pattern(df_full, underlying)
+
+        # Calculate total vega bias
+        total_ce_vega = df_full['Vega_CE'].sum() * df_full['openInterest_CE'].sum() / len(df_full)
+        total_pe_vega = df_full['Vega_PE'].sum() * df_full['openInterest_PE'].sum() / len(df_full)
+        total_vega_bias = "Bullish" if total_pe_vega > total_ce_vega else "Bearish" if total_ce_vega > total_pe_vega else "Neutral"
+
+        # Store overall market analysis in session state
+        st.session_state[f'{instrument}_market_analysis'] = {
+            'Max_Pain_Strike': max_pain_strike,
+            'Max_Pain_Distance': underlying - max_pain_strike if max_pain_strike else 0,
+            'Call_Resistance_Strikes': resistance_strikes,
+            'Put_Support_Strikes': support_strikes,
+            'Total_Vega_Bias': total_vega_bias,
+            'Unusual_Activity': unusual_activity,
+            'Overall_Buildup_Pattern': overall_buildup_pattern,
+            'Buildup_Breakdown': buildup_breakdown,
+            'Spot_Price': underlying
+        }
 
         # Get instrument-specific parameters
         atm_range = NSE_INSTRUMENTS['indices'].get(instrument, {}).get('atm_range', 200) or \
                     NSE_INSTRUMENTS['stocks'].get(instrument, {}).get('atm_range', 200)
 
-        atm_strike = min(df['strikePrice'], key=lambda x: abs(x - underlying))
+        atm_strike = min(df_full['strikePrice'], key=lambda x: abs(x - underlying))
+        df = df_full[df_full['strikePrice'].between(atm_strike - atm_range, atm_strike + atm_range)].copy()
         df = df[df['strikePrice'].between(atm_strike - atm_range, atm_strike + atm_range)]
         df['Zone'] = df['strikePrice'].apply(lambda x: 'ATM' if x == atm_strike else 'ITM' if x < underlying else 'OTM')
         df['Level'] = df.apply(determine_level, axis=1)
@@ -1020,6 +1316,34 @@ def calculate_and_store_atm_zone_bias_silent(instrument, NSE_INSTRUMENTS):
             gamma_exp_bias = "Bullish" if net_gamma_exp > 0 else "Bearish" if net_gamma_exp < 0 else "Neutral"
             iv_skew_bias = "Bullish" if strike_iv_skew > 0 else "Bearish" if strike_iv_skew < 0 else "Neutral"
 
+            # Calculate ATM-specific metrics
+            synthetic_future_price = None
+            synthetic_future_bias = "Neutral"
+            atm_buildup_pattern = "N/A"
+            atm_vega_bias = "Neutral"
+            distance_from_max_pain = 0
+
+            if row['Zone'] == 'ATM':
+                # Synthetic Future Bias (ATM specific)
+                synthetic_future_price, synthetic_future_bias = calculate_synthetic_future(
+                    row['lastPrice_CE'], row['lastPrice_PE'], row['strikePrice'], underlying
+                )
+
+                # ATM Buildup Pattern (ATM specific)
+                atm_buildup_pattern = determine_buildup_pattern(
+                    row['changeinOpenInterest_CE'],
+                    row['changeinOpenInterest_PE'],
+                    row['lastPrice_CE'] - row.get('pChange_CE', 0),  # Price change approximation
+                    row['lastPrice_PE'] - row.get('pChange_PE', 0)
+                )
+
+                # ATM Vega Bias (ATM specific)
+                atm_vega_bias = "Bullish" if row['Vega_PE'] > row['Vega_CE'] else "Bearish" if row['Vega_CE'] > row['Vega_PE'] else "Neutral"
+
+                # Distance from Max Pain (ATM specific display)
+                if max_pain_strike:
+                    distance_from_max_pain = row['strikePrice'] - max_pain_strike
+
             row_data = {
                 "Strike": row['strikePrice'],
                 "Zone": row['Zone'],
@@ -1040,7 +1364,12 @@ def calculate_and_store_atm_zone_bias_silent(instrument, NSE_INSTRUMENTS):
                 ),
                 "Delta_Exposure_Bias": delta_exp_bias,
                 "Gamma_Exposure_Bias": gamma_exp_bias,
-                "IV_Skew_Bias": iv_skew_bias
+                "IV_Skew_Bias": iv_skew_bias,
+                # New ATM-specific metrics
+                "Synthetic_Future_Bias": synthetic_future_bias,
+                "ATM_Buildup_Pattern": atm_buildup_pattern,
+                "ATM_Vega_Bias": atm_vega_bias,
+                "Distance_from_MaxPain": distance_from_max_pain
             }
 
             # Add OI_Change_Bias for compatibility (same as ChgOI_Bias)

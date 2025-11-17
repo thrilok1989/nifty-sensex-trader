@@ -309,8 +309,9 @@ def display_call_log_book(instrument):
             mime="text/csv"
         )
 
+@st.cache_data(ttl=30, show_spinner=False)
 def fetch_option_chain_data(instrument, NSE_INSTRUMENTS):
-    """Fetch and return option chain data for an instrument"""
+    """Fetch and return option chain data for an instrument - Cached for 30 seconds"""
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         session = requests.Session()
@@ -444,6 +445,20 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
         df['Level'] = df.apply(determine_level, axis=1)
 
         bias_results, total_score = [], 0
+        # Calculate Delta and Gamma Exposures
+        total_delta_exposure = 0
+        total_gamma_exposure = 0
+
+        for _, row in df.iterrows():
+            # Calculate exposures for all strikes (not just near ATM)
+            ce_delta_exp = row['Delta_CE'] * row['openInterest_CE']
+            pe_delta_exp = row['Delta_PE'] * row['openInterest_PE']
+            ce_gamma_exp = row['Gamma_CE'] * row['openInterest_CE']
+            pe_gamma_exp = row['Gamma_PE'] * row['openInterest_PE']
+
+            total_delta_exposure += (ce_delta_exp + pe_delta_exp)
+            total_gamma_exposure += (ce_gamma_exp + pe_gamma_exp)
+
         for _, row in df.iterrows():
             if abs(row['strikePrice'] - atm_strike) > (atm_range/2):  # Only consider strikes near ATM
                 continue
@@ -455,6 +470,7 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
                 "Level": row['Level'],
                 "ChgOI_Bias": "Bullish" if row['changeinOpenInterest_CE'] < row['changeinOpenInterest_PE'] else "Bearish",
                 "Volume_Bias": "Bullish" if row['totalTradedVolume_CE'] < row['totalTradedVolume_PE'] else "Bearish",
+                "Delta_Bias": "Bullish" if abs(row['Delta_PE']) > abs(row['Delta_CE']) else "Bearish",
                 "Gamma_Bias": "Bullish" if row['Gamma_CE'] < row['Gamma_PE'] else "Bearish",
                 "AskQty_Bias": "Bullish" if row['askQty_PE'] > row['askQty_CE'] else "Bearish",
                 "BidQty_Bias": "Bearish" if row['bidQty_PE'] > row['bidQty_CE'] else "Bullish",
@@ -479,6 +495,15 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
         df_summary = pd.DataFrame(bias_results)
         atm_row = df_summary[df_summary["Zone"] == "ATM"].iloc[0] if not df_summary[df_summary["Zone"] == "ATM"].empty else None
         market_view = atm_row['Verdict'] if atm_row is not None else "Neutral"
+
+        # Calculate IV Skew (ATM)
+        atm_ce_iv = df.loc[df['strikePrice'] == atm_strike, 'impliedVolatility_CE'].values[0] if not df[df['strikePrice'] == atm_strike].empty else 0
+        atm_pe_iv = df.loc[df['strikePrice'] == atm_strike, 'impliedVolatility_PE'].values[0] if not df[df['strikePrice'] == atm_strike].empty else 0
+        iv_skew = atm_pe_iv - atm_ce_iv
+
+        # Determine Delta Bias based on net delta exposure
+        delta_bias_overall = "Bullish" if total_delta_exposure > 0 else "Bearish" if total_delta_exposure < 0 else "Neutral"
+
         support_zone, resistance_zone = get_support_resistance_zones(df, underlying, instrument, NSE_INSTRUMENTS)
 
         # Store zones in session state
@@ -545,6 +570,32 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
         st.success(f"🧠 {instrument} Market View: **{market_view}** Bias Score: {total_score}")
         st.markdown(f"### 🛡️ {instrument} Support Zone: `{support_str}`")
         st.markdown(f"### 🚧 {instrument} Resistance Zone: `{resistance_str}`")
+
+        # Display Greeks Metrics in a dedicated section
+        st.markdown("---")
+        st.markdown(f"### 🎯 {instrument} Greeks & Exposure Metrics")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            delta_color = "🟢" if delta_bias_overall == "Bullish" else "🔴" if delta_bias_overall == "Bearish" else "🟡"
+            st.metric("Delta Bias", f"{delta_color} {delta_bias_overall}")
+            st.caption(f"Exposure: {total_delta_exposure:,.0f}")
+
+        with col2:
+            st.metric("Gamma Exposure", f"{total_gamma_exposure:,.2f}")
+            st.caption("Total Gamma * OI")
+
+        with col3:
+            st.metric("Delta Exposure", f"{total_delta_exposure:,.0f}")
+            st.caption("Total Delta * OI")
+
+        with col4:
+            iv_skew_color = "🟢" if iv_skew > 0 else "🔴" if iv_skew < 0 else "🟡"
+            st.metric("IV Skew (ATM)", f"{iv_skew_color} {iv_skew:.2f}%")
+            st.caption(f"PE IV: {atm_pe_iv:.1f}% | CE IV: {atm_ce_iv:.1f}%")
+
+        st.markdown("---")
 
         # Display price chart
         plot_price_with_sr(instrument)

@@ -100,13 +100,19 @@ def delta_volume_bias(price, volume, chg_oi):
         return "Neutral"
 
 weights = {
+    "OI_Bias": 2,
     "ChgOI_Bias": 2,
     "Volume_Bias": 1,
+    "Delta_Bias": 1,
     "Gamma_Bias": 1,
+    "Premium_Bias": 1,
     "AskQty_Bias": 1,
     "BidQty_Bias": 1,
     "IV_Bias": 1,
     "DVP_Bias": 1,
+    "Delta_Exposure_Bias": 1.5,
+    "Gamma_Exposure_Bias": 1.5,
+    "IV_Skew_Bias": 1,
 }
 
 def determine_level(row):
@@ -794,10 +800,12 @@ def analyze_instrument(instrument):
                 "Strike": row['strikePrice'],
                 "Zone": row['Zone'],
                 "Level": row['Level'],
+                "OI_Bias": "Bearish" if row['openInterest_CE'] > row['openInterest_PE'] else "Bullish",
                 "ChgOI_Bias": "Bullish" if row['changeinOpenInterest_CE'] < row['changeinOpenInterest_PE'] else "Bearish",
                 "Volume_Bias": "Bullish" if row['totalTradedVolume_CE'] < row['totalTradedVolume_PE'] else "Bearish",
                 "Delta_Bias": "Bullish" if abs(row['Delta_PE']) > abs(row['Delta_CE']) else "Bearish",
                 "Gamma_Bias": "Bullish" if row['Gamma_CE'] < row['Gamma_PE'] else "Bearish",
+                "Premium_Bias": "Bearish" if row['lastPrice_CE'] > row['lastPrice_PE'] else "Bullish",
                 "AskQty_Bias": "Bullish" if row['askQty_PE'] > row['askQty_CE'] else "Bearish",
                 "BidQty_Bias": "Bearish" if row['bidQty_PE'] > row['bidQty_CE'] else "Bullish",
                 "IV_Bias": "Bullish" if row['impliedVolatility_CE'] > row['impliedVolatility_PE'] else "Bearish",

@@ -31,6 +31,7 @@ from data_cache_manager import (
     get_cached_bias_analysis_results
 )
 from vob_signal_generator import VOBSignalGenerator
+from htf_sr_signal_generator import HTFSRSignalGenerator
 
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE CONFIG
@@ -58,6 +59,15 @@ if 'active_vob_signals' not in st.session_state:
 
 if 'last_vob_check_time' not in st.session_state:
     st.session_state.last_vob_check_time = 0
+
+if 'htf_sr_signal_generator' not in st.session_state:
+    st.session_state.htf_sr_signal_generator = HTFSRSignalGenerator(proximity_threshold=8.0)
+
+if 'active_htf_sr_signals' not in st.session_state:
+    st.session_state.active_htf_sr_signals = []
+
+if 'last_htf_sr_check_time' not in st.session_state:
+    st.session_state.last_htf_sr_check_time = 0
 
 if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = time.time()
@@ -342,6 +352,111 @@ if current_time - st.session_state.last_vob_check_time > 10:
         # Silently fail - don't disrupt the app
         pass
 
+# ═══════════════════════════════════════════════════════════════════════
+# HTF SUPPORT/RESISTANCE SIGNAL MONITORING
+# ═══════════════════════════════════════════════════════════════════════
+# Check for HTF S/R signals every 10 seconds using cached sentiment
+if current_time - st.session_state.last_htf_sr_check_time > 10:
+    st.session_state.last_htf_sr_check_time = current_time
+
+    try:
+        # Use cached sentiment (calculated once per minute to avoid redundancy)
+        if st.session_state.cached_sentiment:
+            overall_sentiment = st.session_state.cached_sentiment.get('overall_sentiment', 'NEUTRAL')
+        else:
+            overall_sentiment = 'NEUTRAL'
+
+        # Only check if market sentiment is BULLISH or BEARISH
+        if overall_sentiment in ['BULLISH', 'BEARISH']:
+            # Import HTF S/R indicator
+            from indicators.htf_support_resistance import HTFSupportResistance
+
+            # Fetch chart data for NIFTY
+            chart_analyzer = AdvancedChartAnalysis()
+            df_nifty = chart_analyzer.fetch_intraday_data('^NSEI', period='7d', interval='1m')
+
+            if df_nifty is not None and len(df_nifty) > 0:
+                # Calculate HTF S/R levels for 5min, 10min, 15min
+                htf_sr = HTFSupportResistance()
+                levels_config = [
+                    {'timeframe': '5T', 'length': 5},
+                    {'timeframe': '10T', 'length': 5},
+                    {'timeframe': '15T', 'length': 5}
+                ]
+                htf_levels = htf_sr.calculate_multi_timeframe(df_nifty, levels_config)
+
+                # Check for NIFTY signal
+                nifty_htf_signal = st.session_state.htf_sr_signal_generator.check_for_signal(
+                    spot_price=nifty_data['spot_price'],
+                    market_sentiment=overall_sentiment,
+                    htf_levels=htf_levels,
+                    index='NIFTY'
+                )
+
+                if nifty_htf_signal:
+                    # Check if this is a new signal (not already in active signals)
+                    is_new = True
+                    for existing_signal in st.session_state.active_htf_sr_signals:
+                        if (existing_signal['index'] == nifty_htf_signal['index'] and
+                            existing_signal['direction'] == nifty_htf_signal['direction'] and
+                            abs(existing_signal['entry_price'] - nifty_htf_signal['entry_price']) < 5):
+                            is_new = False
+                            break
+
+                    if is_new:
+                        # Add to active signals
+                        st.session_state.active_htf_sr_signals.append(nifty_htf_signal)
+
+                        # Send telegram notification
+                        telegram_bot = TelegramBot()
+                        telegram_bot.send_htf_sr_entry_signal(nifty_htf_signal)
+
+            # Fetch chart data for SENSEX
+            df_sensex = chart_analyzer.fetch_intraday_data('^BSESN', period='7d', interval='1m')
+
+            if df_sensex is not None and len(df_sensex) > 0:
+                # Calculate HTF S/R levels for SENSEX
+                htf_sr_sensex = HTFSupportResistance()
+                htf_levels_sensex = htf_sr_sensex.calculate_multi_timeframe(df_sensex, levels_config)
+
+                # Get SENSEX spot price
+                sensex_data = get_cached_sensex_data()
+                if sensex_data:
+                    sensex_htf_signal = st.session_state.htf_sr_signal_generator.check_for_signal(
+                        spot_price=sensex_data['spot_price'],
+                        market_sentiment=overall_sentiment,
+                        htf_levels=htf_levels_sensex,
+                        index='SENSEX'
+                    )
+
+                    if sensex_htf_signal:
+                        # Check if this is a new signal
+                        is_new = True
+                        for existing_signal in st.session_state.active_htf_sr_signals:
+                            if (existing_signal['index'] == sensex_htf_signal['index'] and
+                                existing_signal['direction'] == sensex_htf_signal['direction'] and
+                                abs(existing_signal['entry_price'] - sensex_htf_signal['entry_price']) < 5):
+                                is_new = False
+                                break
+
+                        if is_new:
+                            # Add to active signals
+                            st.session_state.active_htf_sr_signals.append(sensex_htf_signal)
+
+                            # Send telegram notification
+                            telegram_bot = TelegramBot()
+                            telegram_bot.send_htf_sr_entry_signal(sensex_htf_signal)
+
+            # Clean up old HTF S/R signals (older than 30 minutes)
+            st.session_state.active_htf_sr_signals = [
+                sig for sig in st.session_state.active_htf_sr_signals
+                if (current_time - sig['timestamp'].timestamp()) < 1800
+            ]
+
+    except Exception as e:
+        # Silently fail - don't disrupt the app
+        pass
+
 # Display market data
 col1, col2, col3, col4 = st.columns(4)
 
@@ -437,6 +552,80 @@ if st.session_state.active_vob_signals:
 else:
     st.info("⏳ Monitoring market for VOB-based entry signals... No active signals at the moment.")
     st.caption("Signals are generated when spot price is within 8 points of a Volume Order Block and aligned with overall market sentiment.")
+
+st.divider()
+
+# ═══════════════════════════════════════════════════════════════════════
+# HTF S/R TRADING SIGNALS DISPLAY
+# ═══════════════════════════════════════════════════════════════════════
+st.markdown("### 📊 HTF Support/Resistance Signals")
+st.markdown("**HTF S/R Based Trading | 5min, 10min, 15min Timeframes**")
+
+if st.session_state.active_htf_sr_signals:
+    for signal in st.session_state.active_htf_sr_signals:
+        signal_emoji = "🟢" if signal['direction'] == 'CALL' else "🔴"
+        direction_label = "BULLISH" if signal['direction'] == 'CALL' else "BEARISH"
+        sentiment_color = "#26ba9f" if signal['market_sentiment'] == 'BULLISH' else "#ba2646"
+
+        # Format timeframe for display
+        timeframe_display = {
+            '5T': '5 Min',
+            '10T': '10 Min',
+            '15T': '15 Min'
+        }.get(signal.get('timeframe', ''), signal.get('timeframe', 'N/A'))
+
+        # Determine level type and value
+        if signal['direction'] == 'CALL':
+            level_type = "Support Level"
+            level_value = signal['support_level']
+        else:
+            level_type = "Resistance Level"
+            level_value = signal.get('resistance_level', 'N/A')
+
+        with st.container():
+            st.markdown(f"""
+            <div style='border: 2px solid {sentiment_color}; border-radius: 10px; padding: 15px; margin: 10px 0; background-color: rgba(38, 186, 159, 0.1);'>
+                <h3 style='margin: 0;'>{signal_emoji} {signal['index']} {direction_label} HTF S/R ENTRY SIGNAL</h3>
+                <p style='margin: 5px 0;'><b>Market Sentiment:</b> {signal['market_sentiment']} | <b>Timeframe:</b> {timeframe_display}</p>
+                <hr style='margin: 10px 0;'>
+                <div style='display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;'>
+                    <div>
+                        <p style='margin: 0; font-size: 12px; color: #888;'>Entry Price</p>
+                        <p style='margin: 0; font-size: 18px; font-weight: bold;'>₹{signal['entry_price']}</p>
+                    </div>
+                    <div>
+                        <p style='margin: 0; font-size: 12px; color: #888;'>Stop Loss</p>
+                        <p style='margin: 0; font-size: 18px; font-weight: bold; color: #ff5252;'>₹{signal['stop_loss']}</p>
+                    </div>
+                    <div>
+                        <p style='margin: 0; font-size: 12px; color: #888;'>Target</p>
+                        <p style='margin: 0; font-size: 18px; font-weight: bold; color: #4caf50;'>₹{signal['target']}</p>
+                    </div>
+                    <div>
+                        <p style='margin: 0; font-size: 12px; color: #888;'>Risk:Reward</p>
+                        <p style='margin: 0; font-size: 18px; font-weight: bold;'>{signal['risk_reward']}</p>
+                    </div>
+                </div>
+                <hr style='margin: 10px 0;'>
+                <div style='display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;'>
+                    <div>
+                        <p style='margin: 0; font-size: 12px; color: #888;'>{level_type}</p>
+                        <p style='margin: 0; font-size: 14px;'>₹{level_value}</p>
+                    </div>
+                    <div>
+                        <p style='margin: 0; font-size: 12px; color: #888;'>Distance from Level</p>
+                        <p style='margin: 0; font-size: 14px;'>{signal['distance_from_level']} points</p>
+                    </div>
+                    <div>
+                        <p style='margin: 0; font-size: 12px; color: #888;'>Signal Time</p>
+                        <p style='margin: 0; font-size: 14px;'>{signal['timestamp'].strftime('%H:%M:%S')}</p>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+else:
+    st.info("⏳ Monitoring market for HTF S/R entry signals... No active signals at the moment.")
+    st.caption("Signals are generated when spot price is within 8 points of HTF Support (for bullish) or Resistance (for bearish) and aligned with overall market sentiment.")
 
 st.divider()
 

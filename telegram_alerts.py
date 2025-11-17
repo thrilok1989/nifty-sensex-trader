@@ -149,6 +149,50 @@ class TelegramBot:
         """
         return self.send_message(message.strip())
 
+    def send_htf_sr_entry_signal(self, signal: dict):
+        """Send HTF Support/Resistance entry signal alert"""
+        signal_emoji = "🟢" if signal['direction'] == 'CALL' else "🔴"
+        direction_label = "BULLISH" if signal['direction'] == 'CALL' else "BEARISH"
+
+        # Format timeframe for display
+        timeframe_display = {
+            '5T': '5 Min',
+            '10T': '10 Min',
+            '15T': '15 Min'
+        }.get(signal.get('timeframe', ''), signal.get('timeframe', 'N/A'))
+
+        # Determine if it's support or resistance signal
+        if signal['direction'] == 'CALL':
+            level_type = "Support"
+            level_value = signal['support_level']
+        else:
+            level_type = "Resistance"
+            level_value = signal['resistance_level']
+
+        message = f"""
+{signal_emoji} <b>HTF S/R ENTRY SIGNAL - {direction_label}</b>
+
+<b>Index:</b> {signal['index']}
+<b>Direction:</b> {signal['direction']}
+<b>Market Sentiment:</b> {signal['market_sentiment']}
+
+💰 <b>ENTRY LEVELS</b>
+<b>Entry Price:</b> {signal['entry_price']}
+<b>Stop Loss:</b> {signal['stop_loss']}
+<b>Target:</b> {signal['target']}
+<b>Risk:Reward:</b> {signal['risk_reward']}
+
+📊 <b>HTF S/R DETAILS</b>
+<b>Timeframe:</b> {timeframe_display}
+<b>{level_type} Level:</b> {level_value}
+<b>Distance from Level:</b> {signal['distance_from_level']} points
+
+<b>Time:</b> {signal['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}
+
+⚡ <b>Execute trade NOW!</b>
+        """
+        return self.send_message(message.strip())
+
 
 def send_test_message():
     """Send test message to verify Telegram setup"""

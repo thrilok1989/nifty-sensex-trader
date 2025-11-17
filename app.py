@@ -374,7 +374,8 @@ if current_time - st.session_state.last_vob_check_time > 30:
                 market_sentiment=overall_sentiment,
                 bullish_blocks=vob_data['bullish_blocks'],
                 bearish_blocks=vob_data['bearish_blocks'],
-                index='NIFTY'
+                index='NIFTY',
+                df=df  # Pass dataframe for strength analysis
             )
 
             if nifty_signal:
@@ -411,7 +412,8 @@ if current_time - st.session_state.last_vob_check_time > 30:
                     market_sentiment=overall_sentiment,
                     bullish_blocks=vob_data_sensex['bullish_blocks'],
                     bearish_blocks=vob_data_sensex['bearish_blocks'],
-                    index='SENSEX'
+                    index='SENSEX',
+                    df=df_sensex  # Pass dataframe for strength analysis
                 )
 
                 if sensex_signal:
@@ -479,7 +481,8 @@ if current_time - st.session_state.last_htf_sr_check_time > 30:
                     spot_price=nifty_data['spot_price'],
                     market_sentiment=overall_sentiment,
                     htf_levels=htf_levels,
-                    index='NIFTY'
+                    index='NIFTY',
+                    df=df_nifty  # Pass dataframe for strength analysis
                 )
 
                 if nifty_htf_signal:
@@ -515,7 +518,8 @@ if current_time - st.session_state.last_htf_sr_check_time > 30:
                         spot_price=sensex_data['spot_price'],
                         market_sentiment=overall_sentiment,
                         htf_levels=htf_levels_sensex,
-                        index='SENSEX'
+                        index='SENSEX',
+                        df=df_sensex  # Pass dataframe for strength analysis
                     )
 
                     if sensex_htf_signal:
@@ -597,6 +601,52 @@ if st.session_state.active_vob_signals:
         direction_label = "BULLISH" if signal['direction'] == 'CALL' else "BEARISH"
         sentiment_color = "#26ba9f" if signal['market_sentiment'] == 'BULLISH' else "#ba2646"
 
+        # Get strength data if available
+        strength = signal.get('strength')
+        strength_html = ""
+        if strength:
+            strength_score = strength.get('strength_score', 0)
+            strength_label = strength.get('strength_label', 'UNKNOWN')
+            trend = strength.get('trend', 'UNKNOWN')
+            times_tested = strength.get('times_tested', 0)
+            respect_rate = strength.get('respect_rate', 0)
+
+            # Determine strength color
+            if strength_score >= 70:
+                strength_color = "#4caf50"  # Green
+            elif strength_score >= 50:
+                strength_color = "#ffc107"  # Yellow
+            else:
+                strength_color = "#ff5252"  # Red
+
+            # Trend indicator
+            trend_emoji = "🔺" if trend == "STRENGTHENING" else "🔻" if trend == "WEAKENING" else "➖"
+
+            strength_html = f"""
+                <hr style='margin: 10px 0;'>
+                <div style='background-color: rgba(0,0,0,0.05); padding: 10px; border-radius: 5px;'>
+                    <p style='margin: 0; font-size: 14px; font-weight: bold;'>📊 Order Block Strength Analysis</p>
+                    <div style='display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px;'>
+                        <div>
+                            <p style='margin: 0; font-size: 11px; color: #888;'>Strength Score</p>
+                            <p style='margin: 0; font-size: 16px; font-weight: bold; color: {strength_color};'>{strength_score}/100</p>
+                        </div>
+                        <div>
+                            <p style='margin: 0; font-size: 11px; color: #888;'>Status</p>
+                            <p style='margin: 0; font-size: 14px;'>{strength_label.replace('_', ' ')}</p>
+                        </div>
+                        <div>
+                            <p style='margin: 0; font-size: 11px; color: #888;'>Trend</p>
+                            <p style='margin: 0; font-size: 14px;'>{trend_emoji} {trend}</p>
+                        </div>
+                        <div>
+                            <p style='margin: 0; font-size: 11px; color: #888;'>Tests / Respect Rate</p>
+                            <p style='margin: 0; font-size: 14px;'>{times_tested} / {respect_rate}%</p>
+                        </div>
+                    </div>
+                </div>
+            """
+
         with st.container():
             st.markdown(f"""
             <div style='border: 2px solid {sentiment_color}; border-radius: 10px; padding: 15px; margin: 10px 0; background-color: rgba(38, 186, 159, 0.1);'>
@@ -636,6 +686,7 @@ if st.session_state.active_vob_signals:
                         <p style='margin: 0; font-size: 14px;'>{signal['timestamp'].strftime('%H:%M:%S')}</p>
                     </div>
                 </div>
+                {strength_html}
             </div>
             """, unsafe_allow_html=True)
 else:
@@ -670,6 +721,52 @@ if st.session_state.active_htf_sr_signals:
         else:
             level_type = "Resistance Level"
             level_value = signal.get('resistance_level', 'N/A')
+
+        # Get strength data if available
+        strength = signal.get('strength')
+        strength_html = ""
+        if strength:
+            strength_score = strength.get('strength_score', 0)
+            strength_label = strength.get('strength_label', 'UNKNOWN')
+            trend = strength.get('trend', 'UNKNOWN')
+            times_tested = strength.get('times_tested', 0)
+            hold_rate = strength.get('hold_rate', 0)
+
+            # Determine strength color
+            if strength_score >= 70:
+                strength_color = "#4caf50"  # Green
+            elif strength_score >= 50:
+                strength_color = "#ffc107"  # Yellow
+            else:
+                strength_color = "#ff5252"  # Red
+
+            # Trend indicator
+            trend_emoji = "🔺" if trend == "STRENGTHENING" else "🔻" if trend == "WEAKENING" else "➖"
+
+            strength_html = f"""
+                <hr style='margin: 10px 0;'>
+                <div style='background-color: rgba(0,0,0,0.05); padding: 10px; border-radius: 5px;'>
+                    <p style='margin: 0; font-size: 14px; font-weight: bold;'>📊 Support/Resistance Strength Analysis</p>
+                    <div style='display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px;'>
+                        <div>
+                            <p style='margin: 0; font-size: 11px; color: #888;'>Strength Score</p>
+                            <p style='margin: 0; font-size: 16px; font-weight: bold; color: {strength_color};'>{strength_score}/100</p>
+                        </div>
+                        <div>
+                            <p style='margin: 0; font-size: 11px; color: #888;'>Status</p>
+                            <p style='margin: 0; font-size: 14px;'>{strength_label.replace('_', ' ')}</p>
+                        </div>
+                        <div>
+                            <p style='margin: 0; font-size: 11px; color: #888;'>Trend</p>
+                            <p style='margin: 0; font-size: 14px;'>{trend_emoji} {trend}</p>
+                        </div>
+                        <div>
+                            <p style='margin: 0; font-size: 11px; color: #888;'>Tests / Hold Rate</p>
+                            <p style='margin: 0; font-size: 14px;'>{times_tested} / {hold_rate}%</p>
+                        </div>
+                    </div>
+                </div>
+            """
 
         with st.container():
             st.markdown(f"""
@@ -710,6 +807,7 @@ if st.session_state.active_htf_sr_signals:
                         <p style='margin: 0; font-size: 14px;'>{signal['timestamp'].strftime('%H:%M:%S')}</p>
                     </div>
                 </div>
+                {strength_html}
             </div>
             """, unsafe_allow_html=True)
 else:

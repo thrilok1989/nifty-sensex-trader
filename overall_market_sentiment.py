@@ -315,6 +315,19 @@ def calculate_option_chain_atm_sentiment(NSE_INSTRUMENTS):
         total_score += score
         instruments_analyzed += 1
 
+        # Collect detailed ATM zone information for this instrument
+        atm_detail = {
+            'Instrument': instrument,
+            'Zone': atm_row.get('Zone', 'ATM'),
+            'OI_Bias': atm_row.get('OI_Bias', 'N/A'),
+            'OI_Change_Bias': atm_row.get('OI_Change_Bias', 'N/A'),
+            'Volume_Bias': atm_row.get('Volume_Bias', 'N/A'),
+            'Premium_Bias': atm_row.get('Premium_Bias', 'N/A'),
+            'Verdict': atm_row.get('Verdict', 'Neutral'),
+            'Score': f"{score:+.0f}"
+        }
+        atm_details.append(atm_detail)
+
     # Calculate overall score and bias
     if instruments_analyzed == 0:
         return None
@@ -339,7 +352,8 @@ def calculate_option_chain_atm_sentiment(NSE_INSTRUMENTS):
         'bearish_instruments': bearish_instruments,
         'neutral_instruments': neutral_instruments,
         'total_instruments': instruments_analyzed,
-        'confidence': confidence
+        'confidence': confidence,
+        'atm_details': atm_details
     }
 
 
@@ -945,7 +959,32 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
             **Total Analyzed:** {source_data.get('total_instruments', 0)}
             """)
 
-            # Display ATM Zone tables for each instrument
+            # Display ATM Details Summary Table
+            atm_details = source_data.get('atm_details', [])
+            if atm_details:
+                st.markdown("#### 📊 ATM Zone Summary")
+
+                # Create DataFrame from atm_details
+                atm_df = pd.DataFrame(atm_details)
+
+                # Add emoji indicators for bias columns
+                bias_columns = ['OI_Bias', 'OI_Change_Bias', 'Volume_Bias', 'Premium_Bias', 'Verdict']
+
+                for col in bias_columns:
+                    if col in atm_df.columns:
+                        atm_df[col] = atm_df[col].apply(lambda x:
+                            f"🐂 {x}" if 'BULLISH' in str(x).upper() else
+                            f"🐻 {x}" if 'BEARISH' in str(x).upper() else
+                            f"⚖️ {x}" if 'NEUTRAL' in str(x).upper() else
+                            str(x)
+                        )
+
+                st.dataframe(atm_df, use_container_width=True, hide_index=True)
+
+                st.markdown("---")
+                st.markdown("#### 📋 Detailed ATM Zone Bias Tables")
+
+            # Display detailed ATM Zone tables for each instrument
             instruments = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY']
 
             atm_data_available = False
@@ -954,7 +993,7 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
                     atm_data_available = True
                     df_atm = st.session_state[f'{instrument}_atm_zone_bias']
 
-                    st.markdown(f"#### {instrument} ATM Zone Bias")
+                    st.markdown(f"##### {instrument} ATM Zone Bias")
 
                     # Add emoji indicators for bias columns
                     df_display = df_atm.copy()
@@ -962,10 +1001,10 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
 
                     for col in bias_columns:
                         df_display[col] = df_display[col].apply(lambda x:
-                            f"🐂 {x}" if str(x).upper() == "BULLISH" else
-                            f"🐻 {x}" if str(x).upper() == "BEARISH" else
-                            f"⚖️ {x}" if str(x).upper() == "NEUTRAL" else
-                            x
+                            f"🐂 {x}" if 'BULLISH' in str(x).upper() else
+                            f"🐻 {x}" if 'BEARISH' in str(x).upper() else
+                            f"⚖️ {x}" if 'NEUTRAL' in str(x).upper() else
+                            str(x)
                         )
 
                     st.dataframe(df_display, use_container_width=True, hide_index=True)

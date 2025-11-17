@@ -9,18 +9,17 @@ Replaces the old NSE-based data fetching.
 from datetime import datetime
 import pytz
 from dhan_data_fetcher import get_nifty_data, get_sensex_data, DhanDataFetcher
+from market_hours_scheduler import scheduler, is_within_trading_hours
 
 IST = pytz.timezone("Asia/Kolkata")
 
 
 def is_market_open():
-    """Check if NSE market is open"""
-    now = datetime.now(IST)
-    if now.weekday() >= 5:
-        return False
-    market_open = now.replace(hour=9, minute=0, second=0, microsecond=0)
-    market_close = now.replace(hour=15, minute=40, second=0, microsecond=0)
-    return market_open <= now <= market_close
+    """
+    Check if NSE market is open for regular trading
+    Uses centralized market hours scheduler (IST: 9:15 AM - 3:30 PM)
+    """
+    return scheduler.is_market_open()
 
 
 def fetch_nifty_data():
@@ -83,23 +82,53 @@ def check_vob_touch(current_price, vob_level, tolerance=5):
 
 
 def get_market_status():
-    """Get current market status"""
-    now = datetime.now(IST)
+    """
+    Get current market status with detailed information
+    Uses centralized market hours scheduler
+    """
+    status = scheduler.get_market_status()
+    now = scheduler.get_current_time_ist()
 
-    if not is_market_open():
-        if now.weekday() >= 5:
-            return {
-                'open': False,
-                'message': '🔴 Market Closed (Weekend)'
-            }
-        else:
-            return {
-                'open': False,
-                'message': '🔴 Market Closed'
-            }
-
-    return {
-        'open': True,
-        'message': '🟢 Market Open',
-        'time': now.strftime('%H:%M:%S IST')
-    }
+    # Determine if market is open based on scheduler
+    if status['is_market_open']:
+        return {
+            'open': True,
+            'message': '🟢 Market Open (Regular)',
+            'time': now.strftime('%H:%M:%S IST'),
+            'session': status['session']
+        }
+    elif status['session'] == 'pre_market':
+        return {
+            'open': True,
+            'message': '🟡 Pre-Market Session',
+            'time': now.strftime('%H:%M:%S IST'),
+            'session': status['session']
+        }
+    elif status['session'] == 'post_market':
+        return {
+            'open': True,
+            'message': '🟡 Post-Market Session',
+            'time': now.strftime('%H:%M:%S IST'),
+            'session': status['session']
+        }
+    elif status['is_weekend']:
+        return {
+            'open': False,
+            'message': '🔴 Market Closed (Weekend)',
+            'session': status['session']
+        }
+    elif status['is_holiday']:
+        return {
+            'open': False,
+            'message': '🔴 Market Closed (Holiday)',
+            'session': status['session']
+        }
+    else:
+        # Outside trading hours
+        next_open = scheduler.get_next_market_open()
+        return {
+            'open': False,
+            'message': f'🔴 Market Closed (Outside Trading Hours)',
+            'next_open': next_open.strftime('%Y-%m-%d %H:%M IST'),
+            'session': status['session']
+        }

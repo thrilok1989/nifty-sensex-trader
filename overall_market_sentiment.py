@@ -1039,6 +1039,91 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
             if not atm_data_available:
                 st.info("ℹ️ ATM Zone analysis data will be displayed here when available. Please run bias analysis from individual instrument tabs (NIFTY, BANKNIFTY, SENSEX, etc.) first.")
 
+        # ═══════════════════════════════════════════════════════════════════
+        # COMPREHENSIVE OPTION CHAIN METRICS
+        # ═══════════════════════════════════════════════════════════════════
+        if result['option_chain_atm']:
+            st.markdown("---")
+            st.markdown("### 🌐 Comprehensive Option Chain Analysis")
+            st.caption("Advanced metrics: Max Pain, Synthetic Future, Vega Bias, Buildup Patterns, and more")
+
+            # Check if comprehensive metrics are available in session state
+            comprehensive_metrics = []
+            instruments_to_check = ['NIFTY', 'BANKNIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY']
+
+            for instrument in instruments_to_check:
+                # Check if comprehensive metrics are stored
+                metrics_key = f'{instrument}_comprehensive_metrics'
+                if metrics_key in st.session_state:
+                    metrics = st.session_state[metrics_key]
+                    comprehensive_metrics.append(metrics)
+
+            if comprehensive_metrics:
+                st.markdown("#### 📊 Comprehensive Metrics Summary")
+                comp_df = pd.DataFrame(comprehensive_metrics)
+                st.dataframe(comp_df, use_container_width=True, hide_index=True)
+
+                # Expandable section with detailed explanations
+                with st.expander("📖 Understanding Comprehensive Metrics"):
+                    st.markdown("""
+                    ### Advanced Option Chain Metrics Explained
+
+                    **ATM-Specific Metrics:**
+
+                    1. **Synthetic Future Bias**
+                       - Calculated as: Strike + CE Premium - PE Premium
+                       - Compares synthetic future price vs spot price
+                       - Bullish if synthetic > spot, Bearish if synthetic < spot
+                       - Indicates market expectations embedded in options pricing
+
+                    2. **ATM Buildup Pattern**
+                       - Analyzes OI changes at ATM strike
+                       - Long Buildup: Rising OI + Rising Prices (Bearish)
+                       - Short Buildup: Rising OI + Falling Prices (Bullish)
+                       - Call Writing: CE OI rising, PE OI falling (Bearish)
+                       - Put Writing: PE OI rising, CE OI falling (Bullish)
+
+                    3. **ATM Vega Bias**
+                       - Measures volatility exposure at ATM
+                       - Higher Put Vega → Bullish (expecting upside volatility)
+                       - Higher Call Vega → Bearish (expecting downside volatility)
+
+                    4. **Distance from Max Pain**
+                       - Shows how far current price is from Max Pain strike
+                       - Price tends to gravitate toward Max Pain near expiry
+                       - Positive distance: Above Max Pain (potential downward pull)
+                       - Negative distance: Below Max Pain (potential upward pull)
+
+                    **Overall Market Metrics:**
+
+                    5. **Max Pain Strike**
+                       - Strike where option writers lose least money
+                       - Calculated by summing all option pain values
+                       - Market tends to drift toward this level
+
+                    6. **Call Resistance (OI)**
+                       - Strike with highest Call OI above spot
+                       - Major resistance level from option positioning
+
+                    7. **Put Support (OI)**
+                       - Strike with highest Put OI below spot
+                       - Major support level from option positioning
+
+                    8. **Total Vega Bias**
+                       - Aggregate vega exposure across all strikes
+                       - Indicates overall market volatility expectations
+
+                    9. **Unusual Activity Alerts**
+                       - Strikes with abnormally high volume/OI ratio
+                       - May indicate smart money positioning
+
+                    10. **Overall Buildup Pattern**
+                        - Combined analysis of ITM, ATM, and OTM activity
+                        - Identifies protective strategies and directional bets
+                    """)
+            else:
+                st.info("ℹ️ Comprehensive option chain metrics will be displayed here. Visit individual instrument tabs in the Option Chain Analysis section to generate these metrics.")
+
     st.markdown("---")
 
     # ═══════════════════════════════════════════════════════════════════

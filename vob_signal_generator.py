@@ -5,10 +5,13 @@ Generates trading signals based on:
 1. Overall market sentiment (BULL/BEAR)
 2. Spot price proximity to Volume Order Blocks (within 8 points)
 3. Automatic entry and stop loss calculation
+4. Volume Order Block strength analysis
 """
 
 from datetime import datetime
 from typing import Dict, List, Optional
+import pandas as pd
+from indicators.vob_strength_tracker import VOBStrengthTracker, get_emoji_for_strength, get_description_for_strength
 
 
 class VOBSignalGenerator:
@@ -26,13 +29,15 @@ class VOBSignalGenerator:
         self.proximity_threshold = proximity_threshold
         self.last_signal = None
         self.signal_history = []
+        self.strength_tracker = VOBStrengthTracker(respect_distance=5.0)
 
     def check_for_signal(self,
                         spot_price: float,
                         market_sentiment: str,
                         bullish_blocks: List[Dict],
                         bearish_blocks: List[Dict],
-                        index: str = "NIFTY") -> Optional[Dict]:
+                        index: str = "NIFTY",
+                        df: Optional[pd.DataFrame] = None) -> Optional[Dict]:
         """
         Check if conditions are met for a trading signal
 
@@ -42,6 +47,7 @@ class VOBSignalGenerator:
             bullish_blocks: List of bullish VOB blocks
             bearish_blocks: List of bearish VOB blocks
             index: Index name (NIFTY or SENSEX)
+            df: Price dataframe for strength analysis (optional)
 
         Returns:
             Signal dictionary if conditions met, None otherwise
@@ -50,11 +56,11 @@ class VOBSignalGenerator:
 
         # Check for BULLISH signal
         if market_sentiment == "BULLISH" and bullish_blocks:
-            signal = self._check_bullish_signal(spot_price, bullish_blocks, index)
+            signal = self._check_bullish_signal(spot_price, bullish_blocks, index, df)
 
         # Check for BEARISH signal
         elif market_sentiment == "BEARISH" and bearish_blocks:
-            signal = self._check_bearish_signal(spot_price, bearish_blocks, index)
+            signal = self._check_bearish_signal(spot_price, bearish_blocks, index, df)
 
         # Store signal if generated
         if signal:
@@ -66,7 +72,7 @@ class VOBSignalGenerator:
 
         return signal
 
-    def _check_bullish_signal(self, spot_price: float, bullish_blocks: List[Dict], index: str) -> Optional[Dict]:
+    def _check_bullish_signal(self, spot_price: float, bullish_blocks: List[Dict], index: str, df: Optional[pd.DataFrame] = None) -> Optional[Dict]:
         """
         Check for bullish entry signal
 
@@ -96,6 +102,11 @@ class VOBSignalGenerator:
                 risk = entry_price - stop_loss
                 target = entry_price + (risk * 1.5)
 
+                # Calculate strength if dataframe provided
+                strength_data = None
+                if df is not None and len(df) > 0:
+                    strength_data = self.strength_tracker.calculate_strength(block, df)
+
                 signal = {
                     'index': index,
                     'direction': 'CALL',
@@ -111,14 +122,15 @@ class VOBSignalGenerator:
                     'risk_reward': '1:1.5',
                     'market_sentiment': 'BULLISH',
                     'timestamp': datetime.now(),
-                    'status': 'ACTIVE'
+                    'status': 'ACTIVE',
+                    'strength': strength_data  # Add strength analysis
                 }
 
                 return signal
 
         return None
 
-    def _check_bearish_signal(self, spot_price: float, bearish_blocks: List[Dict], index: str) -> Optional[Dict]:
+    def _check_bearish_signal(self, spot_price: float, bearish_blocks: List[Dict], index: str, df: Optional[pd.DataFrame] = None) -> Optional[Dict]:
         """
         Check for bearish entry signal
 
@@ -148,6 +160,11 @@ class VOBSignalGenerator:
                 risk = stop_loss - entry_price
                 target = entry_price - (risk * 1.5)
 
+                # Calculate strength if dataframe provided
+                strength_data = None
+                if df is not None and len(df) > 0:
+                    strength_data = self.strength_tracker.calculate_strength(block, df)
+
                 signal = {
                     'index': index,
                     'direction': 'PUT',
@@ -163,7 +180,8 @@ class VOBSignalGenerator:
                     'risk_reward': '1:1.5',
                     'market_sentiment': 'BEARISH',
                     'timestamp': datetime.now(),
-                    'status': 'ACTIVE'
+                    'status': 'ACTIVE',
+                    'strength': strength_data  # Add strength analysis
                 }
 
                 return signal

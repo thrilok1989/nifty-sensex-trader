@@ -358,11 +358,11 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
         now = datetime.now(timezone("Asia/Kolkata"))
         current_day = now.weekday()
         current_time = now.time()
-        market_start = datetime.strptime("09:00", "%H:%M").time()
+        market_start = datetime.strptime("08:00", "%H:%M").time()
         market_end = datetime.strptime("15:40", "%H:%M").time()
 
         if current_day >= 5 or not (market_start <= current_time <= market_end):
-            st.warning("⏳ Market Closed (Mon-Fri 9:00-15:40)")
+            st.warning("⏳ Market Closed (Mon-Fri 8:00-15:40)")
             return
 
         headers = {"User-Agent": "Mozilla/5.0"}

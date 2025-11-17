@@ -515,31 +515,111 @@ class AdvancedChartAnalysis:
                 )
 
     def _add_volume_footprint(self, fig, df, footprint_data, row, col):
-        """Add HTF Volume Footprint to chart"""
+        """Add HTF Volume Footprint to chart with volume bins and dynamic POC"""
         current = footprint_data['current_footprint']
         if not current:
             return
 
-        # Add POC line
-        x_start = df.index[0]
-        x_end = df.index[-1]
+        dynamic_poc = footprint_data.get('dynamic_poc', False)
+        historical_pocs = footprint_data.get('historical_pocs', [])
 
+        # Get current period bounds
+        period_start = current['period_start']
+        current_time = df.index[-1]
+
+        # Add Volume Profile Bins (horizontal rectangles showing volume distribution)
+        if 'bins' in current and len(current['bins']) > 0:
+            max_volume = max([bin_data['volume'] for bin_data in current['bins']])
+
+            # Calculate the width for bins (proportional to timeframe)
+            time_range = (current_time - period_start).total_seconds()
+            # Make bins visible but not too wide - scale to ~10% of period
+            bin_width_seconds = time_range * 0.1
+
+            for bin_data in current['bins']:
+                if bin_data['volume'] > 0:  # Only show bins with volume
+                    # Scale the bin width based on volume
+                    volume_ratio = bin_data['volume'] / max_volume if max_volume > 0 else 0
+                    bin_x_end = period_start + pd.Timedelta(seconds=bin_width_seconds * volume_ratio)
+
+                    # Use different color for POC bin
+                    if bin_data['is_poc']:
+                        bin_color = 'rgba(41, 138, 218, 0.4)'  # Blue for POC
+                        border_color = '#298ada'
+                        border_width = 2
+                    else:
+                        # Gradient color based on volume
+                        intensity = int(120 + (volume_ratio * 135))  # Range from 120 to 255
+                        bin_color = f'rgba({intensity}, {intensity}, {intensity}, 0.2)'
+                        border_color = f'rgba({intensity}, {intensity}, {intensity}, 0.5)'
+                        border_width = 1
+
+                    # Add rectangle for this bin
+                    # For subplots, we need to specify xref and yref correctly
+                    if row == 1 and col == 1:
+                        xref, yref = 'x', 'y'
+                    else:
+                        xref, yref = f'x{row}', f'y{row}'
+
+                    fig.add_shape(
+                        type="rect",
+                        x0=period_start,
+                        x1=bin_x_end,
+                        y0=bin_data['lower'],
+                        y1=bin_data['upper'],
+                        fillcolor=bin_color,
+                        line=dict(color=border_color, width=border_width),
+                        layer='below',
+                        xref=xref,
+                        yref=yref
+                    )
+
+        # Handle POC display based on dynamic_poc setting
+        if dynamic_poc:
+            # Dynamic POC: Show POC line extending from period start to current time (real-time update)
+            fig.add_trace(
+                go.Scatter(
+                    x=[period_start, current_time],
+                    y=[current['poc'], current['poc']],
+                    mode='lines',
+                    name='Dynamic POC',
+                    line=dict(color='#298ada', width=3, dash='solid'),
+                    showlegend=True
+                ),
+                row=row, col=col
+            )
+        else:
+            # Static POC: Show historical POC lines for all completed periods
+            for hist_poc in historical_pocs:
+                fig.add_trace(
+                    go.Scatter(
+                        x=[hist_poc['period_start'], hist_poc['period_end']],
+                        y=[hist_poc['poc_price'], hist_poc['poc_price']],
+                        mode='lines',
+                        name='Historical POC',
+                        line=dict(color='#298ada', width=2, dash='dash'),
+                        showlegend=False
+                    ),
+                    row=row, col=col
+                )
+
+            # Also show current period POC
+            fig.add_trace(
+                go.Scatter(
+                    x=[period_start, current_time],
+                    y=[current['poc'], current['poc']],
+                    mode='lines',
+                    name='POC (Point of Control)',
+                    line=dict(color='#298ada', width=3, dash='solid'),
+                    showlegend=True
+                ),
+                row=row, col=col
+            )
+
+        # Add Value Area (same for both dynamic and static)
         fig.add_trace(
             go.Scatter(
-                x=[x_start, x_end],
-                y=[current['poc'], current['poc']],
-                mode='lines',
-                name='POC (Point of Control)',
-                line=dict(color='#298ada', width=3, dash='dot'),
-                showlegend=True
-            ),
-            row=row, col=col
-        )
-
-        # Add Value Area
-        fig.add_trace(
-            go.Scatter(
-                x=[x_start, x_end],
+                x=[period_start, current_time],
                 y=[current['value_area_high'], current['value_area_high']],
                 mode='lines',
                 name='Value Area High',
@@ -551,7 +631,7 @@ class AdvancedChartAnalysis:
 
         fig.add_trace(
             go.Scatter(
-                x=[x_start, x_end],
+                x=[period_start, current_time],
                 y=[current['value_area_low'], current['value_area_low']],
                 mode='lines',
                 name='Value Area Low',

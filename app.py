@@ -224,6 +224,19 @@ if 'active_htf_sr_signals' not in st.session_state:
 if 'last_htf_sr_check_time' not in st.session_state:
     st.session_state.last_htf_sr_check_time = 0
 
+# VOB and HTF data storage
+if 'vob_data_nifty' not in st.session_state:
+    st.session_state.vob_data_nifty = None
+
+if 'vob_data_sensex' not in st.session_state:
+    st.session_state.vob_data_sensex = None
+
+if 'htf_data_nifty' not in st.session_state:
+    st.session_state.htf_data_nifty = None
+
+if 'htf_data_sensex' not in st.session_state:
+    st.session_state.htf_data_sensex = None
+
 if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = time.time()
 
@@ -546,6 +559,9 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
             # Calculate VOB blocks (reusing indicator instance)
             vob_data = vob_indicator.calculate(df)
 
+            # Store VOB data in session state for display
+            st.session_state.vob_data_nifty = vob_data
+
             # Check for NIFTY signal
             nifty_signal = st.session_state.vob_signal_generator.check_for_signal(
                 spot_price=nifty_data['spot_price'],
@@ -580,6 +596,9 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
         if df_sensex is not None and len(df_sensex) > 0:
             # Calculate VOB blocks for SENSEX (reusing indicator instance)
             vob_data_sensex = vob_indicator.calculate(df_sensex)
+
+            # Store VOB data in session state for display
+            st.session_state.vob_data_sensex = vob_data_sensex
 
             # Get SENSEX spot price
             sensex_data = get_cached_sensex_data()
@@ -654,6 +673,9 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
                 # Calculate HTF S/R levels (reusing indicator instance)
                 htf_levels = htf_sr.calculate_multi_timeframe(df_nifty, levels_config)
 
+                # Store HTF data in session state for display
+                st.session_state.htf_data_nifty = htf_levels
+
                 # Check for NIFTY signal
                 nifty_htf_signal = st.session_state.htf_sr_signal_generator.check_for_signal(
                     spot_price=nifty_data['spot_price'],
@@ -687,6 +709,9 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
             if df_sensex is not None and len(df_sensex) > 0:
                 # Calculate HTF S/R levels for SENSEX (reusing indicator instance)
                 htf_levels_sensex = htf_sr.calculate_multi_timeframe(df_sensex, levels_config)
+
+                # Store HTF data in session state for display
+                st.session_state.htf_data_sensex = htf_levels_sensex
 
                 # Get SENSEX spot price
                 sensex_data = get_cached_sensex_data()
@@ -870,6 +895,101 @@ else:
     st.info("⏳ Monitoring market for VOB-based entry signals... No active signals at the moment.")
     st.caption("Signals are generated when spot price is within 8 points of a Volume Order Block and aligned with overall market sentiment.")
 
+# Display VOB Summary for NIFTY and SENSEX
+st.markdown("#### 📈 Volume Order Block Status")
+
+col1, col2 = st.columns(2)
+
+# NIFTY VOB Summary
+with col1:
+    st.markdown("**NIFTY VOB**")
+    if st.session_state.vob_data_nifty:
+        from indicators.vob_strength_tracker import VOBStrengthTracker
+        vob_tracker = VOBStrengthTracker()
+
+        df_nifty = get_cached_chart_data('^NSEI', '1d', '1m')
+
+        # Get latest bullish and bearish blocks
+        bullish_blocks = st.session_state.vob_data_nifty.get('bullish_blocks', [])
+        bearish_blocks = st.session_state.vob_data_nifty.get('bearish_blocks', [])
+
+        # Calculate strength for latest blocks
+        bull_strength = None
+        bear_strength = None
+
+        if bullish_blocks and df_nifty is not None:
+            latest_bull = bullish_blocks[-1]
+            bull_strength = vob_tracker.calculate_strength(latest_bull, df_nifty)
+
+        if bearish_blocks and df_nifty is not None:
+            latest_bear = bearish_blocks[-1]
+            bear_strength = vob_tracker.calculate_strength(latest_bear, df_nifty)
+
+        # Display bullish block info
+        if bull_strength:
+            trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
+            strength_color = "#4caf50" if bull_strength['strength_score'] >= 70 else "#ffc107" if bull_strength['strength_score'] >= 50 else "#ff5252"
+            st.markdown(f"**🟢 Bullish VOB:** ₹{latest_bull['lower']:.2f} - ₹{latest_bull['upper']:.2f}")
+            st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bull_strength['strength_score']}/100</span> {trend_emoji} {bull_strength['trend']}", unsafe_allow_html=True)
+        else:
+            st.info("No bullish VOB data available")
+
+        # Display bearish block info
+        if bear_strength:
+            trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
+            strength_color = "#4caf50" if bear_strength['strength_score'] >= 70 else "#ffc107" if bear_strength['strength_score'] >= 50 else "#ff5252"
+            st.markdown(f"**🔴 Bearish VOB:** ₹{latest_bear['lower']:.2f} - ₹{latest_bear['upper']:.2f}")
+            st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bear_strength['strength_score']}/100</span> {trend_emoji} {bear_strength['trend']}", unsafe_allow_html=True)
+        else:
+            st.info("No bearish VOB data available")
+    else:
+        st.info("VOB data loading...")
+
+# SENSEX VOB Summary
+with col2:
+    st.markdown("**SENSEX VOB**")
+    if st.session_state.vob_data_sensex:
+        from indicators.vob_strength_tracker import VOBStrengthTracker
+        vob_tracker = VOBStrengthTracker()
+
+        df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
+
+        # Get latest bullish and bearish blocks
+        bullish_blocks = st.session_state.vob_data_sensex.get('bullish_blocks', [])
+        bearish_blocks = st.session_state.vob_data_sensex.get('bearish_blocks', [])
+
+        # Calculate strength for latest blocks
+        bull_strength = None
+        bear_strength = None
+
+        if bullish_blocks and df_sensex is not None:
+            latest_bull = bullish_blocks[-1]
+            bull_strength = vob_tracker.calculate_strength(latest_bull, df_sensex)
+
+        if bearish_blocks and df_sensex is not None:
+            latest_bear = bearish_blocks[-1]
+            bear_strength = vob_tracker.calculate_strength(latest_bear, df_sensex)
+
+        # Display bullish block info
+        if bull_strength:
+            trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
+            strength_color = "#4caf50" if bull_strength['strength_score'] >= 70 else "#ffc107" if bull_strength['strength_score'] >= 50 else "#ff5252"
+            st.markdown(f"**🟢 Bullish VOB:** ₹{latest_bull['lower']:.2f} - ₹{latest_bull['upper']:.2f}")
+            st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bull_strength['strength_score']}/100</span> {trend_emoji} {bull_strength['trend']}", unsafe_allow_html=True)
+        else:
+            st.info("No bullish VOB data available")
+
+        # Display bearish block info
+        if bear_strength:
+            trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
+            strength_color = "#4caf50" if bear_strength['strength_score'] >= 70 else "#ffc107" if bear_strength['strength_score'] >= 50 else "#ff5252"
+            st.markdown(f"**🔴 Bearish VOB:** ₹{latest_bear['lower']:.2f} - ₹{latest_bear['upper']:.2f}")
+            st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bear_strength['strength_score']}/100</span> {trend_emoji} {bear_strength['trend']}", unsafe_allow_html=True)
+        else:
+            st.info("No bearish VOB data available")
+    else:
+        st.info("VOB data loading...")
+
 st.divider()
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -877,6 +997,111 @@ st.divider()
 # ═══════════════════════════════════════════════════════════════════════
 st.markdown("### 📊 HTF Support/Resistance Signals")
 st.markdown("**HTF S/R Based Trading | 5min, 10min, 15min Timeframes**")
+
+# Display VOB and HTF S/R Status Summary
+st.markdown("#### 📊 VOB & HTF S/R Strength Status")
+
+col1, col2 = st.columns(2)
+
+# NIFTY Summary
+with col1:
+    st.markdown("**NIFTY**")
+
+    # VOB Status
+    if st.session_state.vob_data_nifty:
+        from indicators.vob_strength_tracker import VOBStrengthTracker
+        vob_tracker = VOBStrengthTracker()
+        df_nifty = get_cached_chart_data('^NSEI', '1d', '1m')
+
+        bullish_blocks = st.session_state.vob_data_nifty.get('bullish_blocks', [])
+        bearish_blocks = st.session_state.vob_data_nifty.get('bearish_blocks', [])
+
+        if bullish_blocks and df_nifty is not None:
+            latest_bull = bullish_blocks[-1]
+            bull_strength = vob_tracker.calculate_strength(latest_bull, df_nifty)
+            trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
+            st.caption(f"**VOB Bull:** {bull_strength['strength_score']}/100 {trend_emoji} {bull_strength['trend']}")
+
+        if bearish_blocks and df_nifty is not None:
+            latest_bear = bearish_blocks[-1]
+            bear_strength = vob_tracker.calculate_strength(latest_bear, df_nifty)
+            trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
+            st.caption(f"**VOB Bear:** {bear_strength['strength_score']}/100 {trend_emoji} {bear_strength['trend']}")
+
+    # HTF S/R Status
+    if st.session_state.htf_data_nifty:
+        from indicators.htf_sr_strength_tracker import HTFSRStrengthTracker
+        htf_tracker = HTFSRStrengthTracker()
+        df_nifty = get_cached_chart_data('^NSEI', '7d', '1m')
+
+        # Get latest support and resistance levels
+        for timeframe, levels in st.session_state.htf_data_nifty.items():
+            if levels and df_nifty is not None:
+                support = levels.get('support')
+                resistance = levels.get('resistance')
+
+                if support:
+                    support_strength = htf_tracker.calculate_strength(support, 'SUPPORT', df_nifty, lookback_periods=100)
+                    trend_emoji = "🔺" if support_strength['trend'] == "STRENGTHENING" else "🔻" if support_strength['trend'] == "WEAKENING" else "➖"
+                    st.caption(f"**HTF Support ({timeframe}):** {support_strength['strength_score']}/100 {trend_emoji} {support_strength['trend']}")
+
+                if resistance:
+                    resistance_strength = htf_tracker.calculate_strength(resistance, 'RESISTANCE', df_nifty, lookback_periods=100)
+                    trend_emoji = "🔺" if resistance_strength['trend'] == "STRENGTHENING" else "🔻" if resistance_strength['trend'] == "WEAKENING" else "➖"
+                    st.caption(f"**HTF Resistance ({timeframe}):** {resistance_strength['strength_score']}/100 {trend_emoji} {resistance_strength['trend']}")
+
+                break  # Only show one timeframe for brevity
+
+# SENSEX Summary
+with col2:
+    st.markdown("**SENSEX**")
+
+    # VOB Status
+    if st.session_state.vob_data_sensex:
+        from indicators.vob_strength_tracker import VOBStrengthTracker
+        vob_tracker = VOBStrengthTracker()
+        df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
+
+        bullish_blocks = st.session_state.vob_data_sensex.get('bullish_blocks', [])
+        bearish_blocks = st.session_state.vob_data_sensex.get('bearish_blocks', [])
+
+        if bullish_blocks and df_sensex is not None:
+            latest_bull = bullish_blocks[-1]
+            bull_strength = vob_tracker.calculate_strength(latest_bull, df_sensex)
+            trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
+            st.caption(f"**VOB Bull:** {bull_strength['strength_score']}/100 {trend_emoji} {bull_strength['trend']}")
+
+        if bearish_blocks and df_sensex is not None:
+            latest_bear = bearish_blocks[-1]
+            bear_strength = vob_tracker.calculate_strength(latest_bear, df_sensex)
+            trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
+            st.caption(f"**VOB Bear:** {bear_strength['strength_score']}/100 {trend_emoji} {bear_strength['trend']}")
+
+    # HTF S/R Status
+    if st.session_state.htf_data_sensex:
+        from indicators.htf_sr_strength_tracker import HTFSRStrengthTracker
+        htf_tracker = HTFSRStrengthTracker()
+        df_sensex = get_cached_chart_data('^BSESN', '7d', '1m')
+
+        # Get latest support and resistance levels
+        for timeframe, levels in st.session_state.htf_data_sensex.items():
+            if levels and df_sensex is not None:
+                support = levels.get('support')
+                resistance = levels.get('resistance')
+
+                if support:
+                    support_strength = htf_tracker.calculate_strength(support, 'SUPPORT', df_sensex, lookback_periods=100)
+                    trend_emoji = "🔺" if support_strength['trend'] == "STRENGTHENING" else "🔻" if support_strength['trend'] == "WEAKENING" else "➖"
+                    st.caption(f"**HTF Support ({timeframe}):** {support_strength['strength_score']}/100 {trend_emoji} {support_strength['trend']}")
+
+                if resistance:
+                    resistance_strength = htf_tracker.calculate_strength(resistance, 'RESISTANCE', df_sensex, lookback_periods=100)
+                    trend_emoji = "🔺" if resistance_strength['trend'] == "STRENGTHENING" else "🔻" if resistance_strength['trend'] == "WEAKENING" else "➖"
+                    st.caption(f"**HTF Resistance ({timeframe}):** {resistance_strength['strength_score']}/100 {trend_emoji} {resistance_strength['trend']}")
+
+                break  # Only show one timeframe for brevity
+
+st.divider()
 
 if st.session_state.active_htf_sr_signals:
     for signal in st.session_state.active_htf_sr_signals:

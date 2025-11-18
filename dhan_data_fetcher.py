@@ -488,10 +488,32 @@ def get_nifty_data() -> Dict[str, Any]:
             ohlc = nifty.get('ohlc', {})
             expiry_list = nifty.get('expiry_list', {})
 
+            # Check if we have valid price data
+            spot_price = ohlc.get('last_price', 0)
+            atm_strike = nifty.get('atm_strike', 0)
+
+            # If spot price is 0 or None, it means API failed
+            if not spot_price or spot_price == 0:
+                error_msg = ', '.join(all_data.get('errors', [])) if all_data.get('errors') else 'API returned no data'
+                return {
+                    'success': False,
+                    'error': f'Unable to fetch NIFTY price data: {error_msg}',
+                    'spot_price': None,
+                    'atm_strike': None,
+                    'open': None,
+                    'high': None,
+                    'low': None,
+                    'close': None,
+                    'expiry_dates': [],
+                    'current_expiry': 'N/A',
+                    'chart_data': None,
+                    'timestamp': datetime.now()
+                }
+
             return {
                 'success': True,
-                'spot_price': ohlc.get('last_price', 0),
-                'atm_strike': nifty.get('atm_strike', 0),
+                'spot_price': spot_price,
+                'atm_strike': atm_strike,
                 'open': ohlc.get('open', 0),
                 'high': ohlc.get('high', 0),
                 'low': ohlc.get('low', 0),
@@ -508,9 +530,13 @@ def get_nifty_data() -> Dict[str, Any]:
             }
 
     except Exception as e:
+        error_msg = str(e)
+        # Check if it's a credentials error
+        if 'credentials' in error_msg.lower() or 'access_token' in error_msg.lower():
+            error_msg = 'DhanHQ credentials not configured. Please set up .streamlit/secrets.toml'
         return {
             'success': False,
-            'error': str(e)
+            'error': error_msg
         }
 
 
@@ -529,10 +555,30 @@ def get_sensex_data() -> Dict[str, Any]:
             sensex = all_data.get('sensex', {})
             ohlc = sensex.get('ohlc', {})
 
+            # Check if we have valid price data
+            spot_price = ohlc.get('last_price', 0)
+            atm_strike = sensex.get('atm_strike', 0)
+
+            # If spot price is 0 or None, it means API failed
+            if not spot_price or spot_price == 0:
+                error_msg = ', '.join(all_data.get('errors', [])) if all_data.get('errors') else 'API returned no data'
+                return {
+                    'success': False,
+                    'error': f'Unable to fetch SENSEX price data: {error_msg}',
+                    'spot_price': None,
+                    'atm_strike': None,
+                    'open': None,
+                    'high': None,
+                    'low': None,
+                    'close': None,
+                    'chart_data': None,
+                    'timestamp': datetime.now()
+                }
+
             return {
                 'success': True,
-                'spot_price': ohlc.get('last_price', 0),
-                'atm_strike': sensex.get('atm_strike', 0),
+                'spot_price': spot_price,
+                'atm_strike': atm_strike,
                 'open': ohlc.get('open', 0),
                 'high': ohlc.get('high', 0),
                 'low': ohlc.get('low', 0),
@@ -547,9 +593,13 @@ def get_sensex_data() -> Dict[str, Any]:
             }
 
     except Exception as e:
+        error_msg = str(e)
+        # Check if it's a credentials error
+        if 'credentials' in error_msg.lower() or 'access_token' in error_msg.lower():
+            error_msg = 'DhanHQ credentials not configured. Please set up .streamlit/secrets.toml'
         return {
             'success': False,
-            'error': str(e)
+            'error': error_msg
         }
 
 

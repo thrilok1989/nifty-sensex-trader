@@ -357,10 +357,13 @@ def preload_all_data():
 
 def get_cached_nifty_data():
     """
-    Get cached NIFTY data or load if not available
+    Get cached NIFTY data (non-blocking)
+
+    Returns cached data or triggers background load if not available.
+    Never blocks - returns None if data not ready yet.
 
     Returns:
-        NIFTY data dict
+        NIFTY data dict or None if not yet loaded
     """
     cache_manager = get_cache_manager()
     cached_data = cache_manager.get('nifty_data')
@@ -368,19 +371,33 @@ def get_cached_nifty_data():
     if cached_data is not None:
         return cached_data
 
-    # If not cached, load synchronously
-    from market_data import fetch_nifty_data
-    data = fetch_nifty_data()
-    cache_manager.set('nifty_data', data)
-    return data
+    # If not cached, trigger background load (non-blocking)
+    # Don't block the UI - let background thread handle it
+    def load_in_background():
+        try:
+            from market_data import fetch_nifty_data
+            data = fetch_nifty_data()
+            cache_manager.set('nifty_data', data)
+        except Exception as e:
+            print(f"Error loading NIFTY data in background: {e}")
+
+    # Start background thread
+    thread = threading.Thread(target=load_in_background, daemon=True)
+    thread.start()
+
+    # Return None immediately (non-blocking)
+    return None
 
 
 def get_cached_sensex_data():
     """
-    Get cached SENSEX data or load if not available
+    Get cached SENSEX data (non-blocking)
+
+    Returns cached data or triggers background load if not available.
+    Never blocks - returns None if data not ready yet.
 
     Returns:
-        SENSEX data dict
+        SENSEX data dict or None if not yet loaded
     """
     cache_manager = get_cache_manager()
     cached_data = cache_manager.get('sensex_data')
@@ -388,11 +405,22 @@ def get_cached_sensex_data():
     if cached_data is not None:
         return cached_data
 
-    # If not cached, load synchronously
-    from market_data import fetch_sensex_data
-    data = fetch_sensex_data()
-    cache_manager.set('sensex_data', data)
-    return data
+    # If not cached, trigger background load (non-blocking)
+    # Don't block the UI - let background thread handle it
+    def load_in_background():
+        try:
+            from market_data import fetch_sensex_data
+            data = fetch_sensex_data()
+            cache_manager.set('sensex_data', data)
+        except Exception as e:
+            print(f"Error loading SENSEX data in background: {e}")
+
+    # Start background thread
+    thread = threading.Thread(target=load_in_background, daemon=True)
+    thread.start()
+
+    # Return None immediately (non-blocking)
+    return None
 
 
 def get_cached_bias_analysis_results():

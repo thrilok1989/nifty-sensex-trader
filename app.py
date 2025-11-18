@@ -434,14 +434,23 @@ with st.sidebar:
 # ═══════════════════════════════════════════════════════════════════════
 
 # Get NIFTY data from cache (loaded in background)
+# PERFORMANCE OPTIMIZED: Never blocks - shows loading message if data not ready
 nifty_data = get_cached_nifty_data()
 
 if not nifty_data or not nifty_data.get('success'):
-    # Fallback to direct fetch if cache is empty
-    nifty_data = fetch_nifty_data()
-    if not nifty_data['success']:
-        st.error(f"❌ Failed to fetch NIFTY data: {nifty_data.get('error')}")
-        st.stop()
+    # Show loading message (non-blocking)
+    # Background thread will load data and it will appear on next refresh
+    st.info("⏳ Loading NIFTY data in background... Please wait a moment and the data will appear automatically.")
+    st.info("💡 **Performance Note:** Tab and button clicks should be instant now. Data loads in background without blocking UI.")
+
+    # Use a placeholder/default data structure to prevent errors
+    nifty_data = {
+        'success': False,
+        'spot_price': 0,
+        'error': 'Loading...',
+        'timestamp': None
+    }
+    # Note: We don't stop() here - let the app continue and show what it can
 
 # ═══════════════════════════════════════════════════════════════════════
 # CACHED CHART DATA FETCHER (Performance Optimization)

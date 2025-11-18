@@ -6,14 +6,17 @@ This module provides:
 - Thread-safe caching for all data sources
 - Background data loading and auto-refresh
 - Pre-loading of all tab data on startup
-- 1-minute refresh cycle with 10-second interval updates
+- Optimized refresh cycles to prevent API rate limiting
 - Smart cache invalidation and updates
 
-Cache Strategy:
-- NIFTY/SENSEX data: 60-second TTL, background refresh every 10 seconds
-- Bias Analysis: 60-second TTL, background refresh
+Cache Strategy (Optimized for Rate Limiting):
+- NIFTY/SENSEX data: 60-second TTL, background refresh every 45 seconds (config-driven)
+- Bias Analysis: 60-second TTL, background refresh every 300 seconds (5 minutes)
 - Option Chain: 60-second TTL, background refresh
 - Advanced Charts: 60-second TTL, background refresh
+
+Note: Refresh intervals increased to prevent HTTP 429 (rate limit) errors
+Previous 10-second interval caused overlapping cycles and exceeded API limits
 """
 
 import threading
@@ -336,18 +339,20 @@ def preload_all_data():
 
     # Start background threads for continuous refresh
 
-    # Market data: refresh every 10 seconds
+    # Market data: refresh using config interval to prevent rate limiting
+    # Uses regular session interval from config (45 seconds) to avoid overlapping cycles
     cache_manager.start_background_refresh(
         'market_data_refresh',
         load_market_data,
-        interval=10
+        interval=config.REFRESH_INTERVALS['regular']
     )
 
-    # Bias analysis: refresh every 60 seconds
+    # Bias analysis: refresh every 300 seconds (5 minutes) to reduce API load
+    # Previous 60-second interval was contributing to rate limiting
     cache_manager.start_background_refresh(
         'bias_analysis_refresh',
         load_bias_analysis_data,
-        interval=60
+        interval=300
     )
 
     # Initial load (immediate)

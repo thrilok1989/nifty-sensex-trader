@@ -30,6 +30,7 @@ from typing import Dict, List, Optional, Any
 import streamlit as st
 import pytz
 from config import get_dhan_credentials, IST, get_current_time_ist
+from api_request_limiter import global_rate_limiter
 
 # Dhan Security IDs (from instrument master)
 SECURITY_IDS = {
@@ -106,26 +107,17 @@ class DhanDataFetcher:
 
     def _rate_limit_wait(self, api_type: str):
         """
-        Wait for rate limit compliance
+        Wait for rate limit compliance using global rate limiter
 
         Args:
             api_type: 'quote' (1/sec), 'data' (5/sec), or 'option_chain' (1/3sec)
+
+        Note:
+            Now uses global rate limiter for thread-safe, cross-instance rate limiting
         """
-        rate_limits = {
-            'quote': 1.0,       # 1 second between requests
-            'data': 0.2,        # 0.2 seconds (5 req/sec)
-            'option_chain': 3.0  # 3 seconds between requests
-        }
-
-        min_interval = rate_limits.get(api_type, 1.0)
-
-        if api_type in self.last_request_time:
-            elapsed = time.time() - self.last_request_time[api_type]
-            if elapsed < min_interval:
-                wait_time = min_interval - elapsed
-                time.sleep(wait_time)
-
-        self.last_request_time[api_type] = time.time()
+        # Use global rate limiter instead of per-instance rate limiting
+        if not global_rate_limiter.wait_for_slot(api_type):
+            raise Exception(f"Circuit breaker active for {api_type}. Please wait and try again.")
 
     def fetch_ohlc_data(self, instruments: List[str]) -> Dict[str, Any]:
         """
@@ -158,6 +150,9 @@ class DhanDataFetcher:
             response = requests.post(url, json=payload, headers=self.headers, timeout=10)
 
             if response.status_code == 200:
+                # Track success for rate limiter
+                global_rate_limiter.handle_success('quote')
+
                 data = response.json()
 
                 # Parse response
@@ -183,6 +178,10 @@ class DhanDataFetcher:
                             result[instrument] = {'success': False, 'error': 'No data found'}
 
                 return result
+            elif response.status_code == 429:
+                # Handle rate limit error with exponential backoff
+                global_rate_limiter.handle_rate_limit_error('quote')
+                return {'success': False, 'error': f'API returned {response.status_code}', 'message': 'Rate limit exceeded. Will retry with exponential backoff.'}
             else:
                 return {'success': False, 'error': f'API returned {response.status_code}', 'message': response.text}
 
@@ -236,6 +235,9 @@ class DhanDataFetcher:
             response = requests.post(url, json=payload, headers=self.headers, timeout=15)
 
             if response.status_code == 200:
+                # Track success for rate limiter
+                global_rate_limiter.handle_success('data')
+
                 data = response.json()
 
                 # Convert to DataFrame
@@ -255,6 +257,10 @@ class DhanDataFetcher:
                     'interval': interval,
                     'timestamp': get_current_time_ist()
                 }
+            elif response.status_code == 429:
+                # Handle rate limit error with exponential backoff
+                global_rate_limiter.handle_rate_limit_error('data')
+                return {'success': False, 'error': f'API returned {response.status_code}', 'message': 'Rate limit exceeded. Will retry with exponential backoff.'}
             else:
                 return {'success': False, 'error': f'API returned {response.status_code}', 'message': response.text}
 
@@ -293,6 +299,9 @@ class DhanDataFetcher:
             response = requests.post(url, json=payload, headers=self.headers, timeout=15)
 
             if response.status_code == 200:
+                # Track success for rate limiter
+                global_rate_limiter.handle_success('option_chain')
+
                 data = response.json()
 
                 return {
@@ -302,6 +311,10 @@ class DhanDataFetcher:
                     'expiry': expiry,
                     'timestamp': get_current_time_ist()
                 }
+            elif response.status_code == 429:
+                # Handle rate limit error with exponential backoff
+                global_rate_limiter.handle_rate_limit_error('option_chain')
+                return {'success': False, 'error': f'API returned {response.status_code}', 'message': 'Rate limit exceeded. Will retry with exponential backoff.'}
             else:
                 return {'success': False, 'error': f'API returned {response.status_code}', 'message': response.text}
 
@@ -336,6 +349,9 @@ class DhanDataFetcher:
             response = requests.post(url, json=payload, headers=self.headers, timeout=10)
 
             if response.status_code == 200:
+                # Track success for rate limiter
+                global_rate_limiter.handle_success('option_chain')
+
                 data = response.json()
 
                 return {
@@ -344,6 +360,10 @@ class DhanDataFetcher:
                     'instrument': instrument,
                     'timestamp': get_current_time_ist()
                 }
+            elif response.status_code == 429:
+                # Handle rate limit error with exponential backoff
+                global_rate_limiter.handle_rate_limit_error('option_chain')
+                return {'success': False, 'error': f'API returned {response.status_code}', 'message': 'Rate limit exceeded. Will retry with exponential backoff.'}
             else:
                 return {'success': False, 'error': f'API returned {response.status_code}', 'message': response.text}
 

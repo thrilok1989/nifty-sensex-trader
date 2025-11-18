@@ -56,10 +56,12 @@ MARKET_HOURS = {
 }
 
 # Session-based refresh intervals (seconds)
+# Optimized to prevent API rate limiting (HTTP 429)
+# Previous intervals caused overlapping cycles (10s interval with 40s execution)
 REFRESH_INTERVALS = {
-    'pre_market': 30,      # 30 seconds during pre-market
-    'regular': 10,         # 10 seconds during regular trading
-    'post_market': 60,     # 60 seconds during post-market
+    'pre_market': 45,      # 45 seconds during pre-market (was 30)
+    'regular': 45,         # 45 seconds during regular trading (was 10 - CRITICAL FIX)
+    'post_market': 120,    # 120 seconds during post-market (was 60)
     'closed': 300          # 5 minutes when market is closed (minimal activity)
 }
 

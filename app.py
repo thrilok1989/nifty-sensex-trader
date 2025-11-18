@@ -517,13 +517,15 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
         else:
             overall_sentiment = 'NEUTRAL'
 
+        # Optimize: Create single VOB indicator instance for reuse
+        from indicators.volume_order_blocks import VolumeOrderBlocks
+        vob_indicator = VolumeOrderBlocks(sensitivity=5)
+
         # Fetch chart data and calculate VOB for NIFTY (using cached function)
         df = get_cached_chart_data('^NSEI', '1d', '1m')
 
         if df is not None and len(df) > 0:
-            # Calculate VOB blocks
-            from indicators.volume_order_blocks import VolumeOrderBlocks
-            vob_indicator = VolumeOrderBlocks(sensitivity=5)
+            # Calculate VOB blocks (reusing indicator instance)
             vob_data = vob_indicator.calculate(df)
 
             # Check for NIFTY signal
@@ -558,9 +560,8 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
         df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
 
         if df_sensex is not None and len(df_sensex) > 0:
-            # Calculate VOB blocks for SENSEX
-            vob_indicator_sensex = VolumeOrderBlocks(sensitivity=5)
-            vob_data_sensex = vob_indicator_sensex.calculate(df_sensex)
+            # Calculate VOB blocks for SENSEX (reusing indicator instance)
+            vob_data_sensex = vob_indicator.calculate(df_sensex)
 
             # Get SENSEX spot price
             sensex_data = get_cached_sensex_data()
@@ -619,20 +620,20 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
 
         # Only check if market sentiment is BULLISH or BEARISH
         if overall_sentiment in ['BULLISH', 'BEARISH']:
-            # Import HTF S/R indicator
+            # Optimize: Create single HTF S/R indicator instance for reuse
             from indicators.htf_support_resistance import HTFSupportResistance
+            htf_sr = HTFSupportResistance()
+            levels_config = [
+                {'timeframe': '5T', 'length': 5},
+                {'timeframe': '10T', 'length': 5},
+                {'timeframe': '15T', 'length': 5}
+            ]
 
             # Fetch chart data for NIFTY (using cached function)
             df_nifty = get_cached_chart_data('^NSEI', '7d', '1m')
 
             if df_nifty is not None and len(df_nifty) > 0:
-                # Calculate HTF S/R levels for 5min, 10min, 15min
-                htf_sr = HTFSupportResistance()
-                levels_config = [
-                    {'timeframe': '5T', 'length': 5},
-                    {'timeframe': '10T', 'length': 5},
-                    {'timeframe': '15T', 'length': 5}
-                ]
+                # Calculate HTF S/R levels (reusing indicator instance)
                 htf_levels = htf_sr.calculate_multi_timeframe(df_nifty, levels_config)
 
                 # Check for NIFTY signal
@@ -666,9 +667,8 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
             df_sensex = get_cached_chart_data('^BSESN', '7d', '1m')
 
             if df_sensex is not None and len(df_sensex) > 0:
-                # Calculate HTF S/R levels for SENSEX
-                htf_sr_sensex = HTFSupportResistance()
-                htf_levels_sensex = htf_sr_sensex.calculate_multi_timeframe(df_sensex, levels_config)
+                # Calculate HTF S/R levels for SENSEX (reusing indicator instance)
+                htf_levels_sensex = htf_sr.calculate_multi_timeframe(df_sensex, levels_config)
 
                 # Get SENSEX spot price
                 sensex_data = get_cached_sensex_data()
@@ -1666,47 +1666,49 @@ with tab5:
 
         col1, col2, col3 = st.columns(3)
 
-        with col1:
-            st.markdown("**⚡ Fast Indicators (8)**")
-            fast_bias = [b for b in results['bias_results'] if b.get('category') == 'fast']
+        # Optimize: Create DataFrame once and filter using vectorized operations
+        all_bias_df = pd.DataFrame(results['bias_results'])
 
-            fast_df = pd.DataFrame(fast_bias)
-            if not fast_df.empty:
-                fast_bull = len(fast_df[fast_df['bias'].str.contains('BULLISH', na=False)])
-                fast_bear = len(fast_df[fast_df['bias'].str.contains('BEARISH', na=False)])
-                fast_neutral = len(fast_df) - fast_bull - fast_bear
+        if not all_bias_df.empty:
+            # Pre-compute bullish/bearish flags for all rows
+            is_bullish = all_bias_df['bias'].str.contains('BULLISH', na=False)
+            is_bearish = all_bias_df['bias'].str.contains('BEARISH', na=False)
 
-                st.write(f"🐂 {fast_bull} | 🐻 {fast_bear} | ⚖️ {fast_neutral}")
-                st.dataframe(fast_df[['indicator', 'bias', 'score']],
-                           use_container_width=True, hide_index=True)
+            with col1:
+                st.markdown("**⚡ Fast Indicators (8)**")
+                fast_df = all_bias_df[all_bias_df['category'] == 'fast']
+                if not fast_df.empty:
+                    fast_bull = is_bullish[fast_df.index].sum()
+                    fast_bear = is_bearish[fast_df.index].sum()
+                    fast_neutral = len(fast_df) - fast_bull - fast_bear
 
-        with col2:
-            st.markdown("**📊 Medium Indicators (2)**")
-            medium_bias = [b for b in results['bias_results'] if b.get('category') == 'medium']
+                    st.write(f"🐂 {fast_bull} | 🐻 {fast_bear} | ⚖️ {fast_neutral}")
+                    st.dataframe(fast_df[['indicator', 'bias', 'score']],
+                               use_container_width=True, hide_index=True)
 
-            med_df = pd.DataFrame(medium_bias)
-            if not med_df.empty:
-                med_bull = len(med_df[med_df['bias'].str.contains('BULLISH', na=False)])
-                med_bear = len(med_df[med_df['bias'].str.contains('BEARISH', na=False)])
-                med_neutral = len(med_df) - med_bull - med_bear
+            with col2:
+                st.markdown("**📊 Medium Indicators (2)**")
+                med_df = all_bias_df[all_bias_df['category'] == 'medium']
+                if not med_df.empty:
+                    med_bull = is_bullish[med_df.index].sum()
+                    med_bear = is_bearish[med_df.index].sum()
+                    med_neutral = len(med_df) - med_bull - med_bear
 
-                st.write(f"🐂 {med_bull} | 🐻 {med_bear} | ⚖️ {med_neutral}")
-                st.dataframe(med_df[['indicator', 'bias', 'score']],
-                           use_container_width=True, hide_index=True)
+                    st.write(f"🐂 {med_bull} | 🐻 {med_bear} | ⚖️ {med_neutral}")
+                    st.dataframe(med_df[['indicator', 'bias', 'score']],
+                               use_container_width=True, hide_index=True)
 
-        with col3:
-            st.markdown("**🐢 Slow Indicators (3)**")
-            slow_bias = [b for b in results['bias_results'] if b.get('category') == 'slow']
+            with col3:
+                st.markdown("**🐢 Slow Indicators (3)**")
+                slow_df = all_bias_df[all_bias_df['category'] == 'slow']
+                if not slow_df.empty:
+                    slow_bull = is_bullish[slow_df.index].sum()
+                    slow_bear = is_bearish[slow_df.index].sum()
+                    slow_neutral = len(slow_df) - slow_bull - slow_bear
 
-            slow_df = pd.DataFrame(slow_bias)
-            if not slow_df.empty:
-                slow_bull = len(slow_df[slow_df['bias'].str.contains('BULLISH', na=False)])
-                slow_bear = len(slow_df[slow_df['bias'].str.contains('BEARISH', na=False)])
-                slow_neutral = len(slow_df) - slow_bull - slow_bear
-
-                st.write(f"🐂 {slow_bull} | 🐻 {slow_bear} | ⚖️ {slow_neutral}")
-                st.dataframe(slow_df[['indicator', 'bias', 'score']],
-                           use_container_width=True, hide_index=True)
+                    st.write(f"🐂 {slow_bull} | 🐻 {slow_bear} | ⚖️ {slow_neutral}")
+                    st.dataframe(slow_df[['indicator', 'bias', 'score']],
+                               use_container_width=True, hide_index=True)
 
         st.divider()
 

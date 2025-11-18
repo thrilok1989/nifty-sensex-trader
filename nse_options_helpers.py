@@ -310,9 +310,9 @@ def display_call_log_book(instrument):
             mime="text/csv"
         )
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def fetch_option_chain_data(instrument, NSE_INSTRUMENTS):
-    """Fetch and return option chain data for an instrument - Cached for 30 seconds"""
+    """Fetch and return option chain data for an instrument - Cached for 60 seconds"""
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         session = requests.Session()

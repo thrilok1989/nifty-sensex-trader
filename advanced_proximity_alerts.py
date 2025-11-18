@@ -1,12 +1,14 @@
 """
 Advanced Proximity Alert System
 Monitors price proximity to VOB and HTF levels and sends Telegram notifications
+Includes comprehensive market context in all notifications
 """
 
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from notification_rate_limiter import get_rate_limiter
 from telegram_alerts import TelegramBot
+import streamlit as st
 
 class ProximityAlert:
     """Represents a single proximity alert"""
@@ -263,9 +265,205 @@ class AdvancedProximityAlertSystem:
             print(f"Error sending proximity alert: {e}")
             return False
 
+    def _gather_market_context(self) -> Dict:
+        """
+        Gather comprehensive market context from session state
+
+        Returns:
+            Dictionary containing all market biases and analyses
+        """
+        context = {
+            'overall_sentiment': 'N/A',
+            'overall_score': 0,
+            'market_breadth_bias': 'N/A',
+            'market_breadth_pct': 0,
+            'technical_indicators_bias': 'N/A',
+            'technical_indicators_score': 0,
+            'pcr_analysis_bias': 'N/A',
+            'pcr_analysis_score': 0,
+            'nifty_atm_verdict': 'N/A',
+            'option_chain_bias': 'N/A',
+            'option_chain_score': 0
+        }
+
+        # Check if bias analysis results exist
+        if 'bias_analysis_results' in st.session_state and st.session_state.bias_analysis_results:
+            analysis = st.session_state.bias_analysis_results
+
+            if analysis.get('success'):
+                # 1. Market Breadth (Stock Performance)
+                stock_data = analysis.get('stock_data', [])
+                if stock_data:
+                    bullish_stocks = sum(1 for s in stock_data if s.get('change_pct', 0) > 0.5)
+                    total_stocks = len(stock_data)
+                    breadth_pct = (bullish_stocks / total_stocks * 100) if total_stocks > 0 else 50
+
+                    context['market_breadth_pct'] = breadth_pct
+                    if breadth_pct > 60:
+                        context['market_breadth_bias'] = 'BULLISH'
+                    elif breadth_pct < 40:
+                        context['market_breadth_bias'] = 'BEARISH'
+                    else:
+                        context['market_breadth_bias'] = 'NEUTRAL'
+
+                # 2. Technical Indicators
+                bias_results = analysis.get('bias_results', [])
+                if bias_results:
+                    bullish_count = sum(1 for r in bias_results if 'BULLISH' in r.get('bias', ''))
+                    bearish_count = sum(1 for r in bias_results if 'BEARISH' in r.get('bias', ''))
+                    total_count = len(bias_results)
+
+                    if bullish_count > bearish_count:
+                        context['technical_indicators_bias'] = 'BULLISH'
+                    elif bearish_count > bullish_count:
+                        context['technical_indicators_bias'] = 'BEARISH'
+                    else:
+                        context['technical_indicators_bias'] = 'NEUTRAL'
+
+                    # Calculate weighted score
+                    total_score = sum(r.get('score', 0) * r.get('weight', 1) for r in bias_results)
+                    total_weight = sum(r.get('weight', 1) for r in bias_results)
+                    context['technical_indicators_score'] = total_score / total_weight if total_weight > 0 else 0
+
+        # 3. PCR Analysis
+        if 'overall_option_data' in st.session_state and st.session_state.overall_option_data:
+            option_data = st.session_state.overall_option_data
+
+            # Calculate PCR for main indices
+            main_indices = ['NIFTY', 'SENSEX']
+            bullish_instruments = 0
+            bearish_instruments = 0
+            total_score = 0
+            instruments_analyzed = 0
+
+            for instrument in main_indices:
+                if instrument not in option_data:
+                    continue
+
+                data = option_data[instrument]
+                if not data.get('success'):
+                    continue
+
+                # Calculate PCR for Total OI
+                total_ce_oi = data.get('total_ce_oi', 0)
+                total_pe_oi = data.get('total_pe_oi', 0)
+                pcr_oi = total_pe_oi / total_ce_oi if total_ce_oi > 0 else 1
+
+                # Determine bias
+                if pcr_oi > 1.2:
+                    score = min(50, (pcr_oi - 1) * 50)
+                    bullish_instruments += 1
+                elif pcr_oi < 0.8:
+                    score = -min(50, (1 - pcr_oi) * 50)
+                    bearish_instruments += 1
+                else:
+                    score = 0
+
+                total_score += score
+                instruments_analyzed += 1
+
+            if instruments_analyzed > 0:
+                overall_score = total_score / instruments_analyzed
+                context['pcr_analysis_score'] = overall_score
+
+                if overall_score > 10:
+                    context['pcr_analysis_bias'] = 'BULLISH'
+                elif overall_score < -10:
+                    context['pcr_analysis_bias'] = 'BEARISH'
+                else:
+                    context['pcr_analysis_bias'] = 'NEUTRAL'
+
+        # 4. NIFTY ATM Zone Summary
+        if 'NIFTY_atm_zone_bias' in st.session_state:
+            df_atm = st.session_state['NIFTY_atm_zone_bias']
+            atm_row = df_atm[df_atm["Zone"] == "ATM"]
+
+            if not atm_row.empty:
+                context['nifty_atm_verdict'] = atm_row.iloc[0].get('Verdict', 'N/A')
+
+        # 5. Option Chain ATM Zone Analysis (Overall)
+        instruments = ['NIFTY', 'SENSEX', 'FINNIFTY', 'MIDCPNIFTY']
+        bullish_instruments = 0
+        bearish_instruments = 0
+        total_score = 0
+        instruments_analyzed = 0
+
+        for instrument in instruments:
+            atm_key = f'{instrument}_atm_zone_bias'
+            if atm_key not in st.session_state:
+                continue
+
+            df_atm = st.session_state[atm_key]
+            atm_row = df_atm[df_atm["Zone"] == "ATM"]
+
+            if atm_row.empty:
+                continue
+
+            verdict = str(atm_row.iloc[0].get('Verdict', 'Neutral')).upper()
+
+            # Calculate score based on verdict
+            if 'STRONG BULLISH' in verdict:
+                score = 75
+                bullish_instruments += 1
+            elif 'BULLISH' in verdict:
+                score = 40
+                bullish_instruments += 1
+            elif 'STRONG BEARISH' in verdict:
+                score = -75
+                bearish_instruments += 1
+            elif 'BEARISH' in verdict:
+                score = -40
+                bearish_instruments += 1
+            else:
+                score = 0
+
+            total_score += score
+            instruments_analyzed += 1
+
+        if instruments_analyzed > 0:
+            overall_score = total_score / instruments_analyzed
+            context['option_chain_score'] = overall_score
+
+            if overall_score > 30:
+                context['option_chain_bias'] = 'BULLISH'
+            elif overall_score < -30:
+                context['option_chain_bias'] = 'BEARISH'
+            else:
+                context['option_chain_bias'] = 'NEUTRAL'
+
+        # 6. Overall Market Sentiment (from overall_market_sentiment.py)
+        # This is a calculated metric from all the above
+        # Calculate simple average of all biases
+        biases = [
+            context['market_breadth_bias'],
+            context['technical_indicators_bias'],
+            context['pcr_analysis_bias'],
+            context['option_chain_bias']
+        ]
+
+        bullish_count = sum(1 for b in biases if b == 'BULLISH')
+        bearish_count = sum(1 for b in biases if b == 'BEARISH')
+
+        if bullish_count > bearish_count and bullish_count >= 2:
+            context['overall_sentiment'] = 'BULLISH'
+        elif bearish_count > bullish_count and bearish_count >= 2:
+            context['overall_sentiment'] = 'BEARISH'
+        else:
+            context['overall_sentiment'] = 'NEUTRAL'
+
+        # Calculate overall score
+        scores = [
+            context['technical_indicators_score'],
+            context['pcr_analysis_score'],
+            context['option_chain_score']
+        ]
+        context['overall_score'] = sum(s for s in scores if isinstance(s, (int, float))) / len([s for s in scores if isinstance(s, (int, float))]) if scores else 0
+
+        return context
+
     def _build_alert_message(self, alert: ProximityAlert, current_price: float) -> str:
         """
-        Build formatted Telegram message for proximity alert
+        Build formatted Telegram message for proximity alert with comprehensive market context
 
         Args:
             alert: ProximityAlert object
@@ -290,7 +488,10 @@ class AdvancedProximityAlertSystem:
                 emoji = "🔴"
                 direction = "HTF RESISTANCE"
 
-        # Build message
+        # Gather market context
+        market_context = self._gather_market_context()
+
+        # Build message with comprehensive market context
         lines = [
             f"{emoji} <b>PROXIMITY ALERT</b> {emoji}",
             "",
@@ -309,12 +510,64 @@ class AdvancedProximityAlertSystem:
         if alert.alert_type == 'VOB':
             lines.append(f"<b>Level Type:</b> {alert.level_type}")
 
+        # Add comprehensive market context
         lines.extend([
+            "",
+            "━━━━━━━━━━━━━━━━━━",
+            "<b>📊 MARKET CONTEXT</b>",
+            "━━━━━━━━━━━━━━━━━━",
+            "",
+            f"<b>Overall Sentiment:</b> {self._format_bias(market_context['overall_sentiment'])}",
+            f"<b>Overall Score:</b> {market_context['overall_score']:.1f}",
+            "",
+            f"<b>📈 Enhanced Market Analysis:</b>",
+            f"  • Bias: {self._format_bias(market_context['technical_indicators_bias'])}",
+            f"  • Score: {market_context['technical_indicators_score']:.1f}",
+            "",
+            f"<b>🔍 Market Breadth:</b>",
+            f"  • Bias: {self._format_bias(market_context['market_breadth_bias'])}",
+            f"  • Breadth: {market_context['market_breadth_pct']:.1f}%",
+            "",
+            f"<b>📊 Technical Indicators:</b>",
+            f"  • Bias: {self._format_bias(market_context['technical_indicators_bias'])}",
+            f"  • Score: {market_context['technical_indicators_score']:.1f}",
+            "",
+            f"<b>📉 PCR Analysis:</b>",
+            f"  • Bias: {self._format_bias(market_context['pcr_analysis_bias'])}",
+            f"  • Score: {market_context['pcr_analysis_score']:.1f}",
+            "",
+            f"<b>🎯 NIFTY ATM Zone:</b>",
+            f"  • Verdict: {market_context['nifty_atm_verdict']}",
+            "",
+            f"<b>🔗 Option Chain Analysis:</b>",
+            f"  • Bias: {self._format_bias(market_context['option_chain_bias'])}",
+            f"  • Score: {market_context['option_chain_score']:.1f}",
             "",
             f"<i>Time: {alert.timestamp.strftime('%I:%M:%S %p')}</i>"
         ])
 
         return "\n".join(lines)
+
+    def _format_bias(self, bias: str) -> str:
+        """
+        Format bias with appropriate emoji
+
+        Args:
+            bias: Bias string (BULLISH, BEARISH, NEUTRAL, N/A)
+
+        Returns:
+            Formatted bias string with emoji
+        """
+        bias_upper = str(bias).upper()
+
+        if 'BULLISH' in bias_upper:
+            return "🐂 BULLISH"
+        elif 'BEARISH' in bias_upper:
+            return "🐻 BEARISH"
+        elif 'NEUTRAL' in bias_upper:
+            return "⚖️ NEUTRAL"
+        else:
+            return "❓ N/A"
 
     def process_market_data(self, symbol: str, current_price: float,
                            vob_data: Dict, htf_data: List[Dict]) -> Tuple[List[ProximityAlert], int]:

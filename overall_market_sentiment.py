@@ -372,6 +372,115 @@ def calculate_option_chain_atm_sentiment(NSE_INSTRUMENTS):
     }
 
 
+def calculate_nifty_advanced_metrics_sentiment():
+    """
+    Calculate sentiment from NIFTY advanced metrics:
+    - Synthetic Future Bias
+    - ATM Buildup Pattern
+    - ATM Vega Bias
+    - Distance from Max Pain
+    - Call Resistance / Put Support positioning
+    - Total Vega Bias
+
+    Returns: dict with sentiment, score, and details
+    """
+    if 'NIFTY_comprehensive_metrics' not in st.session_state:
+        return None
+
+    metrics = st.session_state['NIFTY_comprehensive_metrics']
+
+    # Initialize score
+    score = 0
+    details = []
+
+    # 1. Synthetic Future Bias (Weight: 2.0)
+    synthetic_bias = metrics.get('Synthetic Future Bias', 'Neutral')
+    synthetic_diff = metrics.get('synthetic_diff', 0)
+    if 'BULLISH' in str(synthetic_bias).upper():
+        score += 20
+        details.append(f"Synthetic Future: Bullish (+{synthetic_diff:.2f})")
+    elif 'BEARISH' in str(synthetic_bias).upper():
+        score -= 20
+        details.append(f"Synthetic Future: Bearish ({synthetic_diff:.2f})")
+    else:
+        details.append(f"Synthetic Future: Neutral")
+
+    # 2. ATM Buildup Pattern (Weight: 2.5)
+    atm_buildup = metrics.get('ATM Buildup Pattern', 'Neutral')
+    if 'SHORT BUILDUP' in str(atm_buildup).upper() or 'PUT WRITING' in str(atm_buildup).upper() or 'SHORT COVERING' in str(atm_buildup).upper():
+        score += 25
+        details.append(f"ATM Buildup: Bullish ({atm_buildup})")
+    elif 'LONG BUILDUP' in str(atm_buildup).upper() or 'CALL WRITING' in str(atm_buildup).upper() or 'LONG UNWINDING' in str(atm_buildup).upper():
+        score -= 25
+        details.append(f"ATM Buildup: Bearish ({atm_buildup})")
+    else:
+        details.append(f"ATM Buildup: Neutral")
+
+    # 3. ATM Vega Bias (Weight: 1.5)
+    atm_vega_bias = metrics.get('ATM Vega Bias', 'Neutral')
+    if 'BULLISH' in str(atm_vega_bias).upper():
+        score += 15
+        details.append(f"ATM Vega: Bullish (High Put Vega)")
+    elif 'BEARISH' in str(atm_vega_bias).upper():
+        score -= 15
+        details.append(f"ATM Vega: Bearish (High Call Vega)")
+    else:
+        details.append(f"ATM Vega: Neutral")
+
+    # 4. Distance from Max Pain (Weight: 2.0)
+    distance_from_max_pain = metrics.get('distance_from_max_pain_value', 0)
+    if distance_from_max_pain > 50:
+        score -= 20  # Above max pain suggests downward pull
+        details.append(f"Max Pain Distance: Bearish (+{distance_from_max_pain:.2f}, above max pain)")
+    elif distance_from_max_pain < -50:
+        score += 20  # Below max pain suggests upward pull
+        details.append(f"Max Pain Distance: Bullish ({distance_from_max_pain:.2f}, below max pain)")
+    else:
+        details.append(f"Max Pain Distance: Neutral ({distance_from_max_pain:+.2f})")
+
+    # 5. Total Vega Bias (Weight: 1.5)
+    total_vega_bias = metrics.get('Total Vega Bias', 'Neutral')
+    if 'BULLISH' in str(total_vega_bias).upper():
+        score += 15
+        details.append(f"Total Vega: Bullish (Put Heavy)")
+    elif 'BEARISH' in str(total_vega_bias).upper():
+        score -= 15
+        details.append(f"Total Vega: Bearish (Call Heavy)")
+    else:
+        details.append(f"Total Vega: Neutral")
+
+    # 6. Call Resistance / Put Support Distance (Weight: 1.0)
+    call_resistance_distance = metrics.get('call_resistance_distance', 0)
+    put_support_distance = metrics.get('put_support_distance', 0)
+
+    # If close to call resistance, bearish; if close to put support, bullish
+    if call_resistance_distance < 50 and call_resistance_distance > 0:
+        score -= 10
+        details.append(f"Near Call Resistance: Bearish ({call_resistance_distance:.2f} pts)")
+    elif put_support_distance < 50 and put_support_distance > 0:
+        score += 10
+        details.append(f"Near Put Support: Bullish ({put_support_distance:.2f} pts)")
+
+    # Determine overall bias
+    if score > 30:
+        bias = "BULLISH"
+    elif score < -30:
+        bias = "BEARISH"
+    else:
+        bias = "NEUTRAL"
+
+    # Calculate confidence based on score magnitude
+    confidence = min(100, abs(score))
+
+    return {
+        'bias': bias,
+        'score': score,
+        'confidence': confidence,
+        'details': details,
+        'metrics': metrics
+    }
+
+
 def calculate_overall_sentiment():
     """
     Calculate overall market sentiment by combining all data sources
@@ -407,6 +516,11 @@ def calculate_overall_sentiment():
     if oc_sentiment and oc_sentiment['total_instruments'] > 0:
         sentiment_sources['Option Chain Analysis'] = oc_sentiment
 
+    # 5. NIFTY Advanced Metrics Sentiment (NEW)
+    nifty_advanced_sentiment = calculate_nifty_advanced_metrics_sentiment()
+    if nifty_advanced_sentiment:
+        sentiment_sources['NIFTY Advanced Metrics'] = nifty_advanced_sentiment
+
     # If no data available
     if not sentiment_sources:
         return {
@@ -426,7 +540,8 @@ def calculate_overall_sentiment():
         'Stock Performance': 2.0,
         'Technical Indicators': 3.0,
         'PCR Analysis': 2.5,
-        'Option Chain Analysis': 2.0
+        'Option Chain Analysis': 2.0,
+        'NIFTY Advanced Metrics': 2.5  # High weight for comprehensive metrics
     }
 
     total_weighted_score = 0
@@ -1004,6 +1119,270 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
             if pcr_details:
                 pcr_df = pd.DataFrame(pcr_details)
                 st.dataframe(pcr_df, use_container_width=True, hide_index=True)
+
+    # ─────────────────────────────────────────────────────────────────
+    # 3.5 NIFTY ADVANCED METRICS (NEW SECTION)
+    # ─────────────────────────────────────────────────────────────────
+    if 'NIFTY Advanced Metrics' in sources:
+        source_data = sources['NIFTY Advanced Metrics']
+        with st.expander("**🌐 NIFTY Advanced Metrics (ATM Zone & Market Analysis)**", expanded=True):
+            bias = source_data.get('bias', 'NEUTRAL')
+            score = source_data.get('score', 0)
+            confidence = source_data.get('confidence', 0)
+
+            # Color based on bias
+            if bias == 'BULLISH':
+                bg_color = '#00ff88'
+                text_color = 'black'
+                icon = '🐂'
+            elif bias == 'BEARISH':
+                bg_color = '#ff4444'
+                text_color = 'white'
+                icon = '🐻'
+            else:
+                bg_color = '#ffa500'
+                text_color = 'white'
+                icon = '⚖️'
+
+            # Display source card
+            col1, col2, col3 = st.columns([2, 1, 1])
+
+            with col1:
+                st.markdown(f"""
+                <div style='background: {bg_color}; padding: 15px; border-radius: 10px;'>
+                    <h3 style='margin: 0; color: {text_color};'>{icon} {bias}</h3>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col2:
+                st.metric("Score", f"{score:+.1f}")
+
+            with col3:
+                st.metric("Confidence", f"{confidence:.1f}%")
+
+            # Get metrics
+            metrics = source_data.get('metrics', {})
+
+            # ═══════════════════════════════════════════════════════════════════
+            # NIFTY ATM ZONE SUMMARY
+            # ═══════════════════════════════════════════════════════════════════
+            st.markdown("#### 📍 NIFTY ATM Zone Summary")
+
+            atm_strike = metrics.get('ATM Strike', 'N/A')
+            st.markdown(f"**Strike: {atm_strike}**")
+
+            col1, col2, col3, col4 = st.columns(4)
+
+            # 1. Synthetic Future Bias
+            with col1:
+                synthetic_bias = metrics.get('Synthetic Future Bias', 'Neutral')
+                synthetic_future = metrics.get('synthetic_future', 0)
+                synthetic_diff = metrics.get('synthetic_diff', 0)
+
+                if 'BULLISH' in str(synthetic_bias).upper():
+                    st.markdown(f"""
+                    <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #00ff88;'>
+                        <p style='margin: 0; color: #888; font-size: 12px;'>Synthetic Future Bias</p>
+                        <h4 style='margin: 5px 0; color: #00ff88;'>🟢 Bullish</h4>
+                        <p style='margin: 0; color: #ccc; font-size: 14px;'>Synth: {synthetic_future:.2f} | Diff: {synthetic_diff:+.2f}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif 'BEARISH' in str(synthetic_bias).upper():
+                    st.markdown(f"""
+                    <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #ff4444;'>
+                        <p style='margin: 0; color: #888; font-size: 12px;'>Synthetic Future Bias</p>
+                        <h4 style='margin: 5px 0; color: #ff4444;'>🔴 Bearish</h4>
+                        <p style='margin: 0; color: #ccc; font-size: 14px;'>Synth: {synthetic_future:.2f} | Diff: {synthetic_diff:+.2f}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #ffa500;'>
+                        <p style='margin: 0; color: #888; font-size: 12px;'>Synthetic Future Bias</p>
+                        <h4 style='margin: 5px 0; color: #ffa500;'>🟡 Neutral</h4>
+                        <p style='margin: 0; color: #ccc; font-size: 14px;'>Synth: {synthetic_future:.2f} | Diff: {synthetic_diff:+.2f}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # 2. ATM Buildup Pattern
+            with col2:
+                atm_buildup = metrics.get('ATM Buildup Pattern', 'Neutral')
+
+                if 'SHORT BUILDUP' in str(atm_buildup).upper() or 'PUT WRITING' in str(atm_buildup).upper():
+                    st.markdown(f"""
+                    <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #00ff88;'>
+                        <p style='margin: 0; color: #888; font-size: 12px;'>ATM Buildup Pattern</p>
+                        <h4 style='margin: 5px 0; color: #00ff88;'>🟢</h4>
+                        <p style='margin: 0; color: #ccc; font-size: 14px;'>{atm_buildup}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif 'LONG BUILDUP' in str(atm_buildup).upper() or 'CALL WRITING' in str(atm_buildup).upper():
+                    st.markdown(f"""
+                    <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #ff4444;'>
+                        <p style='margin: 0; color: #888; font-size: 12px;'>ATM Buildup Pattern</p>
+                        <h4 style='margin: 5px 0; color: #ff4444;'>🔴</h4>
+                        <p style='margin: 0; color: #ccc; font-size: 14px;'>{atm_buildup}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #ffa500;'>
+                        <p style='margin: 0; color: #888; font-size: 12px;'>ATM Buildup Pattern</p>
+                        <h4 style='margin: 5px 0; color: #ffa500;'>🟡</h4>
+                        <p style='margin: 0; color: #ccc; font-size: 14px;'>{atm_buildup}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # 3. ATM Vega Bias
+            with col3:
+                atm_vega_bias = metrics.get('ATM Vega Bias', 'Neutral')
+                atm_vega_exposure = metrics.get('atm_vega_exposure', 0)
+
+                if 'BULLISH' in str(atm_vega_bias).upper():
+                    st.markdown(f"""
+                    <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #00ff88;'>
+                        <p style='margin: 0; color: #888; font-size: 12px;'>ATM Vega Bias</p>
+                        <h4 style='margin: 5px 0; color: #00ff88;'>🟢 Bullish</h4>
+                        <p style='margin: 0; color: #ccc; font-size: 14px;'>High Put Vega | Exp: {atm_vega_exposure:,.2f}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif 'BEARISH' in str(atm_vega_bias).upper():
+                    st.markdown(f"""
+                    <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #ff4444;'>
+                        <p style='margin: 0; color: #888; font-size: 12px;'>ATM Vega Bias</p>
+                        <h4 style='margin: 5px 0; color: #ff4444;'>🔴 Bearish</h4>
+                        <p style='margin: 0; color: #ccc; font-size: 14px;'>High Call Vega | Exp: {atm_vega_exposure:,.2f}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #ffa500;'>
+                        <p style='margin: 0; color: #888; font-size: 12px;'>ATM Vega Bias</p>
+                        <h4 style='margin: 5px 0; color: #ffa500;'>🟡 Neutral</h4>
+                        <p style='margin: 0; color: #ccc; font-size: 14px;'>Exp: {atm_vega_exposure:,.2f}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # 4. Distance from Max Pain
+            with col4:
+                distance_from_max_pain = metrics.get('distance_from_max_pain_value', 0)
+                max_pain_strike = metrics.get('Max Pain Strike', 'N/A')
+
+                if distance_from_max_pain > 50:
+                    st.markdown(f"""
+                    <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #ff4444;'>
+                        <p style='margin: 0; color: #888; font-size: 12px;'>Distance from Max Pain</p>
+                        <h4 style='margin: 5px 0; color: #ff4444;'>🔴 {distance_from_max_pain:+.2f}</h4>
+                        <p style='margin: 0; color: #ccc; font-size: 14px;'>Max Pain: {max_pain_strike}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif distance_from_max_pain < -50:
+                    st.markdown(f"""
+                    <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #00ff88;'>
+                        <p style='margin: 0; color: #888; font-size: 12px;'>Distance from Max Pain</p>
+                        <h4 style='margin: 5px 0; color: #00ff88;'>🟢 {distance_from_max_pain:+.2f}</h4>
+                        <p style='margin: 0; color: #ccc; font-size: 14px;'>Max Pain: {max_pain_strike}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #ffa500;'>
+                        <p style='margin: 0; color: #888; font-size: 12px;'>Distance from Max Pain</p>
+                        <h4 style='margin: 5px 0; color: #ffa500;'>🟡 {distance_from_max_pain:+.2f}</h4>
+                        <p style='margin: 0; color: #ccc; font-size: 14px;'>Max Pain: {max_pain_strike}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            st.markdown("---")
+
+            # ═══════════════════════════════════════════════════════════════════
+            # NIFTY OVERALL MARKET ANALYSIS
+            # ═══════════════════════════════════════════════════════════════════
+            st.markdown("#### 🌐 NIFTY Overall Market Analysis")
+
+            col1, col2, col3, col4 = st.columns(4)
+
+            # 1. Max Pain Strike
+            with col1:
+                max_pain_strike = metrics.get('Max Pain Strike', 'N/A')
+                distance_from_max_pain = metrics.get('distance_from_max_pain_value', 0)
+
+                if distance_from_max_pain > 0:
+                    color = '#00ff88'
+                    icon = '🟢'
+                else:
+                    color = '#ff4444'
+                    icon = '🔴'
+
+                st.markdown(f"""
+                <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid {color};'>
+                    <p style='margin: 0; color: #888; font-size: 12px;'>Max Pain Strike</p>
+                    <h4 style='margin: 5px 0; color: {color};'>{max_pain_strike}</h4>
+                    <p style='margin: 0; color: #ccc; font-size: 14px;'>{icon} Distance: {distance_from_max_pain:+.2f}</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # 2. Call Resistance (OI)
+            with col2:
+                call_resistance = metrics.get('Call Resistance', 'N/A')
+                call_resistance_distance = metrics.get('call_resistance_distance', 0)
+
+                st.markdown(f"""
+                <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #6495ED;'>
+                    <p style='margin: 0; color: #888; font-size: 12px;'>Call Resistance (OI)</p>
+                    <h4 style='margin: 5px 0; color: #6495ED;'>{call_resistance}</h4>
+                    <p style='margin: 0; color: #ccc; font-size: 14px;'>📈 +{call_resistance_distance:.2f} points away</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # 3. Put Support (OI)
+            with col3:
+                put_support = metrics.get('Put Support', 'N/A')
+                put_support_distance = metrics.get('put_support_distance', 0)
+
+                st.markdown(f"""
+                <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #6495ED;'>
+                    <p style='margin: 0; color: #888; font-size: 12px;'>Put Support (OI)</p>
+                    <h4 style='margin: 5px 0; color: #6495ED;'>{put_support}</h4>
+                    <p style='margin: 0; color: #ccc; font-size: 14px;'>📉 -{put_support_distance:.2f} points away</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # 4. Total Vega Bias
+            with col4:
+                total_vega_bias = metrics.get('Total Vega Bias', 'Neutral')
+
+                if 'BULLISH' in str(total_vega_bias).upper():
+                    st.markdown(f"""
+                    <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #00ff88;'>
+                        <p style='margin: 0; color: #888; font-size: 12px;'>Total Vega Bias</p>
+                        <h4 style='margin: 5px 0; color: #00ff88;'>🟢 Bullish</h4>
+                        <p style='margin: 0; color: #ccc; font-size: 14px;'>Put Heavy</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif 'BEARISH' in str(total_vega_bias).upper():
+                    st.markdown(f"""
+                    <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #ff4444;'>
+                        <p style='margin: 0; color: #888; font-size: 12px;'>Total Vega Bias</p>
+                        <h4 style='margin: 5px 0; color: #ff4444;'>🔴 Bearish</h4>
+                        <p style='margin: 0; color: #ccc; font-size: 14px;'>Call Heavy</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style='padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 4px solid #ffa500;'>
+                        <p style='margin: 0; color: #888; font-size: 12px;'>Total Vega Bias</p>
+                        <h4 style='margin: 5px 0; color: #ffa500;'>🟡 Neutral</h4>
+                        <p style='margin: 0; color: #ccc; font-size: 14px;'>Balanced</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # Display detailed breakdown
+            st.markdown("---")
+            st.markdown("**Sentiment Breakdown:**")
+            details = source_data.get('details', [])
+            for detail in details:
+                st.markdown(f"- {detail}")
 
     # ─────────────────────────────────────────────────────────────────
     # 4. OPTION CHAIN ANALYSIS TABLE

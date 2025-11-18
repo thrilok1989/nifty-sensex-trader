@@ -574,6 +574,10 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
         overall_buildup = calculate_overall_buildup_pattern(df, underlying)
 
         # === Store Comprehensive Metrics in Session State ===
+        # Calculate distance from Call Resistance and Put Support
+        call_resistance_distance = call_resistance - underlying if call_resistance else 0
+        put_support_distance = underlying - put_support if put_support else 0
+
         st.session_state[f'{instrument}_comprehensive_metrics'] = {
             'Instrument': instrument,
             'Spot': f"₹{underlying:,.2f}",
@@ -587,7 +591,15 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
             'Put Support': put_support if put_support else 'N/A',
             'Total Vega Bias': total_vega_bias.split('(')[0].strip(),
             'Overall Buildup': overall_buildup,
-            'Unusual Activity Count': len(unusual_activity)
+            'Unusual Activity Count': len(unusual_activity),
+            # Raw values for detailed display
+            'synthetic_future': synthetic_future,
+            'synthetic_diff': synthetic_diff,
+            'atm_vega_exposure': atm_vega_exposure,
+            'call_resistance_distance': call_resistance_distance,
+            'put_support_distance': put_support_distance,
+            'underlying_value': underlying,
+            'distance_from_max_pain_value': distance_from_max_pain
         }
 
         support_zone, resistance_zone = get_support_resistance_zones(df, underlying, instrument, NSE_INSTRUMENTS)

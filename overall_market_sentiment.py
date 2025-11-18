@@ -1737,7 +1737,7 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
 
     # Calculate time until next refresh
     time_since_refresh = time.time() - st.session_state.sentiment_last_refresh
-    time_until_refresh = max(0, 60 - time_since_refresh)
+    time_until_refresh = max(0, refresh_interval - time_since_refresh)
 
     col1, col2 = st.columns(2)
 
@@ -1774,7 +1774,5 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
                     for error in errors:
                         st.error(f"  - {error}")
 
-    # Use st.empty() to trigger rerun for countdown
-    if time_until_refresh > 0:
-        time.sleep(min(1, time_until_refresh))
-        st.rerun()
+    # Auto-refresh handled by the refresh logic at the top of this function
+    # No need for additional sleep/rerun here as it causes duplicate rendering

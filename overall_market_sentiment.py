@@ -393,14 +393,14 @@ def calculate_nifty_advanced_metrics_sentiment():
     score = 0
     details = []
 
-    # 1. Synthetic Future Bias (Weight: 2.0)
+    # 1. Synthetic Future Bias (Display Only - Not used in scoring)
     synthetic_bias = metrics.get('Synthetic Future Bias', 'Neutral')
     synthetic_diff = metrics.get('synthetic_diff', 0)
     if 'BULLISH' in str(synthetic_bias).upper():
-        score += 20
+        # score += 20  # Removed from scoring
         details.append(f"Synthetic Future: Bullish (+{synthetic_diff:.2f})")
     elif 'BEARISH' in str(synthetic_bias).upper():
-        score -= 20
+        # score -= 20  # Removed from scoring
         details.append(f"Synthetic Future: Bearish ({synthetic_diff:.2f})")
     else:
         details.append(f"Synthetic Future: Neutral")
@@ -416,24 +416,24 @@ def calculate_nifty_advanced_metrics_sentiment():
     else:
         details.append(f"ATM Buildup: Neutral")
 
-    # 3. ATM Vega Bias (Weight: 1.5)
+    # 3. ATM Vega Bias (Display Only - Not used in scoring)
     atm_vega_bias = metrics.get('ATM Vega Bias', 'Neutral')
     if 'BULLISH' in str(atm_vega_bias).upper():
-        score += 15
+        # score += 15  # Removed from scoring
         details.append(f"ATM Vega: Bullish (High Put Vega)")
     elif 'BEARISH' in str(atm_vega_bias).upper():
-        score -= 15
+        # score -= 15  # Removed from scoring
         details.append(f"ATM Vega: Bearish (High Call Vega)")
     else:
         details.append(f"ATM Vega: Neutral")
 
-    # 4. Distance from Max Pain (Weight: 2.0)
+    # 4. Distance from Max Pain (Display Only - Not used in scoring)
     distance_from_max_pain = metrics.get('distance_from_max_pain_value', 0)
     if distance_from_max_pain > 50:
-        score -= 20  # Above max pain suggests downward pull
+        # score -= 20  # Removed from scoring - Above max pain suggests downward pull
         details.append(f"Max Pain Distance: Bearish (+{distance_from_max_pain:.2f}, above max pain)")
     elif distance_from_max_pain < -50:
-        score += 20  # Below max pain suggests upward pull
+        # score += 20  # Removed from scoring - Below max pain suggests upward pull
         details.append(f"Max Pain Distance: Bullish ({distance_from_max_pain:.2f}, below max pain)")
     else:
         details.append(f"Max Pain Distance: Neutral ({distance_from_max_pain:+.2f})")

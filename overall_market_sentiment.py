@@ -742,6 +742,11 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
 
     st.markdown("---")
 
+    # ═══════════════════════════════════════════════════════════════════
+    # ENHANCED MARKET ANALYSIS SUMMARY CARD
+    # ═══════════════════════════════════════════════════════════════════
+    # This will be populated after we calculate overall sentiment
+
     # Initialize auto-refresh timestamp
     if 'sentiment_last_refresh' not in st.session_state:
         st.session_state.sentiment_last_refresh = 0
@@ -797,6 +802,115 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
                         st.error(f"  - {error}")
 
         return
+
+    # ═══════════════════════════════════════════════════════════════════
+    # ENHANCED MARKET ANALYSIS SUMMARY
+    # ═══════════════════════════════════════════════════════════════════
+
+    # Get last updated time
+    last_update_time = datetime.fromtimestamp(st.session_state.sentiment_last_refresh)
+    last_updated_str = last_update_time.strftime('%Y-%m-%d %H:%M:%S')
+
+    # Get sentiment data
+    sentiment = result['overall_sentiment']
+    score = result['overall_score']
+    data_points = result['source_count']
+    bullish_count = result['bullish_sources']
+    bearish_count = result['bearish_sources']
+    neutral_count = result['neutral_sources']
+
+    # Determine sentiment icon and color
+    if sentiment == 'BULLISH':
+        sentiment_icon = '📈'
+        sentiment_color = '#00ff88'
+    elif sentiment == 'BEARISH':
+        sentiment_icon = '📉'
+        sentiment_color = '#ff4444'
+    else:
+        sentiment_icon = '⚖️'
+        sentiment_color = '#ffa500'
+
+    # Enhanced Summary Card
+    st.markdown(f"""
+    <div style='background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
+                padding: 25px; border-radius: 15px; margin-bottom: 20px;
+                border: 1px solid #3d3d3d;'>
+
+        <!-- Header -->
+        <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;'>
+            <h3 style='margin: 0; color: #ffffff; font-size: 24px;'>📊 Enhanced Market Analysis</h3>
+            <span style='color: #888; font-size: 14px;'>📅 Last Updated: {last_updated_str}</span>
+        </div>
+
+        <!-- Main Metrics Grid -->
+        <div style='display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;'>
+
+            <!-- Overall Sentiment -->
+            <div style='background: {sentiment_color}; padding: 20px; border-radius: 10px; text-align: center;'>
+                <div style='font-size: 32px; margin-bottom: 5px;'>{sentiment_icon}</div>
+                <div style='font-size: 20px; font-weight: bold; color: white; margin-bottom: 5px;'>{sentiment}</div>
+                <div style='font-size: 12px; color: rgba(255,255,255,0.8);'>Overall Sentiment</div>
+            </div>
+
+            <!-- Average Score -->
+            <div style='background: #2d2d2d; padding: 20px; border-radius: 10px; text-align: center;
+                        border-left: 4px solid {sentiment_color};'>
+                <div style='font-size: 32px; color: {sentiment_color}; font-weight: bold; margin-bottom: 5px;'>{score:+.1f}</div>
+                <div style='font-size: 12px; color: #888;'>Average Score</div>
+            </div>
+
+            <!-- Data Points -->
+            <div style='background: #2d2d2d; padding: 20px; border-radius: 10px; text-align: center;
+                        border-left: 4px solid #6495ED;'>
+                <div style='font-size: 32px; color: #6495ED; font-weight: bold; margin-bottom: 5px;'>{data_points}</div>
+                <div style='font-size: 12px; color: #888;'>Data Points</div>
+            </div>
+
+            <!-- Source Distribution -->
+            <div style='background: #2d2d2d; padding: 20px; border-radius: 10px; text-align: center;'>
+                <div style='font-size: 16px; color: #ffffff; font-weight: bold; margin-bottom: 5px;'>
+                    🟢{bullish_count} | 🔴{bearish_count} | 🟡{neutral_count}
+                </div>
+                <div style='font-size: 12px; color: #888;'>Bullish | Bearish | Neutral</div>
+            </div>
+
+        </div>
+
+        <!-- Summary Icons Section -->
+        <div style='background: #252525; padding: 15px; border-radius: 10px;'>
+            <div style='color: #888; font-size: 14px; margin-bottom: 10px; font-weight: bold;'>📊 Summary</div>
+            <div style='display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px;'>
+                <div style='text-align: center; padding: 10px; background: #1e1e1e; border-radius: 8px;'>
+                    <div style='font-size: 24px; margin-bottom: 5px;'>⚡</div>
+                    <div style='font-size: 11px; color: #888;'>India VIX</div>
+                </div>
+                <div style='text-align: center; padding: 10px; background: #1e1e1e; border-radius: 8px;'>
+                    <div style='font-size: 24px; margin-bottom: 5px;'>🏢</div>
+                    <div style='font-size: 11px; color: #888;'>Sector Rotation</div>
+                </div>
+                <div style='text-align: center; padding: 10px; background: #1e1e1e; border-radius: 8px;'>
+                    <div style='font-size: 24px; margin-bottom: 5px;'>🌍</div>
+                    <div style='font-size: 11px; color: #888;'>Global Markets</div>
+                </div>
+                <div style='text-align: center; padding: 10px; background: #1e1e1e; border-radius: 8px;'>
+                    <div style='font-size: 24px; margin-bottom: 5px;'>💰</div>
+                    <div style='font-size: 11px; color: #888;'>Intermarket</div>
+                </div>
+                <div style='text-align: center; padding: 10px; background: #1e1e1e; border-radius: 8px;'>
+                    <div style='font-size: 24px; margin-bottom: 5px;'>🎯</div>
+                    <div style='font-size: 11px; color: #888;'>Gamma Squeeze</div>
+                </div>
+                <div style='text-align: center; padding: 10px; background: #1e1e1e; border-radius: 8px;'>
+                    <div style='font-size: 24px; margin-bottom: 5px;'>⏰</div>
+                    <div style='font-size: 11px; color: #888;'>Intraday Timing</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("---")
 
     # ═══════════════════════════════════════════════════════════════════
     # HEADER METRICS

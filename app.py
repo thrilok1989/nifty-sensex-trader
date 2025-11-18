@@ -1038,7 +1038,7 @@ with tab2:
         vob_support = st.number_input(
             "VOB Support Level",
             min_value=0.0,
-            value=float(nifty_data['spot_price'] - 50),
+            value=max(0.0, float(nifty_data['spot_price'] - 50)),
             step=10.0,
             key="vob_support"
         )
@@ -1047,7 +1047,7 @@ with tab2:
         vob_resistance = st.number_input(
             "VOB Resistance Level",
             min_value=0.0,
-            value=float(nifty_data['spot_price'] + 50),
+            value=max(0.0, float(nifty_data['spot_price'] + 50)),
             step=10.0,
             key="vob_resistance"
         )

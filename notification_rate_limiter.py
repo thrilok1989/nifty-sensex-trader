@@ -6,6 +6,8 @@ Prevents spam by enforcing cooldown periods between notifications
 import json
 import os
 from datetime import datetime, timedelta
+import pytz
+from config import IST, get_current_time_ist
 from typing import Dict, Optional
 import threading
 
@@ -80,7 +82,7 @@ class NotificationRateLimiter:
             # Parse the last notification time
             try:
                 last_time = datetime.fromisoformat(self.last_notifications[key])
-                current_time = datetime.now()
+                current_time = get_current_time_ist()
 
                 # Check if cooldown period has passed
                 time_since_last = current_time - last_time
@@ -110,7 +112,7 @@ class NotificationRateLimiter:
                 key = f"{alert_type}_{symbol}"
 
             # Store current timestamp
-            self.last_notifications[key] = datetime.now().isoformat()
+            self.last_notifications[key] = get_current_time_ist().isoformat()
 
             # Persist to file
             self._save_to_file()
@@ -139,7 +141,7 @@ class NotificationRateLimiter:
 
             try:
                 last_time = datetime.fromisoformat(self.last_notifications[key])
-                current_time = datetime.now()
+                current_time = get_current_time_ist()
                 cooldown_delta = timedelta(minutes=self.cooldown_minutes)
 
                 time_since_last = current_time - last_time
@@ -162,7 +164,7 @@ class NotificationRateLimiter:
             days_old: Remove entries older than this many days
         """
         with self.lock:
-            cutoff_time = datetime.now() - timedelta(days=days_old)
+            cutoff_time = get_current_time_ist() - timedelta(days=days_old)
 
             keys_to_remove = []
             for key, timestamp_str in self.last_notifications.items():

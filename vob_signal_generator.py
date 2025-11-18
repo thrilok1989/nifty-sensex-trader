@@ -9,6 +9,8 @@ Generates trading signals based on:
 """
 
 from datetime import datetime
+import pytz
+from config import IST, get_current_time_ist
 from typing import Dict, List, Optional
 import pandas as pd
 from indicators.vob_strength_tracker import VOBStrengthTracker, get_emoji_for_strength, get_description_for_strength
@@ -121,7 +123,7 @@ class VOBSignalGenerator:
                     'distance_from_vob': round(distance_from_upper, 2),
                     'risk_reward': '1:1.5',
                     'market_sentiment': 'BULLISH',
-                    'timestamp': datetime.now(),
+                    'timestamp': get_current_time_ist(),
                     'status': 'ACTIVE',
                     'strength': strength_data  # Add strength analysis
                 }
@@ -179,7 +181,7 @@ class VOBSignalGenerator:
                     'distance_from_vob': round(distance_from_lower, 2),
                     'risk_reward': '1:1.5',
                     'market_sentiment': 'BEARISH',
-                    'timestamp': datetime.now(),
+                    'timestamp': get_current_time_ist(),
                     'status': 'ACTIVE',
                     'strength': strength_data  # Add strength analysis
                 }

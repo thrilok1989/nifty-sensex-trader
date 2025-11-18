@@ -9,6 +9,8 @@ import numpy as np
 import math
 from scipy.stats import norm
 from datetime import datetime
+import pytz
+from config import IST, get_current_time_ist
 from pytz import timezone
 import plotly.graph_objects as go
 import io
@@ -162,7 +164,7 @@ def create_export_data(df_summary, trade_log, spot_price, instrument):
         if trade_log:
             pd.DataFrame(trade_log).to_excel(writer, sheet_name=f'{instrument}_Trade_Log', index=False)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = get_current_time_ist().strftime("%Y%m%d_%H%M%S")
     filename = f"{instrument.lower()}_analysis_{timestamp}.xlsx"
 
     return output.getvalue(), filename

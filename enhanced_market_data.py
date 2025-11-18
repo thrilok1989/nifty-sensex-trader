@@ -16,6 +16,8 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 import yfinance as yf
 import warnings
+import pytz
+from config import IST, get_current_time_ist
 warnings.filterwarnings('ignore')
 
 # Try to import Dhan API
@@ -90,7 +92,7 @@ class EnhancedMarketData:
                     'sentiment': vix_sentiment,
                     'bias': vix_bias,
                     'score': vix_score,
-                    'timestamp': datetime.now()
+                    'timestamp': get_current_time_ist()
                 }
             else:
                 return self._fetch_india_vix_yfinance()
@@ -135,7 +137,7 @@ class EnhancedMarketData:
                     'sentiment': vix_sentiment,
                     'bias': vix_bias,
                     'score': vix_score,
-                    'timestamp': datetime.now()
+                    'timestamp': get_current_time_ist()
                 }
         except Exception as e:
             pass
@@ -460,7 +462,7 @@ class EnhancedMarketData:
         print("Fetching enhanced market data...")
 
         result = {
-            'timestamp': datetime.now(),
+            'timestamp': get_current_time_ist(),
             'india_vix': {},
             'sector_indices': [],
             'global_markets': [],
@@ -671,7 +673,7 @@ class EnhancedMarketData:
                 'squeeze_bias': squeeze_bias,
                 'squeeze_score': squeeze_score,
                 'interpretation': interpretation,
-                'timestamp': datetime.now()
+                'timestamp': get_current_time_ist()
             }
         except Exception as e:
             return {'success': False, 'error': str(e)}
@@ -767,7 +769,7 @@ class EnhancedMarketData:
             'sector_sentiment': sector_sentiment,
             'sector_score': sector_score,
             'all_sectors': sectors,
-            'timestamp': datetime.now()
+            'timestamp': get_current_time_ist()
         }
 
     # =========================================================================
@@ -787,7 +789,7 @@ class EnhancedMarketData:
         Returns:
             Dict with intraday seasonality analysis
         """
-        now = datetime.now()
+        now = get_current_time_ist()
         current_time = now.time()
         current_hour = now.hour
         current_minute = now.minute

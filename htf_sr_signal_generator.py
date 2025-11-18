@@ -10,6 +10,8 @@ Generates trading signals based on:
 """
 
 from datetime import datetime
+import pytz
+from config import IST, get_current_time_ist
 from typing import Dict, List, Optional
 import pandas as pd
 from indicators.htf_sr_strength_tracker import HTFSRStrengthTracker, get_emoji_for_strength, get_description_for_strength
@@ -131,7 +133,7 @@ class HTFSRSignalGenerator:
                     'distance_from_level': round(distance_from_support, 2),
                     'risk_reward': '1:1.5',
                     'market_sentiment': 'BULLISH',
-                    'timestamp': datetime.now(),
+                    'timestamp': get_current_time_ist(),
                     'status': 'ACTIVE',
                     'strength': strength_data  # Add strength analysis
                 }
@@ -192,7 +194,7 @@ class HTFSRSignalGenerator:
                     'distance_from_level': round(distance_from_resistance, 2),
                     'risk_reward': '1:1.5',
                     'market_sentiment': 'BEARISH',
-                    'timestamp': datetime.now(),
+                    'timestamp': get_current_time_ist(),
                     'status': 'ACTIVE',
                     'strength': strength_data  # Add strength analysis
                 }

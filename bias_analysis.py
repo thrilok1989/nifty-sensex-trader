@@ -12,7 +12,11 @@ from typing import Dict, List, Tuple, Optional
 import yfinance as yf
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import pytz
 warnings.filterwarnings('ignore')
+
+# Indian Standard Time (IST)
+IST = pytz.timezone('Asia/Kolkata')
 
 # Import Dhan API for Indian indices volume data
 try:
@@ -132,9 +136,10 @@ class BiasAnalysisPro:
                 interval_map = {'1m': '1', '5m': '5', '15m': '15', '1h': '60'}
                 dhan_interval = interval_map.get(interval, '5')
 
-                # Calculate date range for historical data (7 days)
-                to_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                from_date = (datetime.now() - timedelta(days=7)).replace(hour=9, minute=15, second=0).strftime('%Y-%m-%d %H:%M:%S')
+                # Calculate date range for historical data (7 days) - Use IST timezone
+                now_ist = datetime.now(IST)
+                to_date = now_ist.strftime('%Y-%m-%d %H:%M:%S')
+                from_date = (now_ist - timedelta(days=7)).replace(hour=9, minute=15, second=0).strftime('%Y-%m-%d %H:%M:%S')
 
                 # Fetch intraday data with 7 days historical range
                 result = fetcher.fetch_intraday_data(dhan_instrument, interval=dhan_interval, from_date=from_date, to_date=to_date)
@@ -1041,7 +1046,7 @@ class BiasAnalysisPro:
             'success': True,
             'symbol': symbol,
             'current_price': current_price,
-            'timestamp': datetime.now(),
+            'timestamp': datetime.now(IST),
             'bias_results': bias_results,
             'overall_bias': overall_bias,
             'overall_score': overall_score,

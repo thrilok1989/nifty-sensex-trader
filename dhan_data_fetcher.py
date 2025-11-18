@@ -28,7 +28,8 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 import streamlit as st
-from config import get_dhan_credentials
+import pytz
+from config import get_dhan_credentials, IST, get_current_time_ist
 
 # Dhan Security IDs (from instrument master)
 SECURITY_IDS = {
@@ -176,7 +177,7 @@ class DhanDataFetcher:
                                 'high': instrument_data.get('ohlc', {}).get('high'),
                                 'low': instrument_data.get('ohlc', {}).get('low'),
                                 'close': instrument_data.get('ohlc', {}).get('close'),
-                                'timestamp': datetime.now()
+                                'timestamp': get_current_time_ist()
                             }
                         else:
                             result[instrument] = {'success': False, 'error': 'No data found'}
@@ -215,11 +216,11 @@ class DhanDataFetcher:
 
         # Default dates
         if not from_date:
-            today = datetime.now()
+            today = get_current_time_ist()
             from_date = today.replace(hour=9, minute=15, second=0).strftime('%Y-%m-%d %H:%M:%S')
 
         if not to_date:
-            to_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            to_date = get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S')
 
         payload = {
             "securityId": security_id,
@@ -252,7 +253,7 @@ class DhanDataFetcher:
                     'data': df,
                     'instrument': instrument,
                     'interval': interval,
-                    'timestamp': datetime.now()
+                    'timestamp': get_current_time_ist()
                 }
             else:
                 return {'success': False, 'error': f'API returned {response.status_code}', 'message': response.text}
@@ -299,7 +300,7 @@ class DhanDataFetcher:
                     'data': data.get('data', {}),
                     'instrument': instrument,
                     'expiry': expiry,
-                    'timestamp': datetime.now()
+                    'timestamp': get_current_time_ist()
                 }
             else:
                 return {'success': False, 'error': f'API returned {response.status_code}', 'message': response.text}
@@ -341,7 +342,7 @@ class DhanDataFetcher:
                     'success': True,
                     'expiry_dates': data.get('data', []),
                     'instrument': instrument,
-                    'timestamp': datetime.now()
+                    'timestamp': get_current_time_ist()
                 }
             else:
                 return {'success': False, 'error': f'API returned {response.status_code}', 'message': response.text}
@@ -365,7 +366,7 @@ class DhanDataFetcher:
         """
         result = {
             'success': True,
-            'fetch_start': datetime.now(),
+            'fetch_start': get_current_time_ist(),
             'nifty': {},
             'sensex': {},
             'option_chain': {},
@@ -391,7 +392,7 @@ class DhanDataFetcher:
                 result['errors'].append(f"Sensex chart: {sensex_chart.get('error')}")
 
             # Wait to reach 10-second mark
-            elapsed = (datetime.now() - result['fetch_start']).total_seconds()
+            elapsed = (get_current_time_ist() - result['fetch_start']).total_seconds()
             if elapsed < 10:
                 time.sleep(10 - elapsed)
 
@@ -411,7 +412,7 @@ class DhanDataFetcher:
                 result['errors'].append(f"Sensex OHLC: {ohlc_data.get('SENSEX', {}).get('error')}")
 
             # Wait to reach 20-second mark
-            elapsed = (datetime.now() - result['fetch_start']).total_seconds()
+            elapsed = (get_current_time_ist() - result['fetch_start']).total_seconds()
             if elapsed < 20:
                 time.sleep(20 - elapsed)
 
@@ -424,7 +425,7 @@ class DhanDataFetcher:
                 result['nifty']['expiry_list'] = nifty_expiry
 
                 # Wait to reach 30-second mark
-                elapsed = (datetime.now() - result['fetch_start']).total_seconds()
+                elapsed = (get_current_time_ist() - result['fetch_start']).total_seconds()
                 if elapsed < 30:
                     time.sleep(30 - elapsed)
 
@@ -451,7 +452,7 @@ class DhanDataFetcher:
                 sensex_ltp = result['sensex']['ohlc']['last_price']
                 result['sensex']['atm_strike'] = round(sensex_ltp / 100) * 100
 
-            result['fetch_end'] = datetime.now()
+            result['fetch_end'] = get_current_time_ist()
             result['total_time'] = (result['fetch_end'] - result['fetch_start']).total_seconds()
             result['success'] = len(result['errors']) == 0
 
@@ -507,7 +508,7 @@ def get_nifty_data() -> Dict[str, Any]:
                     'expiry_dates': [],
                     'current_expiry': 'N/A',
                     'chart_data': None,
-                    'timestamp': datetime.now()
+                    'timestamp': get_current_time_ist()
                 }
 
             return {
@@ -521,7 +522,7 @@ def get_nifty_data() -> Dict[str, Any]:
                 'expiry_dates': expiry_list.get('expiry_dates', []),
                 'current_expiry': expiry_list.get('expiry_dates', [''])[0] if expiry_list.get('expiry_dates') else '',
                 'chart_data': nifty.get('chart', {}).get('data'),
-                'timestamp': datetime.now()
+                'timestamp': get_current_time_ist()
             }
         else:
             return {
@@ -572,7 +573,7 @@ def get_sensex_data() -> Dict[str, Any]:
                     'low': None,
                     'close': None,
                     'chart_data': None,
-                    'timestamp': datetime.now()
+                    'timestamp': get_current_time_ist()
                 }
 
             return {
@@ -584,7 +585,7 @@ def get_sensex_data() -> Dict[str, Any]:
                 'low': ohlc.get('low', 0),
                 'close': ohlc.get('close', 0),
                 'chart_data': sensex.get('chart', {}).get('data'),
-                'timestamp': datetime.now()
+                'timestamp': get_current_time_ist()
             }
         else:
             return {

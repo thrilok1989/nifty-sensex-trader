@@ -6,6 +6,8 @@ Includes comprehensive market context in all notifications
 
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
+import pytz
+from config import IST, get_current_time_ist
 from notification_rate_limiter import get_rate_limiter
 from telegram_alerts import TelegramBot
 import streamlit as st
@@ -32,7 +34,7 @@ class ProximityAlert:
         self.level_type = level_type
         self.distance = distance
         self.timeframe = timeframe
-        self.timestamp = datetime.now()
+        self.timestamp = get_current_time_ist()
 
     def to_dict(self) -> Dict:
         """Convert to dictionary"""

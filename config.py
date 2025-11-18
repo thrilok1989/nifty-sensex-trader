@@ -86,6 +86,41 @@ SIGNALS_REQUIRED = 3
 VOB_TOUCH_TOLERANCE = 5  # Points
 
 # ═══════════════════════════════════════════════════════════════════════
+# AUTO-TRADE SETTINGS
+# ═══════════════════════════════════════════════════════════════════════
+
+# Auto-trade feature - automatically executes trades when signals are generated
+AUTO_TRADE_ENABLED = False  # Master switch for auto-trading
+
+# Risk Management Settings
+AUTO_TRADE_CONFIG = {
+    'max_trades_per_day': 5,           # Maximum trades allowed per day
+    'max_concurrent_positions': 2,      # Maximum positions at the same time
+    'min_risk_reward_ratio': 1.5,      # Minimum R:R ratio for trade execution
+    'max_daily_loss': 5000,            # Maximum daily loss in rupees (circuit breaker)
+    'trade_cooldown_minutes': 15,      # Minimum time between trades in same direction
+    'require_sentiment_confirmation': True,  # Only trade when market sentiment matches signal
+    'allow_duplicate_strikes': False,   # Prevent multiple positions on same strike
+    'position_size_multiplier': 1.0,   # Multiply standard lot size (1.0 = 1 lot)
+}
+
+# Signal Source Configuration
+AUTO_TRADE_SIGNALS = {
+    'vob_signals': True,               # Auto-trade on VOB signals
+    'htf_sr_signals': True,            # Auto-trade on HTF S/R signals
+    'manual_signals': False,           # Auto-trade on manual signals (Tab 3)
+}
+
+# Safety Features
+AUTO_TRADE_SAFETY = {
+    'demo_mode': True,                 # Start in demo mode (no real orders)
+    'require_confirmation': False,     # Require manual confirmation before each trade
+    'stop_on_error': True,             # Disable auto-trade if any error occurs
+    'telegram_notifications': True,    # Send Telegram alerts for all auto-trades
+    'log_all_decisions': True,         # Log all trading decisions (even skipped)
+}
+
+# ═══════════════════════════════════════════════════════════════════════
 # UI SETTINGS
 # ═══════════════════════════════════════════════════════════════════════
 

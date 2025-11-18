@@ -35,6 +35,7 @@ from data_cache_manager import (
 )
 from vob_signal_generator import VOBSignalGenerator
 from htf_sr_signal_generator import HTFSRSignalGenerator
+from auto_trade_manager import AutoTradeManager
 
 # ═══════════════════════════════════════════════════════════════════════
 # PAGE CONFIG & PERFORMANCE OPTIMIZATION
@@ -426,6 +427,76 @@ with st.sidebar:
 
     st.divider()
 
+    # Auto-Trade Controls
+    st.subheader("🤖 Auto-Trade")
+
+    # Initialize auto-trade manager
+    if 'auto_trade_manager' not in st.session_state:
+        st.session_state.auto_trade_manager = AutoTradeManager()
+
+    auto_mgr = st.session_state.auto_trade_manager
+
+    # Master toggle
+    if AUTO_TRADE_ENABLED:
+        is_enabled = st.toggle(
+            "Enable Auto-Trading",
+            value=auto_mgr.is_enabled(),
+            help="Master switch for automatic trade execution"
+        )
+
+        if is_enabled != auto_mgr.is_enabled():
+            if is_enabled:
+                auto_mgr.enable()
+                st.success("✅ Auto-trading enabled!")
+            else:
+                auto_mgr.disable("User toggled off")
+                st.info("Auto-trading disabled")
+
+        # Status indicator
+        if auto_mgr.is_enabled():
+            mode_text = "🧪 DEMO" if AUTO_TRADE_SAFETY.get('demo_mode', True) else "🔴 LIVE"
+            st.success(f"✅ Active ({mode_text})")
+
+            # Statistics
+            stats = auto_mgr.get_statistics()
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Trades Today", stats['trades_today'])
+                st.metric("Active Positions", stats['active_positions'])
+            with col2:
+                st.metric("Success", stats['successful_trades'])
+                st.metric("Skipped", stats['skipped_signals'])
+
+            # Daily P&L
+            pnl = stats['daily_pnl']
+            if pnl >= 0:
+                st.metric("Daily P&L", f"₹{pnl:,.0f}", delta=f"+{pnl:,.0f}")
+            else:
+                st.metric("Daily P&L", f"₹{pnl:,.0f}", delta=f"{pnl:,.0f}")
+
+            # Settings summary
+            with st.expander("⚙️ Auto-Trade Settings"):
+                st.caption(f"**Max Trades/Day:** {AUTO_TRADE_CONFIG['max_trades_per_day']}")
+                st.caption(f"**Max Positions:** {AUTO_TRADE_CONFIG['max_concurrent_positions']}")
+                st.caption(f"**Min R:R Ratio:** {AUTO_TRADE_CONFIG['min_risk_reward_ratio']}")
+                st.caption(f"**Max Daily Loss:** ₹{AUTO_TRADE_CONFIG['max_daily_loss']:,}")
+                st.caption(f"**Cooldown:** {AUTO_TRADE_CONFIG['trade_cooldown_minutes']} min")
+                st.caption(f"**VOB Signals:** {'✅' if AUTO_TRADE_SIGNALS['vob_signals'] else '❌'}")
+                st.caption(f"**HTF SR Signals:** {'✅' if AUTO_TRADE_SIGNALS['htf_sr_signals'] else '❌'}")
+                st.caption(f"**Sentiment Check:** {'✅' if AUTO_TRADE_CONFIG['require_sentiment_confirmation'] else '❌'}")
+
+                if st.button("Reset Statistics"):
+                    auto_mgr.reset_statistics()
+                    st.success("Statistics reset!")
+                    st.rerun()
+        else:
+            st.info("⏸️ Paused")
+    else:
+        st.warning("⚠️ Disabled in config.py")
+        st.caption("Set AUTO_TRADE_ENABLED=True to enable")
+
+    st.divider()
+
     # Background Data Loading Status
     st.subheader("🔄 Data Loading")
     cache_manager = get_cache_manager()
@@ -614,6 +685,30 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
                     telegram_bot = TelegramBot()
                     telegram_bot.send_vob_entry_signal(nifty_signal)
 
+                    # Auto-trade execution (if enabled)
+                    if 'auto_trade_manager' in st.session_state:
+                        try:
+                            # Get expiry date
+                            expiry_date = nifty_data.get('current_expiry', '')
+                            # Process signal for auto-trade
+                            auto_result = st.session_state.auto_trade_manager.process_signal(
+                                signal=nifty_signal,
+                                nifty_price=nifty_spot_for_signal,
+                                expiry_date=expiry_date,
+                                signal_source='VOB'
+                            )
+                            # Log result in session state for display
+                            if auto_result.get('success'):
+                                if 'auto_trade_results' not in st.session_state:
+                                    st.session_state.auto_trade_results = []
+                                st.session_state.auto_trade_results.append({
+                                    'timestamp': get_current_time_ist(),
+                                    'signal': nifty_signal,
+                                    'result': auto_result
+                                })
+                        except Exception as e:
+                            print(f"Auto-trade error: {e}")
+
         # Fetch chart data and calculate VOB for SENSEX (using cached function)
         df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
 
@@ -665,6 +760,31 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
                         # Send telegram notification
                         telegram_bot = TelegramBot()
                         telegram_bot.send_vob_entry_signal(sensex_signal)
+
+                        # Auto-trade execution (if enabled)
+                        if 'auto_trade_manager' in st.session_state:
+                            try:
+                                # For SENSEX, convert price to NIFTY equivalent for strike calculation
+                                nifty_equivalent = sensex_spot_for_signal / 3.3
+                                expiry_date = sensex_data.get('current_expiry', nifty_data.get('current_expiry', ''))
+                                # Process signal for auto-trade
+                                auto_result = st.session_state.auto_trade_manager.process_signal(
+                                    signal=sensex_signal,
+                                    nifty_price=nifty_equivalent,
+                                    expiry_date=expiry_date,
+                                    signal_source='VOB'
+                                )
+                                # Log result in session state for display
+                                if auto_result.get('success'):
+                                    if 'auto_trade_results' not in st.session_state:
+                                        st.session_state.auto_trade_results = []
+                                    st.session_state.auto_trade_results.append({
+                                        'timestamp': get_current_time_ist(),
+                                        'signal': sensex_signal,
+                                        'result': auto_result
+                                    })
+                            except Exception as e:
+                                print(f"Auto-trade error (SENSEX): {e}")
 
         # Clean up old signals (older than 30 minutes)
         st.session_state.active_vob_signals = [
@@ -819,6 +939,30 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
                         telegram_bot = TelegramBot()
                         telegram_bot.send_htf_sr_entry_signal(nifty_htf_signal)
 
+                        # Auto-trade execution (if enabled)
+                        if 'auto_trade_manager' in st.session_state:
+                            try:
+                                # Get expiry date
+                                expiry_date = nifty_data.get('current_expiry', '')
+                                # Process signal for auto-trade
+                                auto_result = st.session_state.auto_trade_manager.process_signal(
+                                    signal=nifty_htf_signal,
+                                    nifty_price=nifty_spot_htf,
+                                    expiry_date=expiry_date,
+                                    signal_source='HTF_SR'
+                                )
+                                # Log result in session state for display
+                                if auto_result.get('success'):
+                                    if 'auto_trade_results' not in st.session_state:
+                                        st.session_state.auto_trade_results = []
+                                    st.session_state.auto_trade_results.append({
+                                        'timestamp': get_current_time_ist(),
+                                        'signal': nifty_htf_signal,
+                                        'result': auto_result
+                                    })
+                            except Exception as e:
+                                print(f"Auto-trade error (HTF SR): {e}")
+
             # Fetch chart data for SENSEX (using cached function)
             df_sensex = get_cached_chart_data('^BSESN', '7d', '1m')
 
@@ -869,6 +1013,31 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
                         # Send telegram notification
                         telegram_bot = TelegramBot()
                         telegram_bot.send_htf_sr_entry_signal(sensex_htf_signal)
+
+                        # Auto-trade execution (if enabled)
+                        if 'auto_trade_manager' in st.session_state:
+                            try:
+                                # For SENSEX, convert price to NIFTY equivalent for strike calculation
+                                nifty_equivalent = sensex_spot_htf / 3.3
+                                expiry_date = sensex_data.get('current_expiry', nifty_data.get('current_expiry', ''))
+                                # Process signal for auto-trade
+                                auto_result = st.session_state.auto_trade_manager.process_signal(
+                                    signal=sensex_htf_signal,
+                                    nifty_price=nifty_equivalent,
+                                    expiry_date=expiry_date,
+                                    signal_source='HTF_SR'
+                                )
+                                # Log result in session state for display
+                                if auto_result.get('success'):
+                                    if 'auto_trade_results' not in st.session_state:
+                                        st.session_state.auto_trade_results = []
+                                    st.session_state.auto_trade_results.append({
+                                        'timestamp': get_current_time_ist(),
+                                        'signal': sensex_htf_signal,
+                                        'result': auto_result
+                                    })
+                            except Exception as e:
+                                print(f"Auto-trade error (SENSEX HTF SR): {e}")
 
             # Clean up old HTF S/R signals (older than 30 minutes)
             st.session_state.active_htf_sr_signals = [

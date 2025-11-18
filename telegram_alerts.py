@@ -194,6 +194,126 @@ class TelegramBot:
         return self.send_message(message.strip())
 
 
+    def send_vob_status_summary(self, nifty_data: dict, sensex_data: dict):
+        """Send VOB status summary for both NIFTY and SENSEX"""
+
+        def format_vob_block(symbol: str, vob_type: str, block_data: dict):
+            """Format a single VOB block display"""
+            emoji = "🟢" if vob_type == "Bullish" else "🔴"
+            strength = block_data.get('strength_score', 0)
+            trend = block_data.get('trend', 'STABLE')
+            lower = block_data.get('lower', 0)
+            upper = block_data.get('upper', 0)
+
+            # Determine trend emoji
+            if trend == "STRENGTHENING":
+                trend_emoji = "🔺"
+                trend_text = "STRENGTHENING"
+            elif trend == "WEAKENING":
+                trend_emoji = "🔻"
+                trend_text = "WEAKENING"
+            else:
+                trend_emoji = "➖"
+                trend_text = "STABLE"
+
+            return f"""
+{emoji} <b>{vob_type} VOB:</b> ₹{lower:.2f} - ₹{upper:.2f}
+
+<b>Strength:</b> {strength:.1f}/100 {trend_emoji} {trend_text}"""
+
+        message_parts = [
+            "<b>📊 Volume Order Block Status</b>",
+            "",
+            "<b>NIFTY VOB</b>"
+        ]
+
+        # Add NIFTY VOB data
+        if nifty_data.get('bullish'):
+            message_parts.append(format_vob_block("NIFTY", "Bullish", nifty_data['bullish']))
+        else:
+            message_parts.append("🟢 <b>Bullish VOB:</b> No data available")
+
+        if nifty_data.get('bearish'):
+            message_parts.append(format_vob_block("NIFTY", "Bearish", nifty_data['bearish']))
+        else:
+            message_parts.append("🔴 <b>Bearish VOB:</b> No data available")
+
+        message_parts.extend(["", "<b>SENSEX VOB</b>"])
+
+        # Add SENSEX VOB data
+        if sensex_data.get('bullish'):
+            message_parts.append(format_vob_block("SENSEX", "Bullish", sensex_data['bullish']))
+        else:
+            message_parts.append("🟢 <b>Bullish VOB:</b> No data available")
+
+        if sensex_data.get('bearish'):
+            message_parts.append(format_vob_block("SENSEX", "Bearish", sensex_data['bearish']))
+        else:
+            message_parts.append("🔴 <b>Bearish VOB:</b> No data available")
+
+        message_parts.extend([
+            "",
+            f"<i>Updated: {datetime.now().strftime('%I:%M:%S %p')}</i>"
+        ])
+
+        message = "\n".join(message_parts)
+        return self.send_message(message)
+
+    def send_htf_sr_status_summary(self, nifty_htf: dict, sensex_htf: dict):
+        """Send HTF Support/Resistance status summary"""
+
+        def format_htf_levels(symbol: str, htf_data: dict):
+            """Format HTF S/R levels for display"""
+            lines = [f"<b>{symbol}</b>"]
+
+            for timeframe, levels in htf_data.items():
+                if not levels:
+                    continue
+
+                # Format timeframe for display
+                tf_display = timeframe.replace('T', 'min')
+
+                support = levels.get('support')
+                resistance = levels.get('resistance')
+                support_strength = levels.get('support_strength', {})
+                resistance_strength = levels.get('resistance_strength', {})
+
+                if support:
+                    s_score = support_strength.get('strength_score', 0)
+                    s_trend = support_strength.get('trend', 'STABLE')
+                    s_emoji = "🔺" if s_trend == "STRENGTHENING" else "🔻" if s_trend == "WEAKENING" else "➖"
+                    lines.append(f"  🟢 {tf_display} Support: ₹{support:.2f} ({s_score:.1f}/100 {s_emoji})")
+
+                if resistance:
+                    r_score = resistance_strength.get('strength_score', 0)
+                    r_trend = resistance_strength.get('trend', 'STABLE')
+                    r_emoji = "🔺" if r_trend == "STRENGTHENING" else "🔻" if r_trend == "WEAKENING" else "➖"
+                    lines.append(f"  🔴 {tf_display} Resistance: ₹{resistance:.2f} ({r_score:.1f}/100 {r_emoji})")
+
+            return "\n".join(lines) if len(lines) > 1 else f"<b>{symbol}</b>\n  No HTF data available"
+
+        message_parts = [
+            "<b>📊 HTF Support/Resistance Status</b>",
+            "<b>5min, 10min, 15min Timeframes</b>",
+            ""
+        ]
+
+        # Add NIFTY HTF data
+        message_parts.append(format_htf_levels("NIFTY", nifty_htf))
+        message_parts.append("")
+
+        # Add SENSEX HTF data
+        message_parts.append(format_htf_levels("SENSEX", sensex_htf))
+
+        message_parts.extend([
+            "",
+            f"<i>Updated: {datetime.now().strftime('%I:%M:%S %p')}</i>"
+        ])
+
+        message = "\n".join(message_parts)
+        return self.send_message(message)
+
+
 def send_test_message():
     """Send test message to verify Telegram setup"""
     bot = TelegramBot()

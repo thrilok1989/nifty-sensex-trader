@@ -224,6 +224,9 @@ if 'active_htf_sr_signals' not in st.session_state:
 if 'last_htf_sr_check_time' not in st.session_state:
     st.session_state.last_htf_sr_check_time = 0
 
+if 'last_vob_status_update_time' not in st.session_state:
+    st.session_state.last_vob_status_update_time = 0
+
 # VOB and HTF data storage
 if 'vob_data_nifty' not in st.session_state:
     st.session_state.vob_data_nifty = None
@@ -636,6 +639,134 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
             if (current_time - sig['timestamp'].timestamp()) < 1800
         ]
 
+        # ═══════════════════════════════════════════════════════════════
+        # PROXIMITY ALERTS - Check if price is near VOB levels
+        # ═══════════════════════════════════════════════════════════════
+        try:
+            proximity_system = get_proximity_alert_system(cooldown_minutes=10)
+
+            # Check NIFTY VOB proximity
+            if st.session_state.vob_data_nifty and nifty_data:
+                nifty_price = nifty_data['spot_price']
+
+                # Convert HTF data to list format expected by proximity system
+                htf_data_list = []
+                if st.session_state.htf_data_nifty:
+                    for timeframe, levels in st.session_state.htf_data_nifty.items():
+                        if levels:
+                            htf_data_list.append({
+                                'timeframe': timeframe,
+                                'pivot_high': levels.get('resistance'),
+                                'pivot_low': levels.get('support')
+                            })
+
+                # Process proximity alerts for NIFTY
+                nifty_alerts, nifty_notifications = proximity_system.process_market_data(
+                    symbol='NIFTY',
+                    current_price=nifty_price,
+                    vob_data=st.session_state.vob_data_nifty,
+                    htf_data=htf_data_list
+                )
+
+            # Check SENSEX VOB proximity
+            if st.session_state.vob_data_sensex and sensex_data:
+                sensex_price = sensex_data['spot_price']
+
+                # Convert HTF data to list format
+                htf_data_list_sensex = []
+                if st.session_state.htf_data_sensex:
+                    for timeframe, levels in st.session_state.htf_data_sensex.items():
+                        if levels:
+                            htf_data_list_sensex.append({
+                                'timeframe': timeframe,
+                                'pivot_high': levels.get('resistance'),
+                                'pivot_low': levels.get('support')
+                            })
+
+                # Process proximity alerts for SENSEX
+                sensex_alerts, sensex_notifications = proximity_system.process_market_data(
+                    symbol='SENSEX',
+                    current_price=sensex_price,
+                    vob_data=st.session_state.vob_data_sensex,
+                    htf_data=htf_data_list_sensex
+                )
+
+        except Exception as prox_e:
+            # Silently fail proximity alerts
+            pass
+
+        # ═══════════════════════════════════════════════════════════════
+        # PERIODIC VOB STATUS UPDATES via Telegram (every 30 minutes)
+        # ═══════════════════════════════════════════════════════════════
+        # Send VOB status summary to Telegram every 30 minutes (1800 seconds)
+        if (current_time - st.session_state.last_vob_status_update_time) > 1800:
+            st.session_state.last_vob_status_update_time = current_time
+
+            try:
+                from indicators.vob_strength_tracker import VOBStrengthTracker
+                vob_tracker = VOBStrengthTracker()
+
+                # Prepare NIFTY VOB data
+                nifty_vob_summary = {}
+                if st.session_state.vob_data_nifty and df is not None:
+                    bullish_blocks = st.session_state.vob_data_nifty.get('bullish_blocks', [])
+                    bearish_blocks = st.session_state.vob_data_nifty.get('bearish_blocks', [])
+
+                    if bullish_blocks:
+                        latest_bull = bullish_blocks[-1]
+                        bull_strength = vob_tracker.calculate_strength(latest_bull, df)
+                        nifty_vob_summary['bullish'] = {
+                            'lower': latest_bull['lower'],
+                            'upper': latest_bull['upper'],
+                            'strength_score': bull_strength['strength_score'],
+                            'trend': bull_strength['trend']
+                        }
+
+                    if bearish_blocks:
+                        latest_bear = bearish_blocks[-1]
+                        bear_strength = vob_tracker.calculate_strength(latest_bear, df)
+                        nifty_vob_summary['bearish'] = {
+                            'lower': latest_bear['lower'],
+                            'upper': latest_bear['upper'],
+                            'strength_score': bear_strength['strength_score'],
+                            'trend': bear_strength['trend']
+                        }
+
+                # Prepare SENSEX VOB data
+                sensex_vob_summary = {}
+                if st.session_state.vob_data_sensex and df_sensex is not None:
+                    bullish_blocks = st.session_state.vob_data_sensex.get('bullish_blocks', [])
+                    bearish_blocks = st.session_state.vob_data_sensex.get('bearish_blocks', [])
+
+                    if bullish_blocks:
+                        latest_bull = bullish_blocks[-1]
+                        bull_strength = vob_tracker.calculate_strength(latest_bull, df_sensex)
+                        sensex_vob_summary['bullish'] = {
+                            'lower': latest_bull['lower'],
+                            'upper': latest_bull['upper'],
+                            'strength_score': bull_strength['strength_score'],
+                            'trend': bull_strength['trend']
+                        }
+
+                    if bearish_blocks:
+                        latest_bear = bearish_blocks[-1]
+                        bear_strength = vob_tracker.calculate_strength(latest_bear, df_sensex)
+                        sensex_vob_summary['bearish'] = {
+                            'lower': latest_bear['lower'],
+                            'upper': latest_bear['upper'],
+                            'strength_score': bear_strength['strength_score'],
+                            'trend': bear_strength['trend']
+                        }
+
+                # Send VOB status summary to Telegram
+                if nifty_vob_summary or sensex_vob_summary:
+                    telegram_bot = TelegramBot()
+                    telegram_bot.send_vob_status_summary(nifty_vob_summary, sensex_vob_summary)
+
+            except Exception as vob_status_e:
+                # Silently fail VOB status updates
+                pass
+
     except Exception as e:
         # Silently fail - don't disrupt the app
         pass
@@ -989,6 +1120,85 @@ with col2:
             st.info("No bearish VOB data available")
     else:
         st.info("VOB data loading...")
+
+# Add button to send VOB status to Telegram
+st.markdown("")
+col1, col2, col3 = st.columns([1, 1, 1])
+with col2:
+    if st.button("📱 Send VOB Status to Telegram", use_container_width=True):
+        try:
+            from indicators.vob_strength_tracker import VOBStrengthTracker
+            vob_tracker = VOBStrengthTracker()
+
+            # Prepare NIFTY VOB data
+            nifty_vob_summary = {}
+            if st.session_state.vob_data_nifty:
+                df_nifty = get_cached_chart_data('^NSEI', '1d', '1m')
+                if df_nifty is not None:
+                    bullish_blocks = st.session_state.vob_data_nifty.get('bullish_blocks', [])
+                    bearish_blocks = st.session_state.vob_data_nifty.get('bearish_blocks', [])
+
+                    if bullish_blocks:
+                        latest_bull = bullish_blocks[-1]
+                        bull_strength = vob_tracker.calculate_strength(latest_bull, df_nifty)
+                        nifty_vob_summary['bullish'] = {
+                            'lower': latest_bull['lower'],
+                            'upper': latest_bull['upper'],
+                            'strength_score': bull_strength['strength_score'],
+                            'trend': bull_strength['trend']
+                        }
+
+                    if bearish_blocks:
+                        latest_bear = bearish_blocks[-1]
+                        bear_strength = vob_tracker.calculate_strength(latest_bear, df_nifty)
+                        nifty_vob_summary['bearish'] = {
+                            'lower': latest_bear['lower'],
+                            'upper': latest_bear['upper'],
+                            'strength_score': bear_strength['strength_score'],
+                            'trend': bear_strength['trend']
+                        }
+
+            # Prepare SENSEX VOB data
+            sensex_vob_summary = {}
+            if st.session_state.vob_data_sensex:
+                df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
+                if df_sensex is not None:
+                    bullish_blocks = st.session_state.vob_data_sensex.get('bullish_blocks', [])
+                    bearish_blocks = st.session_state.vob_data_sensex.get('bearish_blocks', [])
+
+                    if bullish_blocks:
+                        latest_bull = bullish_blocks[-1]
+                        bull_strength = vob_tracker.calculate_strength(latest_bull, df_sensex)
+                        sensex_vob_summary['bullish'] = {
+                            'lower': latest_bull['lower'],
+                            'upper': latest_bull['upper'],
+                            'strength_score': bull_strength['strength_score'],
+                            'trend': bull_strength['trend']
+                        }
+
+                    if bearish_blocks:
+                        latest_bear = bearish_blocks[-1]
+                        bear_strength = vob_tracker.calculate_strength(latest_bear, df_sensex)
+                        sensex_vob_summary['bearish'] = {
+                            'lower': latest_bear['lower'],
+                            'upper': latest_bear['upper'],
+                            'strength_score': bear_strength['strength_score'],
+                            'trend': bear_strength['trend']
+                        }
+
+            # Send to Telegram
+            if nifty_vob_summary or sensex_vob_summary:
+                telegram_bot = TelegramBot()
+                success = telegram_bot.send_vob_status_summary(nifty_vob_summary, sensex_vob_summary)
+                if success:
+                    st.success("✅ VOB status sent to Telegram!")
+                else:
+                    st.error("❌ Failed to send to Telegram. Check your Telegram credentials.")
+            else:
+                st.warning("⚠️ No VOB data available to send")
+
+        except Exception as e:
+            st.error(f"❌ Error sending VOB status: {str(e)}")
 
 st.divider()
 

@@ -180,28 +180,52 @@ nifty_data = fetch_nifty_data()
 
 if not nifty_data['success']:
     st.error(f"❌ Failed to fetch NIFTY data: {nifty_data.get('error')}")
+
+    # Show help message if it's a credentials error
+    if nifty_data.get('error') and ('credentials' in nifty_data['error'].lower() or 'secrets.toml' in nifty_data['error'].lower()):
+        st.warning("""
+        **Setup Required:**
+        1. Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`
+        2. Fill in your DhanHQ API credentials
+        3. Restart the application
+        """)
     st.stop()
 
 # Display market data
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric(
-        "NIFTY Spot",
-        f"₹{nifty_data['spot_price']:,.2f}",
-        delta=None
-    )
+    # Handle None or 0 values for spot price
+    if nifty_data.get('spot_price') is not None and nifty_data['spot_price'] != 0:
+        st.metric(
+            "NIFTY Spot",
+            f"₹{nifty_data['spot_price']:,.2f}",
+            delta=None
+        )
+    else:
+        st.metric(
+            "NIFTY Spot",
+            "N/A",
+            delta=None
+        )
 
 with col2:
-    st.metric(
-        "ATM Strike",
-        f"{nifty_data['atm_strike']}"
-    )
+    # Handle None or 0 values for ATM strike
+    if nifty_data.get('atm_strike') is not None and nifty_data['atm_strike'] != 0:
+        st.metric(
+            "ATM Strike",
+            f"{nifty_data['atm_strike']}"
+        )
+    else:
+        st.metric(
+            "ATM Strike",
+            "N/A"
+        )
 
 with col3:
     st.metric(
         "Current Expiry",
-        nifty_data['current_expiry']
+        nifty_data.get('current_expiry', 'N/A')
     )
 
 with col4:

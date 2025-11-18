@@ -455,21 +455,35 @@ if not nifty_data or not nifty_data.get('success'):
     # Show loading message (non-blocking)
     # Background thread will load data and it will appear on next refresh
     st.info("⏳ Loading NIFTY data in background... Please wait a moment and the data will appear automatically.")
-    st.info("💡 **Performance Note:** Tab and button clicks should be instant now. Data loads in background without blocking UI.")
+
+    # Check if there's an error message to display
+    if nifty_data and nifty_data.get('error'):
+        st.error(f"⚠️ **Error:** {nifty_data['error']}")
+
+        # Show help message if it's a credentials error
+        if 'credentials' in nifty_data['error'].lower() or 'secrets.toml' in nifty_data['error'].lower():
+            st.warning("""
+            **Setup Required:**
+            1. Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`
+            2. Fill in your DhanHQ API credentials
+            3. Restart the application
+            """)
+    else:
+        st.info("💡 **Performance Note:** Tab and button clicks should be instant now. Data loads in background without blocking UI.")
 
     # Use a placeholder/default data structure to prevent errors
     nifty_data = {
         'success': False,
-        'spot_price': 0,
-        'atm_strike': 0,
-        'open': 0,
-        'high': 0,
-        'low': 0,
-        'close': 0,
+        'spot_price': None,
+        'atm_strike': None,
+        'open': None,
+        'high': None,
+        'low': None,
+        'close': None,
         'expiry_dates': [],
-        'current_expiry': 'Loading...',
+        'current_expiry': 'N/A',
         'chart_data': None,
-        'error': 'Loading...',
+        'error': nifty_data.get('error', 'Loading...') if nifty_data else 'Loading...',
         'timestamp': None
     }
     # Note: We don't stop() here - let the app continue and show what it can
@@ -756,22 +770,39 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric(
-        "NIFTY Spot",
-        f"₹{nifty_data['spot_price']:,.2f}",
-        delta=None
-    )
+    # Handle None or 0 values for spot price
+    if nifty_data.get('spot_price') is not None and nifty_data['spot_price'] != 0:
+        st.metric(
+            "NIFTY Spot",
+            f"₹{nifty_data['spot_price']:,.2f}",
+            delta=None
+        )
+    else:
+        st.metric(
+            "NIFTY Spot",
+            "N/A",
+            delta=None
+        )
+        if nifty_data.get('error'):
+            st.error(f"⚠️ {nifty_data['error']}")
 
 with col2:
-    st.metric(
-        "ATM Strike",
-        f"{nifty_data['atm_strike']}"
-    )
+    # Handle None or 0 values for ATM strike
+    if nifty_data.get('atm_strike') is not None and nifty_data['atm_strike'] != 0:
+        st.metric(
+            "ATM Strike",
+            f"{nifty_data['atm_strike']}"
+        )
+    else:
+        st.metric(
+            "ATM Strike",
+            "N/A"
+        )
 
 with col3:
     st.metric(
         "Current Expiry",
-        nifty_data['current_expiry']
+        nifty_data.get('current_expiry', 'N/A')
     )
 
 with col4:

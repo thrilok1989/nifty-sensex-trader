@@ -1,6 +1,8 @@
 import json
 import os
 from datetime import datetime
+import pytz
+from config import IST, get_current_time_ist
 from typing import Dict, Optional
 
 SIGNALS_FILE = "trading_signals.json"
@@ -26,7 +28,7 @@ class SignalManager:
     def create_setup(self, index: str, direction: str, 
                      vob_support: float, vob_resistance: float) -> str:
         """Create new signal setup"""
-        signal_id = f"{index}_{direction}_{int(vob_support)}_{int(vob_resistance)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        signal_id = f"{index}_{direction}_{int(vob_support)}_{int(vob_resistance)}_{get_current_time_ist().strftime('%Y%m%d_%H%M%S')}"
         
         self.signals[signal_id] = {
             'index': index,
@@ -36,7 +38,7 @@ class SignalManager:
             'signals': [],
             'signal_count': 0,
             'status': 'pending',
-            'created_at': datetime.now().isoformat(),
+            'created_at': get_current_time_ist().isoformat(),
             'executed_at': None,
             'order_id': None
         }
@@ -50,7 +52,7 @@ class SignalManager:
             return False
         
         self.signals[signal_id]['signals'].append({
-            'timestamp': datetime.now().isoformat()
+            'timestamp': get_current_time_ist().isoformat()
         })
         self.signals[signal_id]['signal_count'] += 1
         
@@ -80,7 +82,7 @@ class SignalManager:
         """Mark as executed"""
         if signal_id in self.signals:
             self.signals[signal_id]['status'] = 'executed'
-            self.signals[signal_id]['executed_at'] = datetime.now().isoformat()
+            self.signals[signal_id]['executed_at'] = get_current_time_ist().isoformat()
             self.signals[signal_id]['order_id'] = order_id
             self._save_signals()
     

@@ -9,6 +9,10 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import yfinance as yf
 from datetime import datetime, timedelta
+import pytz
+
+# Indian Standard Time (IST)
+IST = pytz.timezone('Asia/Kolkata')
 
 from indicators.volume_order_blocks import VolumeOrderBlocks
 from indicators.htf_support_resistance import HTFSupportResistance
@@ -76,8 +80,8 @@ class AdvancedChartAnalysis:
             }
             dhan_interval = interval_map.get(interval, '1')
 
-            # Calculate date range based on period
-            to_date = datetime.now()
+            # Calculate date range based on period - Use IST timezone
+            to_date = datetime.now(IST)
             if period == '1d':
                 from_date = to_date - timedelta(days=1)
             elif period == '5d':

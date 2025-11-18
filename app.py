@@ -1728,7 +1728,7 @@ with tab3:
                                         'entry': details['entry_level'],
                                         'sl': details['sl_price'],
                                         'target': details['target_price'],
-                                        'timestamp': datetime.now().isoformat(),
+                                        'timestamp': get_current_time_ist().isoformat(),
                                         'status': 'active'
                                     }
 
@@ -2536,7 +2536,7 @@ with tab7:
 
         # Check if enough time has passed
         from datetime import timedelta
-        time_since_update = (datetime.now() - st.session_state.last_chart_update).total_seconds()
+        time_since_update = (get_current_time_ist() - st.session_state.last_chart_update).total_seconds()
         if time_since_update >= refresh_seconds:
             should_auto_refresh = True
             st.session_state.chart_needs_refresh = True
@@ -2550,8 +2550,8 @@ with tab7:
 
                 if df is not None and len(df) > 0:
                     st.session_state.chart_data = df
-                    st.session_state.last_chart_update = datetime.now()
-                    st.success(f"✅ Loaded {len(df)} candles | Last updated: {st.session_state.last_chart_update.strftime('%H:%M:%S')}")
+                    st.session_state.last_chart_update = get_current_time_ist()
+                    st.success(f"✅ Loaded {len(df)} candles | Last updated (IST): {st.session_state.last_chart_update.strftime('%H:%M:%S %Z')}")
                 else:
                     st.error("❌ Failed to fetch data. Try a different period or interval.")
                     st.session_state.chart_data = None
@@ -2571,7 +2571,7 @@ with tab7:
             "5m": 300
         }.get(chart_auto_refresh, 60)
 
-        time_since_update = (datetime.now() - st.session_state.last_chart_update).total_seconds()
+        time_since_update = (get_current_time_ist() - st.session_state.last_chart_update).total_seconds()
         time_until_refresh = max(0, refresh_seconds - time_since_update)
 
         if time_until_refresh <= 0:
@@ -3274,4 +3274,4 @@ with tab7:
 # ═══════════════════════════════════════════════════════════════════════
 
 st.divider()
-st.caption(f"Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Auto-refresh: {AUTO_REFRESH_INTERVAL}s")
+st.caption(f"Last Updated (IST): {get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')} | Auto-refresh: {AUTO_REFRESH_INTERVAL}s")

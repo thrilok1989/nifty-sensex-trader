@@ -1,4 +1,17 @@
 import streamlit as st
+import pytz
+from datetime import datetime
+
+# ═══════════════════════════════════════════════════════════════════════
+# TIMEZONE CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════════
+
+# Indian Standard Time (IST) - Use this for all datetime operations
+IST = pytz.timezone('Asia/Kolkata')
+
+def get_current_time_ist():
+    """Get current time in IST timezone"""
+    return datetime.now(IST)
 
 # ═══════════════════════════════════════════════════════════════════════
 # CREDENTIALS

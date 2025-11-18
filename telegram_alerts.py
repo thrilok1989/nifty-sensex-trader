@@ -1,6 +1,6 @@
 import requests
 import streamlit as st
-from config import get_telegram_credentials
+from config import get_telegram_credentials, IST, get_current_time_ist
 from datetime import datetime
 
 class TelegramBot:
@@ -43,7 +43,7 @@ class TelegramBot:
 <b>VOB Resistance:</b> {setup['vob_resistance']}
 
 <b>Status:</b> ✅ Ready to Trade
-<b>Time:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+<b>Time (IST):</b> {get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')}
 
 📱 Open app to execute trade
         """
@@ -64,7 +64,7 @@ class TelegramBot:
 <b>VOB {vob_type}:</b> {vob_level}
 
 <b>Status:</b> 🚀 Ready to Execute
-<b>Time:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+<b>Time (IST):</b> {get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')}
 
 ⚡ Execute trade NOW!
         """
@@ -85,7 +85,7 @@ class TelegramBot:
 <b>Stop Loss:</b> {sl}
 <b>Target:</b> {target}
 
-<b>Time:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+<b>Time (IST):</b> {get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')}
 
 📊 Monitor position in app
         """
@@ -101,7 +101,7 @@ class TelegramBot:
 
 <b>Error:</b> {error}
 
-<b>Time:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+<b>Time (IST):</b> {get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')}
 
 ⚠️ Check app for details
         """
@@ -116,7 +116,7 @@ class TelegramBot:
 <b>Order ID:</b> {order_id}
 <b>P&L:</b> ₹{pnl:,.2f}
 
-<b>Time:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+<b>Time (IST):</b> {get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')}
         """
         return self.send_message(message.strip())
 
@@ -253,7 +253,7 @@ class TelegramBot:
 
         message_parts.extend([
             "",
-            f"<i>Updated: {datetime.now().strftime('%I:%M:%S %p')}</i>"
+            f"<i>Updated (IST): {get_current_time_ist().strftime('%I:%M:%S %p %Z')}</i>"
         ])
 
         message = "\n".join(message_parts)
@@ -307,7 +307,7 @@ class TelegramBot:
 
         message_parts.extend([
             "",
-            f"<i>Updated: {datetime.now().strftime('%I:%M:%S %p')}</i>"
+            f"<i>Updated (IST): {get_current_time_ist().strftime('%I:%M:%S %p %Z')}</i>"
         ])
 
         message = "\n".join(message_parts)
@@ -323,6 +323,6 @@ def send_test_message():
 
 Your trading alerts are now active.
 
-<b>Test Time:</b> """ + datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+<b>Test Time (IST):</b> """ + get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')
         return bot.send_message(message.strip())
     return False

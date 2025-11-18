@@ -1492,6 +1492,72 @@ elif selected_tab == "🎯 Bias Analysis Pro":
         **Note:** This tool is converted from the Pine Script "Smart Trading Dashboard - Enhanced Pro" indicator with 80% accuracy.
         """)
 
+    # ═════════════════════════════════════════════════════════════════════
+    # ENHANCED MARKET DATA SECTION
+    # ═════════════════════════════════════════════════════════════════════
+
+    st.markdown("---")
+    st.markdown("---")
+
+    # Add enhanced market data display
+    st.subheader("🌐 Enhanced Market Data Analysis")
+    st.caption("Comprehensive market data from Dhan API + Yahoo Finance | India VIX, Sector Rotation, Global Markets, Intermarket Data, Gamma Squeeze, Intraday Timing")
+
+    # Button to fetch enhanced data
+    col1, col2, col3 = st.columns([2, 1, 1])
+
+    with col1:
+        if st.button("📊 Fetch Enhanced Market Data", type="primary", use_container_width=True, key="fetch_enhanced_data_btn"):
+            with st.spinner("Fetching comprehensive market data from all sources..."):
+                try:
+                    from enhanced_market_data import get_enhanced_market_data
+                    enhanced_data = get_enhanced_market_data()
+                    st.session_state.enhanced_market_data = enhanced_data
+                    st.success("✅ Enhanced market data fetched successfully!")
+                except Exception as e:
+                    st.error(f"❌ Failed to fetch enhanced data: {e}")
+                    import traceback
+                    st.error(traceback.format_exc())
+
+    with col2:
+        if 'enhanced_market_data' in st.session_state:
+            if st.button("🗑️ Clear Data", use_container_width=True, key="clear_enhanced_data_btn"):
+                del st.session_state.enhanced_market_data
+                st.rerun()
+
+    with col3:
+        if 'enhanced_market_data' in st.session_state:
+            data = st.session_state.enhanced_market_data
+            st.caption(f"Last Updated: {data['timestamp'].strftime('%H:%M:%S')}")
+
+    # Display enhanced market data if available
+    if 'enhanced_market_data' in st.session_state:
+        try:
+            from enhanced_market_display import render_enhanced_market_data_tab
+            render_enhanced_market_data_tab(st.session_state.enhanced_market_data)
+        except Exception as e:
+            st.error(f"❌ Error displaying enhanced data: {e}")
+            import traceback
+            st.error(traceback.format_exc())
+    else:
+        st.info("""
+        👆 Click "Fetch Enhanced Market Data" to load comprehensive market analysis including:
+
+        **Data Sources:**
+        - 📊 **Dhan API:** India VIX, All Sector Indices (IT, Auto, Pharma, Metal, FMCG, Realty, Energy)
+        - 🌍 **Yahoo Finance:** Global Markets (S&P 500, Nasdaq, Dow, Nikkei, Hang Seng, etc.)
+        - 💰 **Intermarket:** USD Index, Crude Oil, Gold, USD/INR, US 10Y Treasury, Bitcoin
+
+        **Advanced Analysis:**
+        - ⚡ **India VIX Analysis:** Fear & Greed Index with sentiment scoring
+        - 🏢 **Sector Rotation Model:** Identify market leadership and rotation patterns
+        - 🎯 **Gamma Squeeze Detection:** Option market makers hedging analysis
+        - ⏰ **Intraday Seasonality:** Time-based trading recommendations
+        - 🌐 **Global Correlation:** How worldwide markets affect Indian markets
+
+        **All data is presented in comprehensive tables with bias scores and trading insights!**
+        """)
+
 # ═══════════════════════════════════════════════════════════════════════
 # TAB 6: OPTION CHAIN ANALYSIS (NSE Options Analyzer)
 # ═══════════════════════════════════════════════════════════════════════

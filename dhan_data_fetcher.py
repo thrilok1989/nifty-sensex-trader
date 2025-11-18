@@ -32,16 +32,46 @@ from config import get_dhan_credentials
 
 # Dhan Security IDs (from instrument master)
 SECURITY_IDS = {
+    # Major Indices
     'NIFTY': '13',      # IDX_I segment
     'SENSEX': '51',     # IDX_I segment
     'BANKNIFTY': '25',  # IDX_I segment
+    'FINNIFTY': '27',   # IDX_I segment
+    'MIDCPNIFTY': '28', # IDX_I segment
+
+    # Volatility Index
+    'INDIAVIX': '99',   # India VIX - Critical for sentiment
+
+    # Sector Indices
+    'NIFTY_IT': '65',      # Nifty IT
+    'NIFTY_AUTO': '66',    # Nifty Auto
+    'NIFTY_PHARMA': '67',  # Nifty Pharma
+    'NIFTY_METAL': '68',   # Nifty Metal
+    'NIFTY_REALTY': '69',  # Nifty Realty
+    'NIFTY_ENERGY': '70',  # Nifty Energy
+    'NIFTY_FMCG': '71',    # Nifty FMCG
 }
 
 # Exchange Segments
 EXCHANGE_SEGMENTS = {
+    # Major Indices
     'NIFTY': 'IDX_I',
     'SENSEX': 'IDX_I',
     'BANKNIFTY': 'IDX_I',
+    'FINNIFTY': 'IDX_I',
+    'MIDCPNIFTY': 'IDX_I',
+
+    # Volatility Index
+    'INDIAVIX': 'IDX_I',
+
+    # Sector Indices
+    'NIFTY_IT': 'IDX_I',
+    'NIFTY_AUTO': 'IDX_I',
+    'NIFTY_PHARMA': 'IDX_I',
+    'NIFTY_METAL': 'IDX_I',
+    'NIFTY_REALTY': 'IDX_I',
+    'NIFTY_ENERGY': 'IDX_I',
+    'NIFTY_FMCG': 'IDX_I',
 }
 
 class DhanDataFetcher:

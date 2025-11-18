@@ -5,7 +5,7 @@ Aggregates bias data from all sources to provide a comprehensive market sentimen
 
 Data Sources:
 1. Stock Performance (Market Breadth)
-2. Technical Indicators (Bias Analysis Pro - 15+ indicators)
+2. Technical Indicators (Bias Analysis Pro - 13 indicators matching Pine Script)
 3. Option Chain ATM Zone Analysis (Multiple bias metrics)
 4. PCR Analysis (Put-Call Ratio for indices)
 """

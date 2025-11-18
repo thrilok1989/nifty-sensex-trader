@@ -835,48 +835,33 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     <div style='background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
                 padding: 25px; border-radius: 15px; margin-bottom: 20px;
                 border: 1px solid #3d3d3d;'>
-
-        <!-- Header -->
         <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;'>
             <h3 style='margin: 0; color: #ffffff; font-size: 24px;'>📊 Enhanced Market Analysis</h3>
             <span style='color: #888; font-size: 14px;'>📅 Last Updated: {last_updated_str}</span>
         </div>
-
-        <!-- Main Metrics Grid -->
         <div style='display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;'>
-
-            <!-- Overall Sentiment -->
             <div style='background: {sentiment_color}; padding: 20px; border-radius: 10px; text-align: center;'>
                 <div style='font-size: 32px; margin-bottom: 5px;'>{sentiment_icon}</div>
                 <div style='font-size: 20px; font-weight: bold; color: white; margin-bottom: 5px;'>{sentiment}</div>
                 <div style='font-size: 12px; color: rgba(255,255,255,0.8);'>Overall Sentiment</div>
             </div>
-
-            <!-- Average Score -->
             <div style='background: #2d2d2d; padding: 20px; border-radius: 10px; text-align: center;
                         border-left: 4px solid {sentiment_color};'>
                 <div style='font-size: 32px; color: {sentiment_color}; font-weight: bold; margin-bottom: 5px;'>{score:+.1f}</div>
                 <div style='font-size: 12px; color: #888;'>Average Score</div>
             </div>
-
-            <!-- Data Points -->
             <div style='background: #2d2d2d; padding: 20px; border-radius: 10px; text-align: center;
                         border-left: 4px solid #6495ED;'>
                 <div style='font-size: 32px; color: #6495ED; font-weight: bold; margin-bottom: 5px;'>{data_points}</div>
                 <div style='font-size: 12px; color: #888;'>Data Points</div>
             </div>
-
-            <!-- Source Distribution -->
             <div style='background: #2d2d2d; padding: 20px; border-radius: 10px; text-align: center;'>
                 <div style='font-size: 16px; color: #ffffff; font-weight: bold; margin-bottom: 5px;'>
                     🟢{bullish_count} | 🔴{bearish_count} | 🟡{neutral_count}
                 </div>
                 <div style='font-size: 12px; color: #888;'>Bullish | Bearish | Neutral</div>
             </div>
-
         </div>
-
-        <!-- Summary Icons Section -->
         <div style='background: #252525; padding: 15px; border-radius: 10px;'>
             <div style='color: #888; font-size: 14px; margin-bottom: 10px; font-weight: bold;'>📊 Summary</div>
             <div style='display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px;'>
@@ -906,7 +891,6 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
                 </div>
             </div>
         </div>
-
     </div>
     """, unsafe_allow_html=True)
 

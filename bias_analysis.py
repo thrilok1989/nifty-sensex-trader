@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 import yfinance as yf
 import warnings
+from concurrent.futures import ThreadPoolExecutor, as_completed
 warnings.filterwarnings('ignore')
 
 # Import Dhan API for Indian indices volume data
@@ -569,36 +570,54 @@ class BiasAnalysisPro:
     # MARKET BREADTH & STOCKS ANALYSIS
     # =========================================================================
 
+    def _fetch_stock_data(self, symbol: str, weight: float):
+        """Helper function to fetch single stock data for parallel processing"""
+        try:
+            # Use 5d period with 5m interval (Yahoo Finance limitation for intraday data)
+            df = self.fetch_data(symbol, period='5d', interval='5m')
+            if df.empty or len(df) < 2:
+                return None
+
+            current_price = df['Close'].iloc[-1]
+            prev_price = df['Close'].iloc[0]
+            change_pct = ((current_price - prev_price) / prev_price) * 100
+
+            return {
+                'symbol': symbol.replace('.NS', ''),
+                'change_pct': change_pct,
+                'weight': weight,
+                'is_bullish': change_pct > 0
+            }
+        except Exception as e:
+            print(f"Error processing {symbol}: {e}")
+            return None
+
     def calculate_market_breadth(self):
-        """Calculate market breadth from top stocks"""
+        """Calculate market breadth from top stocks (optimized with parallel processing)"""
         bullish_stocks = 0
         total_stocks = 0
         stock_data = []
 
-        for symbol, weight in self.config['stocks'].items():
-            try:
-                # Use 5d period with 5m interval (Yahoo Finance limitation for intraday data)
-                df = self.fetch_data(symbol, period='5d', interval='5m')
-                if df.empty or len(df) < 2:
-                    continue
+        # Optimize: Use ThreadPoolExecutor for parallel API calls
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            # Submit all tasks
+            future_to_stock = {
+                executor.submit(self._fetch_stock_data, symbol, weight): (symbol, weight)
+                for symbol, weight in self.config['stocks'].items()
+            }
 
-                current_price = df['Close'].iloc[-1]
-                prev_price = df['Close'].iloc[0]
-                change_pct = ((current_price - prev_price) / prev_price) * 100
-
-                if change_pct > 0:
-                    bullish_stocks += 1
-
-                total_stocks += 1
-
-                stock_data.append({
-                    'symbol': symbol.replace('.NS', ''),
-                    'change_pct': change_pct,
-                    'weight': weight
-                })
-            except Exception as e:
-                print(f"Error processing {symbol}: {e}")
-                continue
+            # Collect results as they complete
+            for future in as_completed(future_to_stock):
+                result = future.result()
+                if result:
+                    stock_data.append({
+                        'symbol': result['symbol'],
+                        'change_pct': result['change_pct'],
+                        'weight': result['weight']
+                    })
+                    if result['is_bullish']:
+                        bullish_stocks += 1
+                    total_stocks += 1
 
         if total_stocks > 0:
             market_breadth = (bullish_stocks / total_stocks) * 100

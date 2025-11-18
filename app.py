@@ -2185,7 +2185,7 @@ with tab5:
                                use_container_width=True, hide_index=True)
 
             with col2:
-                st.markdown("**📊 Medium Indicators (2)**")
+                st.markdown("**📊 Medium Indicators (0)**")
                 med_df = all_bias_df[all_bias_df['category'] == 'medium']
                 if not med_df.empty:
                     med_bull = is_bullish[med_df.index].sum()
@@ -2195,9 +2195,11 @@ with tab5:
                     st.write(f"🐂 {med_bull} | 🐻 {med_bear} | ⚖️ {med_neutral}")
                     st.dataframe(med_df[['indicator', 'bias', 'score']],
                                use_container_width=True, hide_index=True)
+                else:
+                    st.info("No medium indicators configured")
 
             with col3:
-                st.markdown("**🐢 Slow Indicators (3)**")
+                st.markdown("**🐢 Slow Indicators (0)**")
                 slow_df = all_bias_df[all_bias_df['category'] == 'slow']
                 if not slow_df.empty:
                     slow_bull = is_bullish[slow_df.index].sum()
@@ -2207,28 +2209,8 @@ with tab5:
                     st.write(f"🐂 {slow_bull} | 🐻 {slow_bear} | ⚖️ {slow_neutral}")
                     st.dataframe(slow_df[['indicator', 'bias', 'score']],
                                use_container_width=True, hide_index=True)
-
-        st.divider()
-
-        # =====================================================================
-        # TOP STOCKS PERFORMANCE (from market breadth analysis)
-        # =====================================================================
-        if results.get('stock_data'):
-            st.subheader("📊 Top Stocks Performance")
-
-            stock_df = pd.DataFrame(results['stock_data'])
-            stock_df = stock_df.sort_values('change_pct', ascending=False)
-
-            # Add bias column
-            stock_df['bias'] = stock_df['change_pct'].apply(
-                lambda x: '🐂 BULLISH' if x > 0.5 else '🐻 BEARISH' if x < -0.5 else '⚖️ NEUTRAL'
-            )
-
-            # Format percentage
-            stock_df['change_pct'] = stock_df['change_pct'].apply(lambda x: f"{x:.2f}%")
-            stock_df['weight'] = stock_df['weight'].apply(lambda x: f"{x:.2f}%")
-
-            st.dataframe(stock_df, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No slow indicators configured")
 
         st.divider()
 

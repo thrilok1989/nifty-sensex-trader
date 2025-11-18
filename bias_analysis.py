@@ -640,10 +640,8 @@ class BiasAnalysisPro:
 
     def analyze_all_bias_indicators(self, symbol: str = "^NSEI") -> Dict:
         """
-        Analyze all 13 bias indicators matching Pine Script EXACTLY:
+        Analyze all 8 bias indicators:
         Fast (8): Volume Delta, HVP, VOB, Order Blocks, RSI, DMI, VIDYA, MFI
-        Medium (2): Close vs VWAP, Price vs VWAP
-        Slow (3): Weighted stocks (Daily, TF1, TF2)
         """
 
         print(f"Fetching data for {symbol}...")
@@ -662,6 +660,7 @@ class BiasAnalysisPro:
 
         # Initialize bias results list
         bias_results = []
+        stock_data = []  # Empty since we removed Weighted Stocks indicators
 
         # =====================================================================
         # FAST INDICATORS (8 total)
@@ -845,102 +844,6 @@ class BiasAnalysisPro:
             'score': mfi_score,
             'weight': 1.0,
             'category': 'fast'
-        })
-
-        # =====================================================================
-        # MEDIUM INDICATORS (2 total)
-        # =====================================================================
-
-        # 9. Close vs VWAP
-        vwap = self.calculate_vwap(df)
-        vwap_value = vwap.iloc[-1]
-
-        if np.isnan(vwap_value):
-            vwap_value = current_price
-
-        if current_price > vwap_value:
-            vwap_bias = "BULLISH"
-            vwap_score = 100
-        else:
-            vwap_bias = "BEARISH"
-            vwap_score = -100
-
-        bias_results.append({
-            'indicator': 'Close vs VWAP',
-            'value': f"Price: {current_price:.2f} | VWAP: {vwap_value:.2f}",
-            'bias': vwap_bias,
-            'score': vwap_score,
-            'weight': 1.0,
-            'category': 'medium'
-        })
-
-        # 10. Price vs VWAP (same as above, as per Pine Script)
-        price_above_vwap = current_price > vwap_value
-        price_below_vwap = current_price < vwap_value
-
-        if price_above_vwap:
-            price_vwap_bias = "BULLISH"
-            price_vwap_score = 100
-        elif price_below_vwap:
-            price_vwap_bias = "BEARISH"
-            price_vwap_score = -100
-        else:
-            price_vwap_bias = "NEUTRAL"
-            price_vwap_score = 0
-
-        bias_results.append({
-            'indicator': 'Price vs VWAP',
-            'value': "Above" if price_above_vwap else "Below" if price_below_vwap else "At",
-            'bias': price_vwap_bias,
-            'score': price_vwap_score,
-            'weight': 1.0,
-            'category': 'medium'
-        })
-
-        # =====================================================================
-        # SLOW INDICATORS (3 total) - Weighted Stocks
-        # =====================================================================
-
-        print("Calculating weighted stock averages...")
-        market_breadth, breadth_bullish, breadth_bearish, bull_stocks, total_stocks, stock_data = self.calculate_market_breadth()
-
-        # 11. Weighted Daily Average
-        weighted_daily_bullish = market_breadth > 50
-
-        if weighted_daily_bullish:
-            wd_bias = "BULLISH"
-            wd_score = 100
-        else:
-            wd_bias = "BEARISH"
-            wd_score = -100
-
-        bias_results.append({
-            'indicator': 'Weighted Stocks (Daily)',
-            'value': f"{market_breadth:.1f}% ({bull_stocks}/{total_stocks} UP)",
-            'bias': wd_bias,
-            'score': wd_score,
-            'weight': 1.0,
-            'category': 'slow'
-        })
-
-        # 12. Weighted TF1 Average (for simplicity, using same market breadth)
-        bias_results.append({
-            'indicator': f'Weighted Stocks ({self.config["tf1"]})',
-            'value': f"{market_breadth:.1f}%",
-            'bias': wd_bias,
-            'score': wd_score,
-            'weight': 1.0,
-            'category': 'slow'
-        })
-
-        # 13. Weighted TF2 Average (for simplicity, using same market breadth)
-        bias_results.append({
-            'indicator': f'Weighted Stocks ({self.config["tf2"]})',
-            'value': f"{market_breadth:.1f}%",
-            'bias': wd_bias,
-            'score': wd_score,
-            'weight': 1.0,
-            'category': 'slow'
         })
 
         # =====================================================================

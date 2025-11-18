@@ -3,8 +3,8 @@ HTF Support/Resistance Signal Generator
 
 Generates trading signals based on:
 1. Overall market sentiment (BULLISH/BEARISH)
-2. Spot price proximity to HTF support/resistance levels (within 8 points)
-3. Multiple timeframes: 5min, 10min, 15min
+2. Spot price proximity to HTF support/resistance levels (within 5 points)
+3. Multiple timeframes: 10min, 15min
 4. Automatic entry and stop loss calculation
 5. HTF S/R level strength analysis
 """
@@ -20,18 +20,18 @@ class HTFSRSignalGenerator:
     Generates trading signals based on HTF Support/Resistance levels and market sentiment
     """
 
-    def __init__(self, proximity_threshold: float = 8.0):
+    def __init__(self, proximity_threshold: float = 5.0):
         """
         Initialize HTF S/R Signal Generator
 
         Args:
-            proximity_threshold: Distance from S/R level to trigger signal (default 8 points)
+            proximity_threshold: Distance from S/R level to trigger signal (default 5 points)
         """
         self.proximity_threshold = proximity_threshold
         self.last_signal = None
         self.signal_history = []
-        # Timeframes to monitor
-        self.monitored_timeframes = ['5T', '10T', '15T']
+        # Timeframes to monitor (only 10min and 15min)
+        self.monitored_timeframes = ['10T', '15T']
         self.strength_tracker = HTFSRStrengthTracker(touch_distance=10.0)
 
     def check_for_signal(self,
@@ -55,7 +55,7 @@ class HTFSRSignalGenerator:
         """
         signal = None
 
-        # Filter to only monitored timeframes (5min, 10min, 15min)
+        # Filter to only monitored timeframes (10min, 15min)
         filtered_levels = [
             level for level in htf_levels
             if level.get('timeframe') in self.monitored_timeframes
@@ -84,7 +84,7 @@ class HTFSRSignalGenerator:
         Check for bullish entry signal
 
         Conditions:
-        - Spot price is above and within 8 points of HTF support (pivot_low)
+        - Spot price is above and within proximity threshold of HTF support (pivot_low)
         - Market sentiment is BULLISH
 
         Returns:
@@ -99,7 +99,7 @@ class HTFSRSignalGenerator:
             # Check if price is above support and within proximity threshold
             distance_from_support = spot_price - pivot_low
 
-            # Signal condition: Price is above support and within 8 points
+            # Signal condition: Price is above support and within proximity threshold
             if 0 <= distance_from_support <= self.proximity_threshold:
                 # Calculate levels
                 entry_price = spot_price
@@ -145,7 +145,7 @@ class HTFSRSignalGenerator:
         Check for bearish entry signal
 
         Conditions:
-        - Spot price is below and within 8 points of HTF resistance (pivot_high)
+        - Spot price is below and within proximity threshold of HTF resistance (pivot_high)
         - Market sentiment is BEARISH
 
         Returns:
@@ -160,7 +160,7 @@ class HTFSRSignalGenerator:
             # Check if price is below resistance and within proximity threshold
             distance_from_resistance = pivot_high - spot_price
 
-            # Signal condition: Price is below resistance and within 8 points
+            # Signal condition: Price is below resistance and within proximity threshold
             if 0 <= distance_from_resistance <= self.proximity_threshold:
                 # Calculate levels
                 entry_price = spot_price

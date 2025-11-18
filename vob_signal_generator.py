@@ -3,7 +3,7 @@ VOB-Based Signal Generator
 
 Generates trading signals based on:
 1. Overall market sentiment (BULL/BEAR)
-2. Spot price proximity to Volume Order Blocks (within 8 points)
+2. Spot price proximity to Volume Order Blocks (within 7 points)
 3. Automatic entry and stop loss calculation
 4. Volume Order Block strength analysis
 """
@@ -19,12 +19,12 @@ class VOBSignalGenerator:
     Generates trading signals based on VOB levels and market sentiment
     """
 
-    def __init__(self, proximity_threshold: float = 8.0):
+    def __init__(self, proximity_threshold: float = 7.0):
         """
         Initialize VOB Signal Generator
 
         Args:
-            proximity_threshold: Distance from VOB to trigger signal (default 8 points)
+            proximity_threshold: Distance from VOB to trigger signal (default 7 points)
         """
         self.proximity_threshold = proximity_threshold
         self.last_signal = None
@@ -77,7 +77,7 @@ class VOBSignalGenerator:
         Check for bullish entry signal
 
         Conditions:
-        - Spot price is above and within 8 points of a bullish VOB
+        - Spot price is above and within proximity threshold of a bullish VOB
         - Market sentiment is BULLISH
 
         Returns:
@@ -92,7 +92,7 @@ class VOBSignalGenerator:
             # Price should be above VOB upper or within the block
             distance_from_upper = spot_price - vob_upper
 
-            # Signal condition: Price is above VOB and within 8 points of upper level
+            # Signal condition: Price is above VOB and within proximity threshold of upper level
             if 0 <= distance_from_upper <= self.proximity_threshold:
                 # Calculate levels
                 entry_price = spot_price
@@ -135,7 +135,7 @@ class VOBSignalGenerator:
         Check for bearish entry signal
 
         Conditions:
-        - Spot price is below and within 8 points of a bearish VOB
+        - Spot price is below and within proximity threshold of a bearish VOB
         - Market sentiment is BEARISH
 
         Returns:
@@ -150,7 +150,7 @@ class VOBSignalGenerator:
             # Price should be below VOB lower or within the block
             distance_from_lower = vob_lower - spot_price
 
-            # Signal condition: Price is below VOB and within 8 points of lower level
+            # Signal condition: Price is below VOB and within proximity threshold of lower level
             if 0 <= distance_from_lower <= self.proximity_threshold:
                 # Calculate levels
                 entry_price = spot_price

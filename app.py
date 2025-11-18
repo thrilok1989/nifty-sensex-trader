@@ -2605,6 +2605,104 @@ with tab7:
                         st.metric("HTF Alerts", htf_alert_count,
                                  delta="Within 5 pts" if htf_alert_count > 0 else None)
 
+                    # Gather and display comprehensive market context
+                    market_context = proximity_system._gather_market_context()
+
+                    # Display market context in an expander
+                    with st.expander("📊 **Comprehensive Market Context**", expanded=True):
+                        st.markdown("### Overall Market Sentiment")
+
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            # Overall sentiment
+                            sentiment = market_context['overall_sentiment']
+                            if sentiment == 'BULLISH':
+                                st.success(f"🐂 **{sentiment}**")
+                            elif sentiment == 'BEARISH':
+                                st.error(f"🐻 **{sentiment}**")
+                            else:
+                                st.info(f"⚖️ **{sentiment}**")
+
+                        with col2:
+                            st.metric("Overall Score", f"{market_context['overall_score']:.1f}")
+
+                        st.divider()
+
+                        # Enhanced Market Analysis
+                        st.markdown("### 📈 Enhanced Market Analysis")
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            bias = market_context['technical_indicators_bias']
+                            if bias == 'BULLISH':
+                                st.success(f"🐂 **{bias}**")
+                            elif bias == 'BEARISH':
+                                st.error(f"🐻 **{bias}**")
+                            else:
+                                st.info(f"⚖️ **{bias}**")
+
+                        with col2:
+                            st.metric("Score", f"{market_context['technical_indicators_score']:.1f}")
+
+                        # Market Breadth
+                        st.markdown("### 🔍 Market Breadth")
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            bias = market_context['market_breadth_bias']
+                            if bias == 'BULLISH':
+                                st.success(f"🐂 **{bias}**")
+                            elif bias == 'BEARISH':
+                                st.error(f"🐻 **{bias}**")
+                            else:
+                                st.info(f"⚖️ **{bias}**")
+
+                        with col2:
+                            st.metric("Breadth %", f"{market_context['market_breadth_pct']:.1f}%")
+
+                        # PCR Analysis
+                        st.markdown("### 📉 PCR Analysis (Put-Call Ratio)")
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            bias = market_context['pcr_analysis_bias']
+                            if bias == 'BULLISH':
+                                st.success(f"🐂 **{bias}**")
+                            elif bias == 'BEARISH':
+                                st.error(f"🐻 **{bias}**")
+                            else:
+                                st.info(f"⚖️ **{bias}**")
+
+                        with col2:
+                            st.metric("Score", f"{market_context['pcr_analysis_score']:.1f}")
+
+                        # NIFTY ATM Zone
+                        st.markdown("### 🎯 NIFTY ATM Zone Summary")
+                        verdict = market_context['nifty_atm_verdict']
+                        if 'Bullish' in verdict:
+                            st.success(f"🐂 **{verdict}**")
+                        elif 'Bearish' in verdict:
+                            st.error(f"🐻 **{verdict}**")
+                        else:
+                            st.info(f"⚖️ **{verdict}**")
+
+                        # Option Chain Analysis
+                        st.markdown("### 🔗 Option Chain ATM Zone Analysis")
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            bias = market_context['option_chain_bias']
+                            if bias == 'BULLISH':
+                                st.success(f"🐂 **{bias}**")
+                            elif bias == 'BEARISH':
+                                st.error(f"🐻 **{bias}**")
+                            else:
+                                st.info(f"⚖️ **{bias}**")
+
+                        with col2:
+                            st.metric("Score", f"{market_context['option_chain_score']:.1f}")
+
                     # Show active alerts
                     if all_alerts:
                         st.markdown("**Active Proximity Alerts:**")
@@ -2622,7 +2720,7 @@ with tab7:
                                         f"({alert.distance:.2f} pts away)")
 
                         if notifications_sent > 0:
-                            st.success(f"📱 Sent {notifications_sent} Telegram notification(s)")
+                            st.success(f"📱 Sent {notifications_sent} Telegram notification(s) with comprehensive market context")
                     else:
                         st.info("ℹ️ No proximity alerts at current price")
 

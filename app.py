@@ -1391,7 +1391,7 @@ elif selected_tab == "📈 Positions":
                 if not positions:
                     st.info("No live positions from API")
                 else:
-                    for pos in positions:
+                    for idx, pos in enumerate(positions):
                         with st.container():
                             col1, col2, col3 = st.columns([3, 2, 1])
 
@@ -1405,7 +1405,9 @@ elif selected_tab == "📈 Positions":
                                 st.markdown(f"**P&L:** <span style='color:{pnl_color}'>₹{pnl:,.2f}</span>", unsafe_allow_html=True)
 
                             with col3:
-                                if st.button("❌ Exit", key=f"exit_api_{pos.get('orderId')}"):
+                                # Use index and trading symbol for unique key to avoid duplicate key errors
+                                unique_key = f"exit_api_{idx}_{pos.get('tradingSymbol', 'pos')}"
+                                if st.button("❌ Exit", key=unique_key):
                                     result = dhan.exit_position(pos.get('orderId'))
                                     if result['success']:
                                         st.success("Position exited!")

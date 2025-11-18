@@ -74,15 +74,16 @@ VOB_TOUCH_TOLERANCE = 5  # Points
 # UI SETTINGS
 # ═══════════════════════════════════════════════════════════════════════
 
-# Auto-refresh interval: 60 seconds (1 minute)
-# Data Loading Strategy (OPTIMIZED):
+# Auto-refresh interval: 5 minutes (300 seconds)
+# Data Loading Strategy (OPTIMIZED FOR PERFORMANCE):
 # - Background threading with smart caching
 # - Market data (NIFTY/SENSEX): Refreshes every 10 seconds in background
 # - Analysis data (Dashboard/Bias): Refreshes every 60 seconds in background
-# - UI updates: Page reloads every 60 seconds to display fresh cached data
+# - UI updates: Page reloads every 5 minutes to display fresh cached data
 # - All tabs show pre-loaded data immediately (no waiting for button clicks)
+# - Tab/button clicks are INSTANT - no blocking, no data fetching
 # - Manual refresh available via "Refresh Now" buttons
-AUTO_REFRESH_INTERVAL = 60  # seconds
+AUTO_REFRESH_INTERVAL = 300  # seconds (5 minutes - optimized for fast clicks)
 DEMO_MODE = False
 
 APP_TITLE = "🎯 NIFTY/SENSEX Manual Trader"

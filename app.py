@@ -2096,7 +2096,7 @@ with tab7:
 
         st.session_state.chart_needs_refresh = False
 
-    # Show auto-refresh countdown and trigger rerun
+    # Show auto-refresh countdown
     if chart_auto_refresh != "Off" and st.session_state.chart_data is not None and st.session_state.last_chart_update is not None:
         refresh_seconds = {
             "30s": 30,
@@ -2108,15 +2108,12 @@ with tab7:
         time_since_update = (datetime.now() - st.session_state.last_chart_update).total_seconds()
         time_until_refresh = max(0, refresh_seconds - time_since_update)
 
-        if time_until_refresh > 0:
-            st.info(f"⏱️ Next auto-refresh in {int(time_until_refresh)} seconds")
-            import time
-            time.sleep(1)  # Wait 1 second before checking again
-            st.rerun()
-        else:
+        if time_until_refresh <= 0:
             # Time for refresh
             st.session_state.chart_needs_refresh = True
             st.rerun()
+        else:
+            st.info(f"⏱️ Next auto-refresh in {int(time_until_refresh)} seconds (auto-refresh enabled)")
 
     st.divider()
 

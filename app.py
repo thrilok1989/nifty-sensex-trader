@@ -45,6 +45,102 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ═══════════════════════════════════════════════════════════════════════
+# CUSTOM CSS - PREVENT BLUR/LOADING OVERLAY DURING REFRESH
+# ═══════════════════════════════════════════════════════════════════════
+# This CSS prevents the app from showing blur/white screen during refresh
+# allowing users to continue viewing data while refresh happens in background
+
+st.markdown("""
+<style>
+    /* Hide the Streamlit loading spinner and blur overlay */
+    .stApp > div[data-testid="stAppViewContainer"] > div:first-child {
+        display: none !important;
+    }
+
+    /* Prevent blur overlay during rerun */
+    .stApp [data-testid="stAppViewContainer"] {
+        background: transparent !important;
+    }
+
+    /* Hide the "Running..." indicator in top right */
+    .stApp [data-testid="stStatusWidget"] {
+        visibility: hidden;
+    }
+
+    /* Hide all spinner elements */
+    .stSpinner {
+        display: none !important;
+    }
+
+    /* Hide loading indicator */
+    div[data-testid="stLoadingIndicator"] {
+        display: none !important;
+    }
+
+    /* Keep app content visible during refresh - no opacity change */
+    .element-container {
+        opacity: 1 !important;
+        transition: none !important;
+    }
+
+    .stMarkdown {
+        opacity: 1 !important;
+        transition: none !important;
+    }
+
+    /* Prevent white flash during page reload */
+    body {
+        background-color: #0E1117;
+        transition: none !important;
+    }
+
+    /* Smooth transitions for dynamic content - DISABLED to prevent blur */
+    .stApp {
+        transition: none !important;
+    }
+
+    /* Hide loading overlay completely */
+    div[data-testid="stAppViewContainer"] > div[style*="position: absolute"] {
+        display: none !important;
+    }
+
+    /* Ensure dataframes remain visible during refresh */
+    .dataframe {
+        opacity: 1 !important;
+        transition: none !important;
+    }
+
+    /* Keep charts visible during refresh */
+    .stPlotlyChart {
+        opacity: 1 !important;
+        transition: none !important;
+    }
+
+    /* Hide the app header spinner */
+    header[data-testid="stHeader"] {
+        background-color: transparent !important;
+    }
+
+    /* Prevent flickering on dynamic updates */
+    section[data-testid="stSidebar"],
+    section[data-testid="stMain"] {
+        transition: none !important;
+    }
+
+    /* Keep all content visible - override any opacity changes */
+    [data-testid="stVerticalBlock"] {
+        opacity: 1 !important;
+    }
+
+    /* Remove blur filter if applied */
+    * {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Performance optimization: Reduce widget refresh overhead
 # This improves app responsiveness and reduces lag
 if 'performance_mode' not in st.session_state:

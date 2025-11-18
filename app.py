@@ -579,15 +579,24 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
             # Store VOB data in session state for display
             st.session_state.vob_data_nifty = vob_data
 
-            # Check for NIFTY signal
-            nifty_signal = st.session_state.vob_signal_generator.check_for_signal(
-                spot_price=nifty_data['spot_price'],
-                market_sentiment=overall_sentiment,
-                bullish_blocks=vob_data['bullish_blocks'],
-                bearish_blocks=vob_data['bearish_blocks'],
-                index='NIFTY',
-                df=df  # Pass dataframe for strength analysis
-            )
+            # Check for NIFTY signal - with safe spot price handling
+            nifty_spot_for_signal = None
+            if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 0, 'N/A']:
+                try:
+                    nifty_spot_for_signal = float(nifty_data['spot_price'])
+                except (TypeError, ValueError):
+                    nifty_spot_for_signal = None
+
+            nifty_signal = None
+            if nifty_spot_for_signal is not None:
+                nifty_signal = st.session_state.vob_signal_generator.check_for_signal(
+                    spot_price=nifty_spot_for_signal,
+                    market_sentiment=overall_sentiment,
+                    bullish_blocks=vob_data['bullish_blocks'],
+                    bearish_blocks=vob_data['bearish_blocks'],
+                    index='NIFTY',
+                    df=df  # Pass dataframe for strength analysis
+                )
 
             if nifty_signal:
                 # Check if this is a new signal (not already in active signals)
@@ -620,14 +629,26 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
             # Get SENSEX spot price
             sensex_data = get_cached_sensex_data()
             if sensex_data:
-                sensex_signal = st.session_state.vob_signal_generator.check_for_signal(
-                    spot_price=sensex_data['spot_price'],
-                    market_sentiment=overall_sentiment,
-                    bullish_blocks=vob_data_sensex['bullish_blocks'],
-                    bearish_blocks=vob_data_sensex['bearish_blocks'],
-                    index='SENSEX',
-                    df=df_sensex  # Pass dataframe for strength analysis
-                )
+                # Safe handling for SENSEX spot price in signal check
+                sensex_spot_for_signal = None
+                if sensex_data.get('spot_price') and sensex_data['spot_price'] not in [None, 0, 'N/A']:
+                    try:
+                        sensex_spot_for_signal = float(sensex_data['spot_price'])
+                    except (TypeError, ValueError):
+                        sensex_spot_for_signal = None
+
+                sensex_signal = None
+                if sensex_spot_for_signal is not None:
+                    sensex_signal = st.session_state.vob_signal_generator.check_for_signal(
+                        spot_price=sensex_spot_for_signal,
+                        market_sentiment=overall_sentiment,
+                        bullish_blocks=vob_data_sensex['bullish_blocks'],
+                        bearish_blocks=vob_data_sensex['bearish_blocks'],
+                        index='SENSEX',
+                        df=df_sensex  # Pass dataframe for strength analysis
+                    )
+            else:
+                sensex_signal = None
 
                 if sensex_signal:
                     # Check if this is a new signal
@@ -661,49 +682,63 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
 
             # Check NIFTY VOB proximity
             if st.session_state.vob_data_nifty and nifty_data:
-                nifty_price = nifty_data['spot_price']
+                # Safe handling for NIFTY spot price
+                nifty_price = None
+                if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 0, 'N/A']:
+                    try:
+                        nifty_price = float(nifty_data['spot_price'])
+                    except (TypeError, ValueError):
+                        nifty_price = None
 
-                # Convert HTF data to list format expected by proximity system
-                htf_data_list = []
-                if st.session_state.htf_data_nifty:
-                    for timeframe, levels in st.session_state.htf_data_nifty.items():
-                        if levels:
-                            htf_data_list.append({
-                                'timeframe': timeframe,
-                                'pivot_high': levels.get('resistance'),
-                                'pivot_low': levels.get('support')
-                            })
+                if nifty_price is not None:
+                    # Convert HTF data to list format expected by proximity system
+                    htf_data_list = []
+                    if st.session_state.htf_data_nifty:
+                        for timeframe, levels in st.session_state.htf_data_nifty.items():
+                            if levels:
+                                htf_data_list.append({
+                                    'timeframe': timeframe,
+                                    'pivot_high': levels.get('resistance'),
+                                    'pivot_low': levels.get('support')
+                                })
 
-                # Process proximity alerts for NIFTY
-                nifty_alerts, nifty_notifications = proximity_system.process_market_data(
-                    symbol='NIFTY',
-                    current_price=nifty_price,
-                    vob_data=st.session_state.vob_data_nifty,
-                    htf_data=htf_data_list
-                )
+                    # Process proximity alerts for NIFTY
+                    nifty_alerts, nifty_notifications = proximity_system.process_market_data(
+                        symbol='NIFTY',
+                        current_price=nifty_price,
+                        vob_data=st.session_state.vob_data_nifty,
+                        htf_data=htf_data_list
+                    )
 
             # Check SENSEX VOB proximity
             if st.session_state.vob_data_sensex and sensex_data:
-                sensex_price = sensex_data['spot_price']
+                # Safe handling for SENSEX spot price
+                sensex_price = None
+                if sensex_data.get('spot_price') and sensex_data['spot_price'] not in [None, 0, 'N/A']:
+                    try:
+                        sensex_price = float(sensex_data['spot_price'])
+                    except (TypeError, ValueError):
+                        sensex_price = None
 
-                # Convert HTF data to list format
-                htf_data_list_sensex = []
-                if st.session_state.htf_data_sensex:
-                    for timeframe, levels in st.session_state.htf_data_sensex.items():
-                        if levels:
-                            htf_data_list_sensex.append({
-                                'timeframe': timeframe,
-                                'pivot_high': levels.get('resistance'),
-                                'pivot_low': levels.get('support')
-                            })
+                if sensex_price is not None:
+                    # Convert HTF data to list format
+                    htf_data_list_sensex = []
+                    if st.session_state.htf_data_sensex:
+                        for timeframe, levels in st.session_state.htf_data_sensex.items():
+                            if levels:
+                                htf_data_list_sensex.append({
+                                    'timeframe': timeframe,
+                                    'pivot_high': levels.get('resistance'),
+                                    'pivot_low': levels.get('support')
+                                })
 
-                # Process proximity alerts for SENSEX
-                sensex_alerts, sensex_notifications = proximity_system.process_market_data(
-                    symbol='SENSEX',
-                    current_price=sensex_price,
-                    vob_data=st.session_state.vob_data_sensex,
-                    htf_data=htf_data_list_sensex
-                )
+                    # Process proximity alerts for SENSEX
+                    sensex_alerts, sensex_notifications = proximity_system.process_market_data(
+                        symbol='SENSEX',
+                        current_price=sensex_price,
+                        vob_data=st.session_state.vob_data_sensex,
+                        htf_data=htf_data_list_sensex
+                    )
 
         except Exception as prox_e:
             # Silently fail proximity alerts
@@ -821,14 +856,23 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
                 # Store HTF data in session state for display
                 st.session_state.htf_data_nifty = htf_levels
 
-                # Check for NIFTY signal
-                nifty_htf_signal = st.session_state.htf_sr_signal_generator.check_for_signal(
-                    spot_price=nifty_data['spot_price'],
-                    market_sentiment=overall_sentiment,
-                    htf_levels=htf_levels,
-                    index='NIFTY',
-                    df=df_nifty  # Pass dataframe for strength analysis
-                )
+                # Check for NIFTY signal - with safe spot price handling
+                nifty_spot_htf = None
+                if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 0, 'N/A']:
+                    try:
+                        nifty_spot_htf = float(nifty_data['spot_price'])
+                    except (TypeError, ValueError):
+                        nifty_spot_htf = None
+
+                nifty_htf_signal = None
+                if nifty_spot_htf is not None:
+                    nifty_htf_signal = st.session_state.htf_sr_signal_generator.check_for_signal(
+                        spot_price=nifty_spot_htf,
+                        market_sentiment=overall_sentiment,
+                        htf_levels=htf_levels,
+                        index='NIFTY',
+                        df=df_nifty  # Pass dataframe for strength analysis
+                    )
 
                 if nifty_htf_signal:
                     # Check if this is a new signal (not already in active signals)
@@ -861,31 +905,43 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
                 # Get SENSEX spot price
                 sensex_data = get_cached_sensex_data()
                 if sensex_data:
-                    sensex_htf_signal = st.session_state.htf_sr_signal_generator.check_for_signal(
-                        spot_price=sensex_data['spot_price'],
-                        market_sentiment=overall_sentiment,
-                        htf_levels=htf_levels_sensex,
-                        index='SENSEX',
-                        df=df_sensex  # Pass dataframe for strength analysis
-                    )
+                    # Safe handling for SENSEX spot price in HTF signal check
+                    sensex_spot_htf = None
+                    if sensex_data.get('spot_price') and sensex_data['spot_price'] not in [None, 0, 'N/A']:
+                        try:
+                            sensex_spot_htf = float(sensex_data['spot_price'])
+                        except (TypeError, ValueError):
+                            sensex_spot_htf = None
 
-                    if sensex_htf_signal:
-                        # Check if this is a new signal
-                        is_new = True
-                        for existing_signal in st.session_state.active_htf_sr_signals:
-                            if (existing_signal['index'] == sensex_htf_signal['index'] and
-                                existing_signal['direction'] == sensex_htf_signal['direction'] and
-                                abs(existing_signal['entry_price'] - sensex_htf_signal['entry_price']) < 5):
-                                is_new = False
-                                break
+                    sensex_htf_signal = None
+                    if sensex_spot_htf is not None:
+                        sensex_htf_signal = st.session_state.htf_sr_signal_generator.check_for_signal(
+                            spot_price=sensex_spot_htf,
+                            market_sentiment=overall_sentiment,
+                            htf_levels=htf_levels_sensex,
+                            index='SENSEX',
+                            df=df_sensex  # Pass dataframe for strength analysis
+                        )
+                else:
+                    sensex_htf_signal = None
 
-                        if is_new:
-                            # Add to active signals
-                            st.session_state.active_htf_sr_signals.append(sensex_htf_signal)
+                if sensex_htf_signal:
+                    # Check if this is a new signal
+                    is_new = True
+                    for existing_signal in st.session_state.active_htf_sr_signals:
+                        if (existing_signal['index'] == sensex_htf_signal['index'] and
+                            existing_signal['direction'] == sensex_htf_signal['direction'] and
+                            abs(existing_signal['entry_price'] - sensex_htf_signal['entry_price']) < 5):
+                            is_new = False
+                            break
 
-                            # Send telegram notification
-                            telegram_bot = TelegramBot()
-                            telegram_bot.send_htf_sr_entry_signal(sensex_htf_signal)
+                    if is_new:
+                        # Add to active signals
+                        st.session_state.active_htf_sr_signals.append(sensex_htf_signal)
+
+                        # Send telegram notification
+                        telegram_bot = TelegramBot()
+                        telegram_bot.send_htf_sr_entry_signal(sensex_htf_signal)
 
             # Clean up old HTF S/R signals (older than 30 minutes)
             st.session_state.active_htf_sr_signals = [
@@ -1509,19 +1565,31 @@ with tab2:
     col1, col2 = st.columns(2)
     
     with col1:
+        # Safe default value handling for VOB support level
+        try:
+            default_support = max(0.0, float(nifty_data['spot_price']) - 50.0) if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 0, 'N/A'] else 25000.0
+        except (TypeError, ValueError):
+            default_support = 25000.0
+
         vob_support = st.number_input(
             "VOB Support Level",
             min_value=0.0,
-            value=max(0.0, float(nifty_data['spot_price'] - 50)),
+            value=default_support,
             step=10.0,
             key="vob_support"
         )
-    
+
     with col2:
+        # Safe default value handling for VOB resistance level
+        try:
+            default_resistance = max(0.0, float(nifty_data['spot_price']) + 50.0) if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 0, 'N/A'] else 25100.0
+        except (TypeError, ValueError):
+            default_resistance = 25100.0
+
         vob_resistance = st.number_input(
             "VOB Resistance Level",
             min_value=0.0,
-            value=max(0.0, float(nifty_data['spot_price'] + 50)),
+            value=default_resistance,
             step=10.0,
             key="vob_resistance"
         )
@@ -1538,12 +1606,20 @@ with tab2:
         vob_resistance,
         STOP_LOSS_OFFSET
     )
-    
+
+    # Safe handling for spot price in strike calculation
+    safe_spot_price = 25000.0  # Default fallback value
+    if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 0, 'N/A']:
+        try:
+            safe_spot_price = float(nifty_data['spot_price'])
+        except (TypeError, ValueError):
+            safe_spot_price = 25000.0
+
     strike_info = calculate_strike(
         selected_index,
-        nifty_data['spot_price'],
+        safe_spot_price,
         selected_direction,
-        nifty_data['current_expiry']
+        nifty_data.get('current_expiry', 'N/A')
     )
     
     col1, col2, col3, col4 = st.columns(4)
@@ -1762,10 +1838,21 @@ with tab4:
     if 'active_positions' not in st.session_state:
         st.session_state.active_positions = {}
 
-    # Get current spot prices for monitoring
-    nifty_spot = nifty_data['spot_price']
+    # Get current spot prices for monitoring - with safe null handling
+    nifty_spot = 0
+    if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 'N/A']:
+        try:
+            nifty_spot = float(nifty_data['spot_price'])
+        except (TypeError, ValueError):
+            nifty_spot = 0
+
     sensex_data_obj = get_cached_sensex_data()
-    sensex_spot = sensex_data_obj['spot_price'] if sensex_data_obj else 0
+    sensex_spot = 0
+    if sensex_data_obj and sensex_data_obj.get('spot_price') and sensex_data_obj['spot_price'] not in [None, 'N/A']:
+        try:
+            sensex_spot = float(sensex_data_obj['spot_price'])
+        except (TypeError, ValueError):
+            sensex_spot = 0
 
     # Check for auto-exit conditions
     positions_to_exit = []

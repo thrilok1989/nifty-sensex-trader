@@ -2000,7 +2000,7 @@ with tab7:
     st.caption("TradingView-style Chart with 6 Advanced Indicators: Volume Bars, Volume Order Blocks, HTF Support/Resistance (3min, 5min, 10min, 15min levels), Volume Footprint (1D timeframe, 10 bins, Dynamic POC), Ultimate RSI, OM Indicator (Order Flow & Momentum)")
 
     # Chart controls
-    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
 
     with col1:
         chart_symbol = st.selectbox(
@@ -2027,22 +2027,96 @@ with tab7:
         )
 
     with col4:
-        if st.button("🔄 Load Chart", type="primary", use_container_width=True):
-            with st.spinner("Loading chart data and calculating indicators..."):
-                try:
-                    # Fetch data using cached function (60s cache)
-                    df = get_cached_chart_data(symbol_code, chart_period, chart_interval)
+        chart_auto_refresh = st.selectbox(
+            "Auto Refresh",
+            ["Off", "30s", "60s", "2m", "5m"],
+            index=2,
+            key="chart_auto_refresh",
+            help="Automatically refresh chart at selected interval"
+        )
 
-                    if df is not None and len(df) > 0:
-                        st.session_state.chart_data = df
-                        st.success(f"✅ Loaded {len(df)} candles")
-                    else:
-                        st.error("❌ Failed to fetch data. Try a different period or interval.")
-                        st.session_state.chart_data = None
+    with col5:
+        if st.button("🔄 Refresh", type="primary", use_container_width=True, key="manual_refresh_chart"):
+            st.session_state.chart_needs_refresh = True
 
-                except Exception as e:
-                    st.error(f"❌ Error loading chart: {e}")
+    st.divider()
+
+    # Initialize chart session state variables
+    if 'chart_data' not in st.session_state:
+        st.session_state.chart_data = None
+    if 'chart_needs_refresh' not in st.session_state:
+        st.session_state.chart_needs_refresh = True
+    if 'last_chart_params' not in st.session_state:
+        st.session_state.last_chart_params = None
+    if 'last_chart_update' not in st.session_state:
+        st.session_state.last_chart_update = None
+
+    # Check if chart parameters changed
+    current_params = (symbol_code, chart_period, chart_interval)
+    if st.session_state.last_chart_params != current_params:
+        st.session_state.chart_needs_refresh = True
+        st.session_state.last_chart_params = current_params
+
+    # Handle auto-refresh timing
+    should_auto_refresh = False
+    if chart_auto_refresh != "Off" and st.session_state.last_chart_update is not None:
+        # Convert refresh interval to seconds
+        refresh_seconds = {
+            "30s": 30,
+            "60s": 60,
+            "2m": 120,
+            "5m": 300
+        }.get(chart_auto_refresh, 60)
+
+        # Check if enough time has passed
+        from datetime import timedelta
+        time_since_update = (datetime.now() - st.session_state.last_chart_update).total_seconds()
+        if time_since_update >= refresh_seconds:
+            should_auto_refresh = True
+            st.session_state.chart_needs_refresh = True
+
+    # Auto-load chart data on first load or when refresh is needed
+    if st.session_state.chart_needs_refresh:
+        with st.spinner("Loading chart data and calculating indicators..."):
+            try:
+                # Fetch data using cached function (60s cache)
+                df = get_cached_chart_data(symbol_code, chart_period, chart_interval)
+
+                if df is not None and len(df) > 0:
+                    st.session_state.chart_data = df
+                    st.session_state.last_chart_update = datetime.now()
+                    st.success(f"✅ Loaded {len(df)} candles | Last updated: {st.session_state.last_chart_update.strftime('%H:%M:%S')}")
+                else:
+                    st.error("❌ Failed to fetch data. Try a different period or interval.")
                     st.session_state.chart_data = None
+
+            except Exception as e:
+                st.error(f"❌ Error loading chart: {e}")
+                st.session_state.chart_data = None
+
+        st.session_state.chart_needs_refresh = False
+
+    # Show auto-refresh countdown and trigger rerun
+    if chart_auto_refresh != "Off" and st.session_state.chart_data is not None and st.session_state.last_chart_update is not None:
+        refresh_seconds = {
+            "30s": 30,
+            "60s": 60,
+            "2m": 120,
+            "5m": 300
+        }.get(chart_auto_refresh, 60)
+
+        time_since_update = (datetime.now() - st.session_state.last_chart_update).total_seconds()
+        time_until_refresh = max(0, refresh_seconds - time_since_update)
+
+        if time_until_refresh > 0:
+            st.info(f"⏱️ Next auto-refresh in {int(time_until_refresh)} seconds")
+            import time
+            time.sleep(1)  # Wait 1 second before checking again
+            st.rerun()
+        else:
+            # Time for refresh
+            st.session_state.chart_needs_refresh = True
+            st.rerun()
 
     st.divider()
 
@@ -2579,7 +2653,7 @@ with tab7:
             st.write("Error details:", str(e))
 
     else:
-        st.info("👆 Click 'Load Chart' button to display the advanced chart")
+        st.info("⏳ Loading chart... The chart will automatically load and refresh based on your settings")
 
         st.markdown("""
         ### About Advanced Chart Analysis
@@ -2625,10 +2699,11 @@ with tab7:
         #### 🎯 How to Use
         1. Select market (NIFTY, SENSEX, or DOW)
         2. Choose period and interval (default: 1 day, 1 minute)
-        3. Click "Load Chart" to fetch data
-        4. Toggle indicators on/off as needed
-        5. Analyze chart and trading signals
-        6. Use signals to inform your trading decisions
+        3. Chart loads automatically - no need to click any button!
+        4. Set auto-refresh interval (default: 60s) or click Refresh for manual update
+        5. Toggle indicators on/off as needed
+        6. Analyze chart and trading signals
+        7. Use signals to inform your trading decisions
 
         **Note:** All indicators are converted from Pine Script with high accuracy and optimized for Python/Plotly.
         """)

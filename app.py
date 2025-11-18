@@ -25,6 +25,7 @@ from option_chain_analysis import OptionChainAnalyzer
 from nse_options_helpers import *
 from advanced_chart_analysis import AdvancedChartAnalysis
 from overall_market_sentiment import render_overall_market_sentiment, calculate_overall_sentiment
+from advanced_proximity_alerts import get_proximity_alert_system
 from data_cache_manager import (
     get_cache_manager,
     preload_all_data,
@@ -2464,6 +2465,81 @@ with tab7:
                             for i, block in enumerate(vob_data['bearish_blocks'][-3:]):
                                 if block['active']:
                                     st.write(f"  - Resistance: {block['lower']:.2f} - {block['upper']:.2f}")
+
+                # Proximity Alerts Section
+                st.divider()
+                st.markdown("**🔔 Proximity Alerts**")
+                st.caption("Automatic Telegram notifications when price is near key levels (Rate limited: 10 minutes)")
+
+                try:
+                    # Get proximity alert system
+                    proximity_system = get_proximity_alert_system(cooldown_minutes=10)
+
+                    # Get current price
+                    current_price = df_stats['close'].iloc[-1]
+
+                    # Determine symbol for alerts
+                    alert_symbol = "NIFTY" if "NSEI" in symbol_code else "SENSEX" if "BSESN" in symbol_code else symbol_code
+
+                    # Get HTF data if enabled
+                    htf_data = []
+                    if show_htf_sr and htf_params and htf_params.get('levels_config'):
+                        from indicators.htf_support_resistance import HTFSupportResistance
+                        for level_config in htf_params['levels_config']:
+                            htf_indicator = HTFSupportResistance(
+                                timeframes=[level_config['timeframe']],
+                                pivot_length=level_config['length']
+                            )
+                            levels = htf_indicator.calculate_levels(df_stats)
+                            htf_data.extend(levels)
+
+                    # Process proximity alerts
+                    all_alerts, notifications_sent = proximity_system.process_market_data(
+                        symbol=alert_symbol,
+                        current_price=current_price,
+                        vob_data=vob_data if show_vob else {},
+                        htf_data=htf_data
+                    )
+
+                    # Display alert summary
+                    col1, col2, col3 = st.columns(3)
+
+                    with col1:
+                        st.metric("Current Price", f"₹{current_price:,.2f}")
+
+                    with col2:
+                        vob_alert_count = len([a for a in all_alerts if a.alert_type == 'VOB'])
+                        st.metric("VOB Alerts", vob_alert_count,
+                                 delta="Within 7 pts" if vob_alert_count > 0 else None)
+
+                    with col3:
+                        htf_alert_count = len([a for a in all_alerts if a.alert_type == 'HTF'])
+                        st.metric("HTF Alerts", htf_alert_count,
+                                 delta="Within 5 pts" if htf_alert_count > 0 else None)
+
+                    # Show active alerts
+                    if all_alerts:
+                        st.markdown("**Active Proximity Alerts:**")
+                        for alert in all_alerts[:5]:  # Show top 5 alerts
+                            if alert.alert_type == 'VOB':
+                                emoji = "🟢" if "Bull" in alert.level_type else "🔴"
+                                st.write(f"{emoji} **{alert.alert_type}** {alert.level_type}: "
+                                        f"₹{alert.level:.2f} "
+                                        f"({alert.distance:.2f} pts away)")
+                            else:  # HTF
+                                emoji = "🟢" if alert.level_type == 'Support' else "🔴"
+                                tf_readable = alert.timeframe.replace('T', 'm') if alert.timeframe else ''
+                                st.write(f"{emoji} **{alert.alert_type}** {alert.level_type} ({tf_readable}): "
+                                        f"₹{alert.level:.2f} "
+                                        f"({alert.distance:.2f} pts away)")
+
+                        if notifications_sent > 0:
+                            st.success(f"📱 Sent {notifications_sent} Telegram notification(s)")
+                    else:
+                        st.info("ℹ️ No proximity alerts at current price")
+
+                except Exception as e:
+                    st.warning(f"⚠️ Proximity alerts unavailable: {str(e)}")
 
                 # Data table
                 st.divider()

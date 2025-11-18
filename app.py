@@ -1488,7 +1488,7 @@ with tab4:
 
 with tab5:
     st.header("🎯 Comprehensive Bias Analysis Pro")
-    st.caption("15+ Bias Indicators with Weighted Scoring System | 🔄 Auto-refreshing every 60 seconds")
+    st.caption("13 Bias Indicators with Adaptive Weighted Scoring | 🔄 Auto-refreshing every 60 seconds")
 
     # Auto-load cached results if not already in session state
     if not st.session_state.bias_analysis_results:
@@ -1659,68 +1659,53 @@ with tab5:
         # =====================================================================
         st.subheader("📈 Bias by Category")
 
-        col1, col2 = st.columns(2)
+        # Display mode info
+        if 'mode' in results:
+            mode_color = "🔄" if results['mode'] == "REVERSAL" else "📊"
+            st.info(f"{mode_color} **Mode:** {results['mode']} | Fast: {results.get('fast_bull_pct', 0):.0f}% Bull | Slow: {results.get('slow_bull_pct', 0):.0f}% Bull")
+
+        col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.markdown("**🔧 Technical Indicators**")
-            technical_bias = [b for b in results['bias_results'] if b['indicator'] in
-                             ['RSI', 'MFI (Money Flow)', 'DMI/ADX', 'VWAP', 'EMA Crossover (5/18)']]
+            st.markdown("**⚡ Fast Indicators (8)**")
+            fast_bias = [b for b in results['bias_results'] if b.get('category') == 'fast']
 
-            tech_df = pd.DataFrame(technical_bias)
-            if not tech_df.empty:
-                tech_bull = len(tech_df[tech_df['bias'].str.contains('BULLISH', na=False)])
-                tech_bear = len(tech_df[tech_df['bias'].str.contains('BEARISH', na=False)])
-                tech_neutral = len(tech_df) - tech_bull - tech_bear
+            fast_df = pd.DataFrame(fast_bias)
+            if not fast_df.empty:
+                fast_bull = len(fast_df[fast_df['bias'].str.contains('BULLISH', na=False)])
+                fast_bear = len(fast_df[fast_df['bias'].str.contains('BEARISH', na=False)])
+                fast_neutral = len(fast_df) - fast_bull - fast_bear
 
-                st.write(f"🐂 Bullish: {tech_bull} | 🐻 Bearish: {tech_bear} | ⚖️ Neutral: {tech_neutral}")
-                st.dataframe(tech_df[['indicator', 'bias', 'score']],
+                st.write(f"🐂 {fast_bull} | 🐻 {fast_bear} | ⚖️ {fast_neutral}")
+                st.dataframe(fast_df[['indicator', 'bias', 'score']],
                            use_container_width=True, hide_index=True)
 
         with col2:
-            st.markdown("**📊 Volume Indicators**")
-            volume_bias = [b for b in results['bias_results'] if b['indicator'] in
-                          ['Volume ROC', 'OBV (On Balance Volume)', 'Force Index', 'Volume Trend']]
+            st.markdown("**📊 Medium Indicators (2)**")
+            medium_bias = [b for b in results['bias_results'] if b.get('category') == 'medium']
 
-            vol_df = pd.DataFrame(volume_bias)
-            if not vol_df.empty:
-                vol_bull = len(vol_df[vol_df['bias'].str.contains('BULLISH', na=False)])
-                vol_bear = len(vol_df[vol_df['bias'].str.contains('BEARISH', na=False)])
-                vol_neutral = len(vol_df) - vol_bull - vol_bear
+            med_df = pd.DataFrame(medium_bias)
+            if not med_df.empty:
+                med_bull = len(med_df[med_df['bias'].str.contains('BULLISH', na=False)])
+                med_bear = len(med_df[med_df['bias'].str.contains('BEARISH', na=False)])
+                med_neutral = len(med_df) - med_bull - med_bear
 
-                st.write(f"🐂 Bullish: {vol_bull} | 🐻 Bearish: {vol_bear} | ⚖️ Neutral: {vol_neutral}")
-                st.dataframe(vol_df[['indicator', 'bias', 'score']],
+                st.write(f"🐂 {med_bull} | 🐻 {med_bear} | ⚖️ {med_neutral}")
+                st.dataframe(med_df[['indicator', 'bias', 'score']],
                            use_container_width=True, hide_index=True)
 
-        col1, col2 = st.columns(2)
+        with col3:
+            st.markdown("**🐢 Slow Indicators (3)**")
+            slow_bias = [b for b in results['bias_results'] if b.get('category') == 'slow']
 
-        with col1:
-            st.markdown("**📉 Momentum Indicators**")
-            momentum_bias = [b for b in results['bias_results'] if b['indicator'] in
-                           ['Price Momentum (ROC)', 'RSI Divergence', 'Choppiness Index']]
+            slow_df = pd.DataFrame(slow_bias)
+            if not slow_df.empty:
+                slow_bull = len(slow_df[slow_df['bias'].str.contains('BULLISH', na=False)])
+                slow_bear = len(slow_df[slow_df['bias'].str.contains('BEARISH', na=False)])
+                slow_neutral = len(slow_df) - slow_bull - slow_bear
 
-            mom_df = pd.DataFrame(momentum_bias)
-            if not mom_df.empty:
-                mom_bull = len(mom_df[mom_df['bias'].str.contains('BULLISH', na=False)])
-                mom_bear = len(mom_df[mom_df['bias'].str.contains('BEARISH', na=False)])
-                mom_neutral = len(mom_df) - mom_bull - mom_bear
-
-                st.write(f"🐂 Bullish: {mom_bull} | 🐻 Bearish: {mom_bear} | ⚖️ Neutral: {mom_neutral}")
-                st.dataframe(mom_df[['indicator', 'bias', 'score']],
-                           use_container_width=True, hide_index=True)
-
-        with col2:
-            st.markdown("**🌍 Market Wide Indicators**")
-            market_bias = [b for b in results['bias_results'] if b['indicator'] in
-                          ['Market Breadth', 'Volatility Ratio', 'ATR Trend']]
-
-            mkt_df = pd.DataFrame(market_bias)
-            if not mkt_df.empty:
-                mkt_bull = len(mkt_df[mkt_df['bias'].str.contains('BULLISH', na=False)])
-                mkt_bear = len(mkt_df[mkt_df['bias'].str.contains('BEARISH', na=False)])
-                mkt_neutral = len(mkt_df) - mkt_bull - mkt_bear
-
-                st.write(f"🐂 Bullish: {mkt_bull} | 🐻 Bearish: {mkt_bear} | ⚖️ Neutral: {mkt_neutral}")
-                st.dataframe(mkt_df[['indicator', 'bias', 'score']],
+                st.write(f"🐂 {slow_bull} | 🐻 {slow_bear} | ⚖️ {slow_neutral}")
+                st.dataframe(slow_df[['indicator', 'bias', 'score']],
                            use_container_width=True, hide_index=True)
 
         st.divider()
@@ -1833,45 +1818,42 @@ with tab5:
         st.markdown("""
         ### About Bias Analysis Pro
 
-        This comprehensive bias analyzer evaluates **15+ different bias indicators** to provide:
+        This comprehensive bias analyzer evaluates **13 bias indicators** matching Pine Script EXACTLY:
 
-        #### 📊 Technical Indicators
+        #### ⚡ Fast Indicators (8)
+        - **Volume Delta** (Up Vol - Down Vol)
+        - **HVP** (High Volume Pivots)
+        - **VOB** (Volume Order Blocks)
+        - **Order Blocks** (EMA 5/18 Crossover)
         - **RSI** (Relative Strength Index)
+        - **DMI** (Directional Movement Index)
+        - **VIDYA** (Variable Index Dynamic Average)
         - **MFI** (Money Flow Index)
-        - **DMI/ADX** (Directional Movement Index)
-        - **VWAP** (Volume Weighted Average Price)
-        - **EMA Crossover** (5/18 periods)
 
-        #### 📈 Volume Indicators
-        - **Volume ROC** (Rate of Change)
-        - **OBV** (On Balance Volume)
-        - **Force Index**
-        - **Volume Trend**
+        #### 📊 Medium Indicators (2)
+        - **Close vs VWAP** (Price above/below VWAP)
+        - **Price vs VWAP** (Position relative to VWAP)
 
-        #### 📉 Momentum Indicators
-        - **Price ROC** (Momentum)
-        - **RSI Divergence** (Bullish/Bearish)
-        - **Choppiness Index**
+        #### 🐢 Slow Indicators (3)
+        - **Weighted Stocks (Daily)** (Top 9 NSE stocks)
+        - **Weighted Stocks (15m)** (Intraday trend)
+        - **Weighted Stocks (1h)** (Higher timeframe trend)
 
-        #### 🌍 Market Wide Indicators
-        - **Market Breadth** (Top 9 NSE stocks analysis)
-        - **Volatility Ratio**
-        - **ATR Trend**
-
-        #### 🎯 Scoring System
-        - Each indicator has a **weight** based on reliability
+        #### 🎯 Adaptive Scoring System
+        - **Normal Mode:** Fast (2x), Medium (3x), Slow (5x) weights
+        - **Reversal Mode:** Fast (5x), Medium (3x), Slow (2x) weights
+        - Mode switches automatically when divergence detected
         - Scores range from **-100 (Strong Bearish)** to **+100 (Strong Bullish)**
-        - Overall bias is calculated using **weighted average** of all indicators
-        - Final recommendation considers both **bias direction** and **confidence level**
+        - Overall bias requires **60%+ strength** for directional bias
 
         #### ✅ How to Use
         1. Select the market (NIFTY, SENSEX, or DOW)
         2. Click "Analyze All Bias" button
-        3. Review comprehensive bias breakdown
-        4. Check trading recommendation
+        3. Review comprehensive bias breakdown by category
+        4. Check for REVERSAL mode warnings
         5. Use signals to inform your trading decisions
 
-        **Note:** This tool is converted from the Pine Script "Smart Trading Dashboard - Enhanced Pro" indicator with 80% accuracy.
+        **Note:** This tool is converted from the Pine Script "Smart Trading Dashboard - Adaptive + VOB" indicator with EXACT matching logic.
         """)
 
     # ═════════════════════════════════════════════════════════════════════

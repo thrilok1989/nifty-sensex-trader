@@ -45,6 +45,102 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ═══════════════════════════════════════════════════════════════════════
+# CUSTOM CSS - PREVENT BLUR/LOADING OVERLAY DURING REFRESH
+# ═══════════════════════════════════════════════════════════════════════
+# This CSS prevents the app from showing blur/white screen during refresh
+# allowing users to continue viewing data while refresh happens in background
+
+st.markdown("""
+<style>
+    /* Hide the Streamlit loading spinner and blur overlay */
+    .stApp > div[data-testid="stAppViewContainer"] > div:first-child {
+        display: none !important;
+    }
+
+    /* Prevent blur overlay during rerun */
+    .stApp [data-testid="stAppViewContainer"] {
+        background: transparent !important;
+    }
+
+    /* Hide the "Running..." indicator in top right */
+    .stApp [data-testid="stStatusWidget"] {
+        visibility: hidden;
+    }
+
+    /* Hide all spinner elements */
+    .stSpinner {
+        display: none !important;
+    }
+
+    /* Hide loading indicator */
+    div[data-testid="stLoadingIndicator"] {
+        display: none !important;
+    }
+
+    /* Keep app content visible during refresh - no opacity change */
+    .element-container {
+        opacity: 1 !important;
+        transition: none !important;
+    }
+
+    .stMarkdown {
+        opacity: 1 !important;
+        transition: none !important;
+    }
+
+    /* Prevent white flash during page reload */
+    body {
+        background-color: #0E1117;
+        transition: none !important;
+    }
+
+    /* Smooth transitions for dynamic content - DISABLED to prevent blur */
+    .stApp {
+        transition: none !important;
+    }
+
+    /* Hide loading overlay completely */
+    div[data-testid="stAppViewContainer"] > div[style*="position: absolute"] {
+        display: none !important;
+    }
+
+    /* Ensure dataframes remain visible during refresh */
+    .dataframe {
+        opacity: 1 !important;
+        transition: none !important;
+    }
+
+    /* Keep charts visible during refresh */
+    .stPlotlyChart {
+        opacity: 1 !important;
+        transition: none !important;
+    }
+
+    /* Hide the app header spinner */
+    header[data-testid="stHeader"] {
+        background-color: transparent !important;
+    }
+
+    /* Prevent flickering on dynamic updates */
+    section[data-testid="stSidebar"],
+    section[data-testid="stMain"] {
+        transition: none !important;
+    }
+
+    /* Keep all content visible - override any opacity changes */
+    [data-testid="stVerticalBlock"] {
+        opacity: 1 !important;
+    }
+
+    /* Remove blur filter if applied */
+    * {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Performance optimization: Reduce widget refresh overhead
 # This improves app responsiveness and reduces lag
 if 'performance_mode' not in st.session_state:
@@ -277,7 +373,7 @@ with st.sidebar:
         else:
             st.info(f"⏳ {name} Loading...")
 
-    st.caption("🔄 Auto-refreshing every 10-60 seconds")
+    st.caption("🔄 Auto-refreshing every 60-120 seconds (optimized for performance)")
 
 # ═══════════════════════════════════════════════════════════════════════
 # MAIN CONTENT
@@ -302,13 +398,13 @@ if 'chart_data_cache' not in st.session_state:
 if 'chart_data_cache_time' not in st.session_state:
     st.session_state.chart_data_cache_time = {}
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)  # Increased from 60s to 120s for better performance
 def get_cached_chart_data(symbol, period, interval):
     """Cached chart data fetcher - reduces API calls"""
     chart_analyzer = AdvancedChartAnalysis()
     return chart_analyzer.fetch_intraday_data(symbol, period=period, interval=interval)
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)  # Increased from 60s to 120s for better performance
 def calculate_vob_indicators(df_key, sensitivity=5):
     """Cached VOB calculation - reduces redundant computations"""
     from indicators.volume_order_blocks import VolumeOrderBlocks
@@ -323,7 +419,7 @@ def calculate_vob_indicators(df_key, sensitivity=5):
     vob_indicator = VolumeOrderBlocks(sensitivity=sensitivity)
     return vob_indicator.calculate(df)
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)  # Increased from 60s to 120s for better performance
 def calculate_sentiment():
     """Cached sentiment calculation"""
     try:
@@ -340,16 +436,24 @@ if 'cached_sentiment' not in st.session_state:
 if 'sentiment_cache_time' not in st.session_state:
     st.session_state.sentiment_cache_time = 0
 
-# Calculate sentiment once every 60 seconds and cache it (avoid redundant calculations)
+# Calculate sentiment once every 120 seconds and cache it (increased from 60s for better performance)
 current_time = time.time()
-if current_time - st.session_state.sentiment_cache_time > 60:
+if current_time - st.session_state.sentiment_cache_time > 120:
     sentiment_result = calculate_sentiment()
     if sentiment_result:
         st.session_state.cached_sentiment = sentiment_result
         st.session_state.sentiment_cache_time = current_time
 
-# Check for VOB signals every 30 seconds (reduced from 10s for better performance)
-if current_time - st.session_state.last_vob_check_time > 30:
+# ═══════════════════════════════════════════════════════════════════════
+# PERFORMANCE OPTIMIZATION: Only run expensive signal checks during market hours
+# and increase check interval to reduce load (60 seconds instead of 30)
+# ═══════════════════════════════════════════════════════════════════════
+market_status = get_market_status()
+should_run_signal_check = market_status.get('open', False)
+
+# Check for VOB signals every 60 seconds (increased from 30s for better performance)
+# Only run during market hours to reduce unnecessary processing
+if should_run_signal_check and (current_time - st.session_state.last_vob_check_time > 60):
     st.session_state.last_vob_check_time = current_time
 
     try:
@@ -447,8 +551,9 @@ if current_time - st.session_state.last_vob_check_time > 30:
 # ═══════════════════════════════════════════════════════════════════════
 # HTF SUPPORT/RESISTANCE SIGNAL MONITORING (Optimized)
 # ═══════════════════════════════════════════════════════════════════════
-# Check for HTF S/R signals every 30 seconds (reduced from 10s for better performance)
-if current_time - st.session_state.last_htf_sr_check_time > 30:
+# Check for HTF S/R signals every 60 seconds (increased from 30s for better performance)
+# Only run during market hours to reduce unnecessary processing
+if should_run_signal_check and (current_time - st.session_state.last_htf_sr_check_time > 60):
     st.session_state.last_htf_sr_check_time = current_time
 
     try:

@@ -373,7 +373,7 @@ with st.sidebar:
         else:
             st.info(f"⏳ {name} Loading...")
 
-    st.caption("🔄 Auto-refreshing every 10-60 seconds")
+    st.caption("🔄 Auto-refreshing every 60-120 seconds (optimized for performance)")
 
 # ═══════════════════════════════════════════════════════════════════════
 # MAIN CONTENT
@@ -398,13 +398,13 @@ if 'chart_data_cache' not in st.session_state:
 if 'chart_data_cache_time' not in st.session_state:
     st.session_state.chart_data_cache_time = {}
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)  # Increased from 60s to 120s for better performance
 def get_cached_chart_data(symbol, period, interval):
     """Cached chart data fetcher - reduces API calls"""
     chart_analyzer = AdvancedChartAnalysis()
     return chart_analyzer.fetch_intraday_data(symbol, period=period, interval=interval)
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)  # Increased from 60s to 120s for better performance
 def calculate_vob_indicators(df_key, sensitivity=5):
     """Cached VOB calculation - reduces redundant computations"""
     from indicators.volume_order_blocks import VolumeOrderBlocks
@@ -419,7 +419,7 @@ def calculate_vob_indicators(df_key, sensitivity=5):
     vob_indicator = VolumeOrderBlocks(sensitivity=sensitivity)
     return vob_indicator.calculate(df)
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)  # Increased from 60s to 120s for better performance
 def calculate_sentiment():
     """Cached sentiment calculation"""
     try:
@@ -436,16 +436,24 @@ if 'cached_sentiment' not in st.session_state:
 if 'sentiment_cache_time' not in st.session_state:
     st.session_state.sentiment_cache_time = 0
 
-# Calculate sentiment once every 60 seconds and cache it (avoid redundant calculations)
+# Calculate sentiment once every 120 seconds and cache it (increased from 60s for better performance)
 current_time = time.time()
-if current_time - st.session_state.sentiment_cache_time > 60:
+if current_time - st.session_state.sentiment_cache_time > 120:
     sentiment_result = calculate_sentiment()
     if sentiment_result:
         st.session_state.cached_sentiment = sentiment_result
         st.session_state.sentiment_cache_time = current_time
 
-# Check for VOB signals every 30 seconds (reduced from 10s for better performance)
-if current_time - st.session_state.last_vob_check_time > 30:
+# ═══════════════════════════════════════════════════════════════════════
+# PERFORMANCE OPTIMIZATION: Only run expensive signal checks during market hours
+# and increase check interval to reduce load (60 seconds instead of 30)
+# ═══════════════════════════════════════════════════════════════════════
+market_status = get_market_status()
+should_run_signal_check = market_status.get('open', False)
+
+# Check for VOB signals every 60 seconds (increased from 30s for better performance)
+# Only run during market hours to reduce unnecessary processing
+if should_run_signal_check and (current_time - st.session_state.last_vob_check_time > 60):
     st.session_state.last_vob_check_time = current_time
 
     try:
@@ -543,8 +551,9 @@ if current_time - st.session_state.last_vob_check_time > 30:
 # ═══════════════════════════════════════════════════════════════════════
 # HTF SUPPORT/RESISTANCE SIGNAL MONITORING (Optimized)
 # ═══════════════════════════════════════════════════════════════════════
-# Check for HTF S/R signals every 30 seconds (reduced from 10s for better performance)
-if current_time - st.session_state.last_htf_sr_check_time > 30:
+# Check for HTF S/R signals every 60 seconds (increased from 30s for better performance)
+# Only run during market hours to reduce unnecessary processing
+if should_run_signal_check and (current_time - st.session_state.last_htf_sr_check_time > 60):
     st.session_state.last_htf_sr_check_time = current_time
 
     try:

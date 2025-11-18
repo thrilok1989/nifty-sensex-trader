@@ -9,6 +9,7 @@ from pytz import timezone as pytz_timezone
 import plotly.graph_objects as go
 import io
 import requests
+from streamlit_autorefresh import st_autorefresh
 
 # Import modules
 from config import *
@@ -138,6 +139,57 @@ st.markdown("""
         backdrop-filter: none !important;
         -webkit-backdrop-filter: none !important;
     }
+
+    /* ═══════════════════════════════════════════════════════════════════ */
+    /* MOBILE & DESKTOP RESPONSIVE IMPROVEMENTS */
+    /* ═══════════════════════════════════════════════════════════════════ */
+
+    /* Ensure tabs are scrollable on mobile */
+    [data-baseweb="tab-list"] {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+
+    /* Make tabs touch-friendly on mobile */
+    [data-baseweb="tab"] {
+        min-height: 48px !important;
+        padding: 12px 16px !important;
+    }
+
+    /* Responsive font sizes for mobile */
+    @media (max-width: 768px) {
+        h1 { font-size: 1.5rem !important; }
+        h2 { font-size: 1.3rem !important; }
+        h3 { font-size: 1.1rem !important; }
+
+        /* Reduce padding on mobile */
+        .main .block-container {
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+        }
+
+        /* Make tables scrollable on mobile */
+        .dataframe-container {
+            overflow-x: auto !important;
+        }
+
+        /* Stack columns on mobile */
+        [data-testid="column"] {
+            min-width: 100% !important;
+        }
+    }
+
+    /* Improve touch targets for buttons */
+    button {
+        min-height: 44px !important;
+        min-width: 44px !important;
+    }
+
+    /* Smooth scrolling for better UX */
+    html {
+        scroll-behavior: smooth;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -176,9 +228,6 @@ if 'last_refresh' not in st.session_state:
 
 if 'active_setup_id' not in st.session_state:
     st.session_state.active_setup_id = None
-
-if 'active_tab' not in st.session_state:
-    st.session_state.active_tab = 0
 
 # Lazy initialization - only create these objects when needed (on tab access)
 # This significantly reduces initial load time
@@ -262,6 +311,11 @@ if 'overall_option_data' not in st.session_state:
 # - Signal checks reduced to 30-second intervals
 # - Lazy loading for tab-specific data
 # - Streamlit caching for expensive computations
+
+# Auto-refresh every 60 seconds (configurable via AUTO_REFRESH_INTERVAL)
+# This ensures the app stays updated with latest market data
+# The refresh is seamless - no blur/flash thanks to custom CSS above
+refresh_count = st_autorefresh(interval=AUTO_REFRESH_INTERVAL * 1000, key="data_refresh")
 
 # ═══════════════════════════════════════════════════════════════════════
 # HEADER
@@ -922,28 +976,32 @@ else:
 st.divider()
 
 # ═══════════════════════════════════════════════════════════════════════
-# TABS WITH PERSISTENT STATE
+# TABS - USING NATIVE STREAMLIT TABS FOR BETTER UX
 # ═══════════════════════════════════════════════════════════════════════
 
-# Tab selector that persists across reruns
-tab_options = ["🌟 Overall Market Sentiment", "🎯 Trade Setup", "📊 Active Signals", "📈 Positions", "🎯 Bias Analysis Pro", "📊 Option Chain Analysis", "📈 Advanced Chart Analysis"]
-selected_tab = st.radio("Select Tab", tab_options, index=st.session_state.active_tab, horizontal=True, key="tab_selector", label_visibility="collapsed")
-
-# Update active tab in session state
-st.session_state.active_tab = tab_options.index(selected_tab)
+# Native tabs - work seamlessly on mobile and desktop, no multiple clicks needed
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "🌟 Overall Market Sentiment",
+    "🎯 Trade Setup",
+    "📊 Active Signals",
+    "📈 Positions",
+    "🎯 Bias Analysis Pro",
+    "📊 Option Chain Analysis",
+    "📈 Advanced Chart Analysis"
+])
 
 # ═══════════════════════════════════════════════════════════════════════
 # TAB 1: OVERALL MARKET SENTIMENT
 # ═══════════════════════════════════════════════════════════════════════
 
-if selected_tab == "🌟 Overall Market Sentiment":
+with tab1:
     render_overall_market_sentiment(NSE_INSTRUMENTS)
 
 # ═══════════════════════════════════════════════════════════════════════
 # TAB 2: TRADE SETUP
 # ═══════════════════════════════════════════════════════════════════════
 
-elif selected_tab == "🎯 Trade Setup":
+with tab2:
     st.header("🎯 Create New Trade Setup")
     
     col1, col2 = st.columns(2)
@@ -1042,10 +1100,10 @@ elif selected_tab == "🎯 Trade Setup":
         st.rerun()
 
 # ═══════════════════════════════════════════════════════════════════════
-# TAB 2: ACTIVE SIGNALS
+# TAB 3: ACTIVE SIGNALS
 # ═══════════════════════════════════════════════════════════════════════
 
-elif selected_tab == "📊 Active Signals":
+with tab3:
     st.header("📊 Active Signal Setups")
 
     active_setups = st.session_state.signal_manager.get_active_setups()
@@ -1210,10 +1268,10 @@ elif selected_tab == "📊 Active Signals":
                 st.divider()
 
 # ═══════════════════════════════════════════════════════════════════════
-# TAB 3: POSITIONS
+# TAB 4: POSITIONS
 # ═══════════════════════════════════════════════════════════════════════
 
-elif selected_tab == "📈 Positions":
+with tab4:
     st.header("📈 Active Positions & Monitoring")
 
     # Initialize active_positions in session state if not exists
@@ -1428,7 +1486,7 @@ elif selected_tab == "📈 Positions":
 # TAB 5: BIAS ANALYSIS PRO
 # ═══════════════════════════════════════════════════════════════════════
 
-elif selected_tab == "🎯 Bias Analysis Pro":
+with tab5:
     st.header("🎯 Comprehensive Bias Analysis Pro")
     st.caption("15+ Bias Indicators with Weighted Scoring System | 🔄 Auto-refreshing every 60 seconds")
 
@@ -1886,7 +1944,7 @@ elif selected_tab == "🎯 Bias Analysis Pro":
 # TAB 6: OPTION CHAIN ANALYSIS (NSE Options Analyzer)
 # ═══════════════════════════════════════════════════════════════════════
 
-elif selected_tab == "📊 Option Chain Analysis":
+with tab6:
     st.header("📊 NSE Options Analyzer")
     st.caption("Comprehensive Option Chain Analysis with Bias Detection, Support/Resistance Zones, and Trade Signals")
 
@@ -1935,7 +1993,7 @@ elif selected_tab == "📊 Option Chain Analysis":
 # TAB 7: ADVANCED CHART ANALYSIS
 # ═══════════════════════════════════════════════════════════════════════
 
-elif selected_tab == "📈 Advanced Chart Analysis":
+with tab7:
     st.header("📈 Advanced Chart Analysis")
     st.caption("TradingView-style Chart with 6 Advanced Indicators: Volume Bars, Volume Order Blocks, HTF Support/Resistance (3min, 5min, 10min, 15min levels), Volume Footprint (1D timeframe, 10 bins, Dynamic POC), Ultimate RSI, OM Indicator (Order Flow & Momentum)")
 

@@ -357,9 +357,11 @@ class BiasAnalysisPro:
         return volume_delta, volume_bullish, volume_bearish
 
     def calculate_hvp(self, df: pd.DataFrame, left_bars: int = 15, right_bars: int = 15, vol_filter: float = 2.0):
-        """Calculate High Volume Pivots matching Pine Script"""
+        """Calculate High Volume Pivots matching Pine Script
+        Returns: (hvp_bullish, hvp_bearish, pivot_high_count, pivot_low_count)
+        """
         if df['Volume'].sum() == 0:
-            return False, False
+            return False, False, 0, 0
 
         # Calculate pivot highs and lows
         pivot_highs = []
@@ -403,10 +405,12 @@ class BiasAnalysisPro:
             if norm_vol.iloc[last_pivot_high_idx] > vol_filter:
                 hvp_bearish = True
 
-        return hvp_bullish, hvp_bearish
+        return hvp_bullish, hvp_bearish, len(pivot_highs), len(pivot_lows)
 
     def calculate_vob(self, df: pd.DataFrame, length1: int = 5):
-        """Calculate Volume Order Blocks matching Pine Script"""
+        """Calculate Volume Order Blocks matching Pine Script
+        Returns: (vob_bullish, vob_bearish, ema1_value, ema2_value)
+        """
         # Calculate EMAs
         length2 = length1 + 13
         ema1 = self.calculate_ema(df['Close'], length1)
@@ -421,7 +425,7 @@ class BiasAnalysisPro:
         vob_bullish = cross_up
         vob_bearish = cross_dn
 
-        return vob_bullish, vob_bearish
+        return vob_bullish, vob_bearish, ema1.iloc[-1], ema2.iloc[-1]
 
     # =========================================================================
     # ENHANCED INDICATORS (KEPT FOR COMPATIBILITY)
@@ -689,21 +693,24 @@ class BiasAnalysisPro:
         })
 
         # 2. HVP (High Volume Pivots)
-        hvp_bullish, hvp_bearish = self.calculate_hvp(df)
+        hvp_bullish, hvp_bearish, pivot_highs, pivot_lows = self.calculate_hvp(df)
 
         if hvp_bullish:
             hvp_bias = "BULLISH"
             hvp_score = 100
+            hvp_value = f"Bull Signal (Lows: {pivot_lows}, Highs: {pivot_highs})"
         elif hvp_bearish:
             hvp_bias = "BEARISH"
             hvp_score = -100
+            hvp_value = f"Bear Signal (Highs: {pivot_highs}, Lows: {pivot_lows})"
         else:
             hvp_bias = "NEUTRAL"
             hvp_score = 0
+            hvp_value = f"No Signal (Highs: {pivot_highs}, Lows: {pivot_lows})"
 
         bias_results.append({
             'indicator': 'HVP (High Volume Pivots)',
-            'value': "Bull" if hvp_bullish else "Bear" if hvp_bearish else "None",
+            'value': hvp_value,
             'bias': hvp_bias,
             'score': hvp_score,
             'weight': 1.0,
@@ -711,21 +718,28 @@ class BiasAnalysisPro:
         })
 
         # 3. VOB (Volume Order Blocks)
-        vob_bullish, vob_bearish = self.calculate_vob(df)
+        vob_bullish, vob_bearish, vob_ema5, vob_ema18 = self.calculate_vob(df)
 
         if vob_bullish:
             vob_bias = "BULLISH"
             vob_score = 100
+            vob_value = f"Bull Cross (EMA5: {vob_ema5:.2f} > EMA18: {vob_ema18:.2f})"
         elif vob_bearish:
             vob_bias = "BEARISH"
             vob_score = -100
+            vob_value = f"Bear Cross (EMA5: {vob_ema5:.2f} < EMA18: {vob_ema18:.2f})"
         else:
             vob_bias = "NEUTRAL"
             vob_score = 0
+            # Determine if EMA5 is above or below EMA18
+            if vob_ema5 > vob_ema18:
+                vob_value = f"EMA5: {vob_ema5:.2f} > EMA18: {vob_ema18:.2f} (No Cross)"
+            else:
+                vob_value = f"EMA5: {vob_ema5:.2f} < EMA18: {vob_ema18:.2f} (No Cross)"
 
         bias_results.append({
             'indicator': 'VOB (Volume Order Blocks)',
-            'value': "Bull Touch" if vob_bullish else "Bear Touch" if vob_bearish else "None",
+            'value': vob_value,
             'bias': vob_bias,
             'score': vob_score,
             'weight': 1.0,

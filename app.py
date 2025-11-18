@@ -447,6 +447,14 @@ if not nifty_data or not nifty_data.get('success'):
     nifty_data = {
         'success': False,
         'spot_price': 0,
+        'atm_strike': 0,
+        'open': 0,
+        'high': 0,
+        'low': 0,
+        'close': 0,
+        'expiry_dates': [],
+        'current_expiry': 'Loading...',
+        'chart_data': None,
         'error': 'Loading...',
         'timestamp': None
     }

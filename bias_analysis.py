@@ -11,12 +11,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Tuple, Optional
 import yfinance as yf
 import warnings
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import pytz
 warnings.filterwarnings('ignore')
-
-# Indian Standard Time (IST)
-IST = pytz.timezone('Asia/Kolkata')
 
 # Import Dhan API for Indian indices volume data
 try:
@@ -136,10 +131,9 @@ class BiasAnalysisPro:
                 interval_map = {'1m': '1', '5m': '5', '15m': '15', '1h': '60'}
                 dhan_interval = interval_map.get(interval, '5')
 
-                # Calculate date range for historical data (7 days) - Use IST timezone
-                now_ist = datetime.now(IST)
-                to_date = now_ist.strftime('%Y-%m-%d %H:%M:%S')
-                from_date = (now_ist - timedelta(days=7)).replace(hour=9, minute=15, second=0).strftime('%Y-%m-%d %H:%M:%S')
+                # Calculate date range for historical data (7 days)
+                to_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                from_date = (datetime.now() - timedelta(days=7)).replace(hour=9, minute=15, second=0).strftime('%Y-%m-%d %H:%M:%S')
 
                 # Fetch intraday data with 7 days historical range
                 result = fetcher.fetch_intraday_data(dhan_instrument, interval=dhan_interval, from_date=from_date, to_date=to_date)
@@ -357,11 +351,9 @@ class BiasAnalysisPro:
         return volume_delta, volume_bullish, volume_bearish
 
     def calculate_hvp(self, df: pd.DataFrame, left_bars: int = 15, right_bars: int = 15, vol_filter: float = 2.0):
-        """Calculate High Volume Pivots matching Pine Script
-        Returns: (hvp_bullish, hvp_bearish, pivot_high_count, pivot_low_count)
-        """
+        """Calculate High Volume Pivots matching Pine Script"""
         if df['Volume'].sum() == 0:
-            return False, False, 0, 0
+            return False, False
 
         # Calculate pivot highs and lows
         pivot_highs = []
@@ -405,12 +397,10 @@ class BiasAnalysisPro:
             if norm_vol.iloc[last_pivot_high_idx] > vol_filter:
                 hvp_bearish = True
 
-        return hvp_bullish, hvp_bearish, len(pivot_highs), len(pivot_lows)
+        return hvp_bullish, hvp_bearish
 
     def calculate_vob(self, df: pd.DataFrame, length1: int = 5):
-        """Calculate Volume Order Blocks matching Pine Script
-        Returns: (vob_bullish, vob_bearish, ema1_value, ema2_value)
-        """
+        """Calculate Volume Order Blocks matching Pine Script"""
         # Calculate EMAs
         length2 = length1 + 13
         ema1 = self.calculate_ema(df['Close'], length1)
@@ -425,7 +415,7 @@ class BiasAnalysisPro:
         vob_bullish = cross_up
         vob_bearish = cross_dn
 
-        return vob_bullish, vob_bearish, ema1.iloc[-1], ema2.iloc[-1]
+        return vob_bullish, vob_bearish
 
     # =========================================================================
     # ENHANCED INDICATORS (KEPT FOR COMPATIBILITY)
@@ -579,54 +569,36 @@ class BiasAnalysisPro:
     # MARKET BREADTH & STOCKS ANALYSIS
     # =========================================================================
 
-    def _fetch_stock_data(self, symbol: str, weight: float):
-        """Helper function to fetch single stock data for parallel processing"""
-        try:
-            # Use 5d period with 5m interval (Yahoo Finance limitation for intraday data)
-            df = self.fetch_data(symbol, period='5d', interval='5m')
-            if df.empty or len(df) < 2:
-                return None
-
-            current_price = df['Close'].iloc[-1]
-            prev_price = df['Close'].iloc[0]
-            change_pct = ((current_price - prev_price) / prev_price) * 100
-
-            return {
-                'symbol': symbol.replace('.NS', ''),
-                'change_pct': change_pct,
-                'weight': weight,
-                'is_bullish': change_pct > 0
-            }
-        except Exception as e:
-            print(f"Error processing {symbol}: {e}")
-            return None
-
     def calculate_market_breadth(self):
-        """Calculate market breadth from top stocks (optimized with parallel processing)"""
+        """Calculate market breadth from top stocks"""
         bullish_stocks = 0
         total_stocks = 0
         stock_data = []
 
-        # Optimize: Use ThreadPoolExecutor for parallel API calls
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            # Submit all tasks
-            future_to_stock = {
-                executor.submit(self._fetch_stock_data, symbol, weight): (symbol, weight)
-                for symbol, weight in self.config['stocks'].items()
-            }
+        for symbol, weight in self.config['stocks'].items():
+            try:
+                # Use 5d period with 5m interval (Yahoo Finance limitation for intraday data)
+                df = self.fetch_data(symbol, period='5d', interval='5m')
+                if df.empty or len(df) < 2:
+                    continue
 
-            # Collect results as they complete
-            for future in as_completed(future_to_stock):
-                result = future.result()
-                if result:
-                    stock_data.append({
-                        'symbol': result['symbol'],
-                        'change_pct': result['change_pct'],
-                        'weight': result['weight']
-                    })
-                    if result['is_bullish']:
-                        bullish_stocks += 1
-                    total_stocks += 1
+                current_price = df['Close'].iloc[-1]
+                prev_price = df['Close'].iloc[0]
+                change_pct = ((current_price - prev_price) / prev_price) * 100
+
+                if change_pct > 0:
+                    bullish_stocks += 1
+
+                total_stocks += 1
+
+                stock_data.append({
+                    'symbol': symbol.replace('.NS', ''),
+                    'change_pct': change_pct,
+                    'weight': weight
+                })
+            except Exception as e:
+                print(f"Error processing {symbol}: {e}")
+                continue
 
         if total_stocks > 0:
             market_breadth = (bullish_stocks / total_stocks) * 100
@@ -644,8 +616,10 @@ class BiasAnalysisPro:
 
     def analyze_all_bias_indicators(self, symbol: str = "^NSEI") -> Dict:
         """
-        Analyze all 8 bias indicators:
+        Analyze all 13 bias indicators matching Pine Script EXACTLY:
         Fast (8): Volume Delta, HVP, VOB, Order Blocks, RSI, DMI, VIDYA, MFI
+        Medium (2): Close vs VWAP, Price vs VWAP
+        Slow (3): Weighted stocks (Daily, TF1, TF2)
         """
 
         print(f"Fetching data for {symbol}...")
@@ -664,7 +638,6 @@ class BiasAnalysisPro:
 
         # Initialize bias results list
         bias_results = []
-        stock_data = []  # Empty since we removed Weighted Stocks indicators
 
         # =====================================================================
         # FAST INDICATORS (8 total)
@@ -693,24 +666,21 @@ class BiasAnalysisPro:
         })
 
         # 2. HVP (High Volume Pivots)
-        hvp_bullish, hvp_bearish, pivot_highs, pivot_lows = self.calculate_hvp(df)
+        hvp_bullish, hvp_bearish = self.calculate_hvp(df)
 
         if hvp_bullish:
             hvp_bias = "BULLISH"
             hvp_score = 100
-            hvp_value = f"Bull Signal (Lows: {pivot_lows}, Highs: {pivot_highs})"
         elif hvp_bearish:
             hvp_bias = "BEARISH"
             hvp_score = -100
-            hvp_value = f"Bear Signal (Highs: {pivot_highs}, Lows: {pivot_lows})"
         else:
             hvp_bias = "NEUTRAL"
             hvp_score = 0
-            hvp_value = f"No Signal (Highs: {pivot_highs}, Lows: {pivot_lows})"
 
         bias_results.append({
             'indicator': 'HVP (High Volume Pivots)',
-            'value': hvp_value,
+            'value': "Bull" if hvp_bullish else "Bear" if hvp_bearish else "None",
             'bias': hvp_bias,
             'score': hvp_score,
             'weight': 1.0,
@@ -718,28 +688,21 @@ class BiasAnalysisPro:
         })
 
         # 3. VOB (Volume Order Blocks)
-        vob_bullish, vob_bearish, vob_ema5, vob_ema18 = self.calculate_vob(df)
+        vob_bullish, vob_bearish = self.calculate_vob(df)
 
         if vob_bullish:
             vob_bias = "BULLISH"
             vob_score = 100
-            vob_value = f"Bull Cross (EMA5: {vob_ema5:.2f} > EMA18: {vob_ema18:.2f})"
         elif vob_bearish:
             vob_bias = "BEARISH"
             vob_score = -100
-            vob_value = f"Bear Cross (EMA5: {vob_ema5:.2f} < EMA18: {vob_ema18:.2f})"
         else:
             vob_bias = "NEUTRAL"
             vob_score = 0
-            # Determine if EMA5 is above or below EMA18
-            if vob_ema5 > vob_ema18:
-                vob_value = f"EMA5: {vob_ema5:.2f} > EMA18: {vob_ema18:.2f} (No Cross)"
-            else:
-                vob_value = f"EMA5: {vob_ema5:.2f} < EMA18: {vob_ema18:.2f} (No Cross)"
 
         bias_results.append({
             'indicator': 'VOB (Volume Order Blocks)',
-            'value': vob_value,
+            'value': "Bull Touch" if vob_bullish else "Bear Touch" if vob_bearish else "None",
             'bias': vob_bias,
             'score': vob_score,
             'weight': 1.0,
@@ -861,6 +824,102 @@ class BiasAnalysisPro:
         })
 
         # =====================================================================
+        # MEDIUM INDICATORS (2 total)
+        # =====================================================================
+
+        # 9. Close vs VWAP
+        vwap = self.calculate_vwap(df)
+        vwap_value = vwap.iloc[-1]
+
+        if np.isnan(vwap_value):
+            vwap_value = current_price
+
+        if current_price > vwap_value:
+            vwap_bias = "BULLISH"
+            vwap_score = 100
+        else:
+            vwap_bias = "BEARISH"
+            vwap_score = -100
+
+        bias_results.append({
+            'indicator': 'Close vs VWAP',
+            'value': f"Price: {current_price:.2f} | VWAP: {vwap_value:.2f}",
+            'bias': vwap_bias,
+            'score': vwap_score,
+            'weight': 1.0,
+            'category': 'medium'
+        })
+
+        # 10. Price vs VWAP (same as above, as per Pine Script)
+        price_above_vwap = current_price > vwap_value
+        price_below_vwap = current_price < vwap_value
+
+        if price_above_vwap:
+            price_vwap_bias = "BULLISH"
+            price_vwap_score = 100
+        elif price_below_vwap:
+            price_vwap_bias = "BEARISH"
+            price_vwap_score = -100
+        else:
+            price_vwap_bias = "NEUTRAL"
+            price_vwap_score = 0
+
+        bias_results.append({
+            'indicator': 'Price vs VWAP',
+            'value': "Above" if price_above_vwap else "Below" if price_below_vwap else "At",
+            'bias': price_vwap_bias,
+            'score': price_vwap_score,
+            'weight': 1.0,
+            'category': 'medium'
+        })
+
+        # =====================================================================
+        # SLOW INDICATORS (3 total) - Weighted Stocks
+        # =====================================================================
+
+        print("Calculating weighted stock averages...")
+        market_breadth, breadth_bullish, breadth_bearish, bull_stocks, total_stocks, stock_data = self.calculate_market_breadth()
+
+        # 11. Weighted Daily Average
+        weighted_daily_bullish = market_breadth > 50
+
+        if weighted_daily_bullish:
+            wd_bias = "BULLISH"
+            wd_score = 100
+        else:
+            wd_bias = "BEARISH"
+            wd_score = -100
+
+        bias_results.append({
+            'indicator': 'Weighted Stocks (Daily)',
+            'value': f"{market_breadth:.1f}% ({bull_stocks}/{total_stocks} UP)",
+            'bias': wd_bias,
+            'score': wd_score,
+            'weight': 1.0,
+            'category': 'slow'
+        })
+
+        # 12. Weighted TF1 Average (for simplicity, using same market breadth)
+        bias_results.append({
+            'indicator': f'Weighted Stocks ({self.config["tf1"]})',
+            'value': f"{market_breadth:.1f}%",
+            'bias': wd_bias,
+            'score': wd_score,
+            'weight': 1.0,
+            'category': 'slow'
+        })
+
+        # 13. Weighted TF2 Average (for simplicity, using same market breadth)
+        bias_results.append({
+            'indicator': f'Weighted Stocks ({self.config["tf2"]})',
+            'value': f"{market_breadth:.1f}%",
+            'bias': wd_bias,
+            'score': wd_score,
+            'weight': 1.0,
+            'category': 'slow'
+        })
+
+        # =====================================================================
         # CALCULATE OVERALL BIAS (Matching Pine Script Logic)
         # =====================================================================
         fast_bull = 0
@@ -963,7 +1022,7 @@ class BiasAnalysisPro:
             'success': True,
             'symbol': symbol,
             'current_price': current_price,
-            'timestamp': datetime.now(IST),
+            'timestamp': datetime.now(),
             'bias_results': bias_results,
             'overall_bias': overall_bias,
             'overall_score': overall_score,

@@ -25,7 +25,6 @@ from option_chain_analysis import OptionChainAnalyzer
 from nse_options_helpers import *
 from advanced_chart_analysis import AdvancedChartAnalysis
 from overall_market_sentiment import render_overall_market_sentiment, calculate_overall_sentiment
-from advanced_proximity_alerts import get_proximity_alert_system
 from data_cache_manager import (
     get_cache_manager,
     preload_all_data,
@@ -223,20 +222,6 @@ if 'active_htf_sr_signals' not in st.session_state:
 
 if 'last_htf_sr_check_time' not in st.session_state:
     st.session_state.last_htf_sr_check_time = 0
-
-
-# VOB and HTF data storage
-if 'vob_data_nifty' not in st.session_state:
-    st.session_state.vob_data_nifty = None
-
-if 'vob_data_sensex' not in st.session_state:
-    st.session_state.vob_data_sensex = None
-
-if 'htf_data_nifty' not in st.session_state:
-    st.session_state.htf_data_nifty = None
-
-if 'htf_data_sensex' not in st.session_state:
-    st.session_state.htf_data_sensex = None
 
 if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = time.time()
@@ -449,45 +434,14 @@ with st.sidebar:
 # ═══════════════════════════════════════════════════════════════════════
 
 # Get NIFTY data from cache (loaded in background)
-# PERFORMANCE OPTIMIZED: Never blocks - shows loading message if data not ready
 nifty_data = get_cached_nifty_data()
 
 if not nifty_data or not nifty_data.get('success'):
-    # Show loading message (non-blocking)
-    # Background thread will load data and it will appear on next refresh
-    st.info("⏳ Loading NIFTY data in background... Please wait a moment and the data will appear automatically.")
-
-    # Check if there's an error message to display
-    if nifty_data and nifty_data.get('error'):
-        st.error(f"⚠️ **Error:** {nifty_data['error']}")
-
-        # Show help message if it's a credentials error
-        if 'credentials' in nifty_data['error'].lower() or 'secrets.toml' in nifty_data['error'].lower():
-            st.warning("""
-            **Setup Required:**
-            1. Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`
-            2. Fill in your DhanHQ API credentials
-            3. Restart the application
-            """)
-    else:
-        st.info("💡 **Performance Note:** Tab and button clicks should be instant now. Data loads in background without blocking UI.")
-
-    # Use a placeholder/default data structure to prevent errors
-    nifty_data = {
-        'success': False,
-        'spot_price': None,
-        'atm_strike': None,
-        'open': None,
-        'high': None,
-        'low': None,
-        'close': None,
-        'expiry_dates': [],
-        'current_expiry': 'N/A',
-        'chart_data': None,
-        'error': nifty_data.get('error', 'Loading...') if nifty_data else 'Loading...',
-        'timestamp': None
-    }
-    # Note: We don't stop() here - let the app continue and show what it can
+    # Fallback to direct fetch if cache is empty
+    nifty_data = fetch_nifty_data()
+    if not nifty_data['success']:
+        st.error(f"❌ Failed to fetch NIFTY data: {nifty_data.get('error')}")
+        st.stop()
 
 # ═══════════════════════════════════════════════════════════════════════
 # CACHED CHART DATA FETCHER (Performance Optimization)
@@ -563,38 +517,24 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
         else:
             overall_sentiment = 'NEUTRAL'
 
-        # Optimize: Create single VOB indicator instance for reuse
-        from indicators.volume_order_blocks import VolumeOrderBlocks
-        vob_indicator = VolumeOrderBlocks(sensitivity=5)
-
         # Fetch chart data and calculate VOB for NIFTY (using cached function)
         df = get_cached_chart_data('^NSEI', '1d', '1m')
 
         if df is not None and len(df) > 0:
-            # Calculate VOB blocks (reusing indicator instance)
+            # Calculate VOB blocks
+            from indicators.volume_order_blocks import VolumeOrderBlocks
+            vob_indicator = VolumeOrderBlocks(sensitivity=5)
             vob_data = vob_indicator.calculate(df)
 
-            # Store VOB data in session state for display
-            st.session_state.vob_data_nifty = vob_data
-
-            # Check for NIFTY signal - with safe spot price handling
-            nifty_spot_for_signal = None
-            if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 0, 'N/A']:
-                try:
-                    nifty_spot_for_signal = float(nifty_data['spot_price'])
-                except (TypeError, ValueError):
-                    nifty_spot_for_signal = None
-
-            nifty_signal = None
-            if nifty_spot_for_signal is not None:
-                nifty_signal = st.session_state.vob_signal_generator.check_for_signal(
-                    spot_price=nifty_spot_for_signal,
-                    market_sentiment=overall_sentiment,
-                    bullish_blocks=vob_data['bullish_blocks'],
-                    bearish_blocks=vob_data['bearish_blocks'],
-                    index='NIFTY',
-                    df=df  # Pass dataframe for strength analysis
-                )
+            # Check for NIFTY signal
+            nifty_signal = st.session_state.vob_signal_generator.check_for_signal(
+                spot_price=nifty_data['spot_price'],
+                market_sentiment=overall_sentiment,
+                bullish_blocks=vob_data['bullish_blocks'],
+                bearish_blocks=vob_data['bearish_blocks'],
+                index='NIFTY',
+                df=df  # Pass dataframe for strength analysis
+            )
 
             if nifty_signal:
                 # Check if this is a new signal (not already in active signals)
@@ -618,35 +558,21 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
         df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
 
         if df_sensex is not None and len(df_sensex) > 0:
-            # Calculate VOB blocks for SENSEX (reusing indicator instance)
-            vob_data_sensex = vob_indicator.calculate(df_sensex)
-
-            # Store VOB data in session state for display
-            st.session_state.vob_data_sensex = vob_data_sensex
+            # Calculate VOB blocks for SENSEX
+            vob_indicator_sensex = VolumeOrderBlocks(sensitivity=5)
+            vob_data_sensex = vob_indicator_sensex.calculate(df_sensex)
 
             # Get SENSEX spot price
             sensex_data = get_cached_sensex_data()
             if sensex_data:
-                # Safe handling for SENSEX spot price in signal check
-                sensex_spot_for_signal = None
-                if sensex_data.get('spot_price') and sensex_data['spot_price'] not in [None, 0, 'N/A']:
-                    try:
-                        sensex_spot_for_signal = float(sensex_data['spot_price'])
-                    except (TypeError, ValueError):
-                        sensex_spot_for_signal = None
-
-                sensex_signal = None
-                if sensex_spot_for_signal is not None:
-                    sensex_signal = st.session_state.vob_signal_generator.check_for_signal(
-                        spot_price=sensex_spot_for_signal,
-                        market_sentiment=overall_sentiment,
-                        bullish_blocks=vob_data_sensex['bullish_blocks'],
-                        bearish_blocks=vob_data_sensex['bearish_blocks'],
-                        index='SENSEX',
-                        df=df_sensex  # Pass dataframe for strength analysis
-                    )
-            else:
-                sensex_signal = None
+                sensex_signal = st.session_state.vob_signal_generator.check_for_signal(
+                    spot_price=sensex_data['spot_price'],
+                    market_sentiment=overall_sentiment,
+                    bullish_blocks=vob_data_sensex['bullish_blocks'],
+                    bearish_blocks=vob_data_sensex['bearish_blocks'],
+                    index='SENSEX',
+                    df=df_sensex  # Pass dataframe for strength analysis
+                )
 
                 if sensex_signal:
                     # Check if this is a new signal
@@ -672,77 +598,6 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
             if (current_time - sig['timestamp'].timestamp()) < 1800
         ]
 
-        # ═══════════════════════════════════════════════════════════════
-        # PROXIMITY ALERTS - Check if price is near VOB levels
-        # ═══════════════════════════════════════════════════════════════
-        try:
-            proximity_system = get_proximity_alert_system(cooldown_minutes=10)
-
-            # Check NIFTY VOB proximity
-            if st.session_state.vob_data_nifty and nifty_data:
-                # Safe handling for NIFTY spot price
-                nifty_price = None
-                if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 0, 'N/A']:
-                    try:
-                        nifty_price = float(nifty_data['spot_price'])
-                    except (TypeError, ValueError):
-                        nifty_price = None
-
-                if nifty_price is not None:
-                    # Convert HTF data to list format expected by proximity system
-                    htf_data_list = []
-                    if st.session_state.htf_data_nifty:
-                        for timeframe, levels in st.session_state.htf_data_nifty.items():
-                            if levels:
-                                htf_data_list.append({
-                                    'timeframe': timeframe,
-                                    'pivot_high': levels.get('resistance'),
-                                    'pivot_low': levels.get('support')
-                                })
-
-                    # Process proximity alerts for NIFTY
-                    nifty_alerts, nifty_notifications = proximity_system.process_market_data(
-                        symbol='NIFTY',
-                        current_price=nifty_price,
-                        vob_data=st.session_state.vob_data_nifty,
-                        htf_data=htf_data_list
-                    )
-
-            # Check SENSEX VOB proximity
-            if st.session_state.vob_data_sensex and sensex_data:
-                # Safe handling for SENSEX spot price
-                sensex_price = None
-                if sensex_data.get('spot_price') and sensex_data['spot_price'] not in [None, 0, 'N/A']:
-                    try:
-                        sensex_price = float(sensex_data['spot_price'])
-                    except (TypeError, ValueError):
-                        sensex_price = None
-
-                if sensex_price is not None:
-                    # Convert HTF data to list format
-                    htf_data_list_sensex = []
-                    if st.session_state.htf_data_sensex:
-                        for timeframe, levels in st.session_state.htf_data_sensex.items():
-                            if levels:
-                                htf_data_list_sensex.append({
-                                    'timeframe': timeframe,
-                                    'pivot_high': levels.get('resistance'),
-                                    'pivot_low': levels.get('support')
-                                })
-
-                    # Process proximity alerts for SENSEX
-                    sensex_alerts, sensex_notifications = proximity_system.process_market_data(
-                        symbol='SENSEX',
-                        current_price=sensex_price,
-                        vob_data=st.session_state.vob_data_sensex,
-                        htf_data=htf_data_list_sensex
-                    )
-
-        except Exception as prox_e:
-            # Silently fail proximity alerts
-            pass
-
-
     except Exception as e:
         # Silently fail - don't disrupt the app
         pass
@@ -764,42 +619,30 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
 
         # Only check if market sentiment is BULLISH or BEARISH
         if overall_sentiment in ['BULLISH', 'BEARISH']:
-            # Optimize: Create single HTF S/R indicator instance for reuse
+            # Import HTF S/R indicator
             from indicators.htf_support_resistance import HTFSupportResistance
-            htf_sr = HTFSupportResistance()
-            levels_config = [
-                {'timeframe': '5T', 'length': 5},
-                {'timeframe': '10T', 'length': 5},
-                {'timeframe': '15T', 'length': 5}
-            ]
 
             # Fetch chart data for NIFTY (using cached function)
             df_nifty = get_cached_chart_data('^NSEI', '7d', '1m')
 
             if df_nifty is not None and len(df_nifty) > 0:
-                # Calculate HTF S/R levels (reusing indicator instance)
+                # Calculate HTF S/R levels for 5min, 10min, 15min
+                htf_sr = HTFSupportResistance()
+                levels_config = [
+                    {'timeframe': '5T', 'length': 5},
+                    {'timeframe': '10T', 'length': 5},
+                    {'timeframe': '15T', 'length': 5}
+                ]
                 htf_levels = htf_sr.calculate_multi_timeframe(df_nifty, levels_config)
 
-                # Store HTF data in session state for display
-                st.session_state.htf_data_nifty = htf_levels
-
-                # Check for NIFTY signal - with safe spot price handling
-                nifty_spot_htf = None
-                if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 0, 'N/A']:
-                    try:
-                        nifty_spot_htf = float(nifty_data['spot_price'])
-                    except (TypeError, ValueError):
-                        nifty_spot_htf = None
-
-                nifty_htf_signal = None
-                if nifty_spot_htf is not None:
-                    nifty_htf_signal = st.session_state.htf_sr_signal_generator.check_for_signal(
-                        spot_price=nifty_spot_htf,
-                        market_sentiment=overall_sentiment,
-                        htf_levels=htf_levels,
-                        index='NIFTY',
-                        df=df_nifty  # Pass dataframe for strength analysis
-                    )
+                # Check for NIFTY signal
+                nifty_htf_signal = st.session_state.htf_sr_signal_generator.check_for_signal(
+                    spot_price=nifty_data['spot_price'],
+                    market_sentiment=overall_sentiment,
+                    htf_levels=htf_levels,
+                    index='NIFTY',
+                    df=df_nifty  # Pass dataframe for strength analysis
+                )
 
                 if nifty_htf_signal:
                     # Check if this is a new signal (not already in active signals)
@@ -823,52 +666,38 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
             df_sensex = get_cached_chart_data('^BSESN', '7d', '1m')
 
             if df_sensex is not None and len(df_sensex) > 0:
-                # Calculate HTF S/R levels for SENSEX (reusing indicator instance)
-                htf_levels_sensex = htf_sr.calculate_multi_timeframe(df_sensex, levels_config)
-
-                # Store HTF data in session state for display
-                st.session_state.htf_data_sensex = htf_levels_sensex
+                # Calculate HTF S/R levels for SENSEX
+                htf_sr_sensex = HTFSupportResistance()
+                htf_levels_sensex = htf_sr_sensex.calculate_multi_timeframe(df_sensex, levels_config)
 
                 # Get SENSEX spot price
                 sensex_data = get_cached_sensex_data()
                 if sensex_data:
-                    # Safe handling for SENSEX spot price in HTF signal check
-                    sensex_spot_htf = None
-                    if sensex_data.get('spot_price') and sensex_data['spot_price'] not in [None, 0, 'N/A']:
-                        try:
-                            sensex_spot_htf = float(sensex_data['spot_price'])
-                        except (TypeError, ValueError):
-                            sensex_spot_htf = None
+                    sensex_htf_signal = st.session_state.htf_sr_signal_generator.check_for_signal(
+                        spot_price=sensex_data['spot_price'],
+                        market_sentiment=overall_sentiment,
+                        htf_levels=htf_levels_sensex,
+                        index='SENSEX',
+                        df=df_sensex  # Pass dataframe for strength analysis
+                    )
 
-                    sensex_htf_signal = None
-                    if sensex_spot_htf is not None:
-                        sensex_htf_signal = st.session_state.htf_sr_signal_generator.check_for_signal(
-                            spot_price=sensex_spot_htf,
-                            market_sentiment=overall_sentiment,
-                            htf_levels=htf_levels_sensex,
-                            index='SENSEX',
-                            df=df_sensex  # Pass dataframe for strength analysis
-                        )
-                else:
-                    sensex_htf_signal = None
+                    if sensex_htf_signal:
+                        # Check if this is a new signal
+                        is_new = True
+                        for existing_signal in st.session_state.active_htf_sr_signals:
+                            if (existing_signal['index'] == sensex_htf_signal['index'] and
+                                existing_signal['direction'] == sensex_htf_signal['direction'] and
+                                abs(existing_signal['entry_price'] - sensex_htf_signal['entry_price']) < 5):
+                                is_new = False
+                                break
 
-                if sensex_htf_signal:
-                    # Check if this is a new signal
-                    is_new = True
-                    for existing_signal in st.session_state.active_htf_sr_signals:
-                        if (existing_signal['index'] == sensex_htf_signal['index'] and
-                            existing_signal['direction'] == sensex_htf_signal['direction'] and
-                            abs(existing_signal['entry_price'] - sensex_htf_signal['entry_price']) < 5):
-                            is_new = False
-                            break
+                        if is_new:
+                            # Add to active signals
+                            st.session_state.active_htf_sr_signals.append(sensex_htf_signal)
 
-                    if is_new:
-                        # Add to active signals
-                        st.session_state.active_htf_sr_signals.append(sensex_htf_signal)
-
-                        # Send telegram notification
-                        telegram_bot = TelegramBot()
-                        telegram_bot.send_htf_sr_entry_signal(sensex_htf_signal)
+                            # Send telegram notification
+                            telegram_bot = TelegramBot()
+                            telegram_bot.send_htf_sr_entry_signal(sensex_htf_signal)
 
             # Clean up old HTF S/R signals (older than 30 minutes)
             st.session_state.active_htf_sr_signals = [
@@ -884,39 +713,22 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    # Handle None or 0 values for spot price
-    if nifty_data.get('spot_price') is not None and nifty_data['spot_price'] != 0:
-        st.metric(
-            "NIFTY Spot",
-            f"₹{nifty_data['spot_price']:,.2f}",
-            delta=None
-        )
-    else:
-        st.metric(
-            "NIFTY Spot",
-            "N/A",
-            delta=None
-        )
-        if nifty_data.get('error'):
-            st.error(f"⚠️ {nifty_data['error']}")
+    st.metric(
+        "NIFTY Spot",
+        f"₹{nifty_data['spot_price']:,.2f}",
+        delta=None
+    )
 
 with col2:
-    # Handle None or 0 values for ATM strike
-    if nifty_data.get('atm_strike') is not None and nifty_data['atm_strike'] != 0:
-        st.metric(
-            "ATM Strike",
-            f"{nifty_data['atm_strike']}"
-        )
-    else:
-        st.metric(
-            "ATM Strike",
-            "N/A"
-        )
+    st.metric(
+        "ATM Strike",
+        f"{nifty_data['atm_strike']}"
+    )
 
 with col3:
     st.metric(
         "Current Expiry",
-        nifty_data.get('current_expiry', 'N/A')
+        nifty_data['current_expiry']
     )
 
 with col4:
@@ -1040,180 +852,6 @@ else:
     st.info("⏳ Monitoring market for VOB-based entry signals... No active signals at the moment.")
     st.caption("Signals are generated when spot price is within 8 points of a Volume Order Block and aligned with overall market sentiment.")
 
-# Display VOB Summary for NIFTY and SENSEX
-st.markdown("#### 📈 Volume Order Block Status")
-
-col1, col2 = st.columns(2)
-
-# NIFTY VOB Summary
-with col1:
-    st.markdown("**NIFTY VOB**")
-    if st.session_state.vob_data_nifty:
-        from indicators.vob_strength_tracker import VOBStrengthTracker
-        vob_tracker = VOBStrengthTracker()
-
-        df_nifty = get_cached_chart_data('^NSEI', '1d', '1m')
-
-        # Get latest bullish and bearish blocks
-        bullish_blocks = st.session_state.vob_data_nifty.get('bullish_blocks', [])
-        bearish_blocks = st.session_state.vob_data_nifty.get('bearish_blocks', [])
-
-        # Calculate strength for latest blocks
-        bull_strength = None
-        bear_strength = None
-
-        if bullish_blocks and df_nifty is not None:
-            latest_bull = bullish_blocks[-1]
-            bull_strength = vob_tracker.calculate_strength(latest_bull, df_nifty)
-
-        if bearish_blocks and df_nifty is not None:
-            latest_bear = bearish_blocks[-1]
-            bear_strength = vob_tracker.calculate_strength(latest_bear, df_nifty)
-
-        # Display bullish block info
-        if bull_strength:
-            trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
-            strength_color = "#4caf50" if bull_strength['strength_score'] >= 70 else "#ffc107" if bull_strength['strength_score'] >= 50 else "#ff5252"
-            st.markdown(f"**🟢 Bullish VOB:** ₹{latest_bull['lower']:.2f} - ₹{latest_bull['upper']:.2f}")
-            st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bull_strength['strength_score']}/100</span> {trend_emoji} {bull_strength['trend']}", unsafe_allow_html=True)
-        else:
-            st.info("No bullish VOB data available")
-
-        # Display bearish block info
-        if bear_strength:
-            trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
-            strength_color = "#4caf50" if bear_strength['strength_score'] >= 70 else "#ffc107" if bear_strength['strength_score'] >= 50 else "#ff5252"
-            st.markdown(f"**🔴 Bearish VOB:** ₹{latest_bear['lower']:.2f} - ₹{latest_bear['upper']:.2f}")
-            st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bear_strength['strength_score']}/100</span> {trend_emoji} {bear_strength['trend']}", unsafe_allow_html=True)
-        else:
-            st.info("No bearish VOB data available")
-    else:
-        st.info("VOB data loading...")
-
-# SENSEX VOB Summary
-with col2:
-    st.markdown("**SENSEX VOB**")
-    if st.session_state.vob_data_sensex:
-        from indicators.vob_strength_tracker import VOBStrengthTracker
-        vob_tracker = VOBStrengthTracker()
-
-        df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
-
-        # Get latest bullish and bearish blocks
-        bullish_blocks = st.session_state.vob_data_sensex.get('bullish_blocks', [])
-        bearish_blocks = st.session_state.vob_data_sensex.get('bearish_blocks', [])
-
-        # Calculate strength for latest blocks
-        bull_strength = None
-        bear_strength = None
-
-        if bullish_blocks and df_sensex is not None:
-            latest_bull = bullish_blocks[-1]
-            bull_strength = vob_tracker.calculate_strength(latest_bull, df_sensex)
-
-        if bearish_blocks and df_sensex is not None:
-            latest_bear = bearish_blocks[-1]
-            bear_strength = vob_tracker.calculate_strength(latest_bear, df_sensex)
-
-        # Display bullish block info
-        if bull_strength:
-            trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
-            strength_color = "#4caf50" if bull_strength['strength_score'] >= 70 else "#ffc107" if bull_strength['strength_score'] >= 50 else "#ff5252"
-            st.markdown(f"**🟢 Bullish VOB:** ₹{latest_bull['lower']:.2f} - ₹{latest_bull['upper']:.2f}")
-            st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bull_strength['strength_score']}/100</span> {trend_emoji} {bull_strength['trend']}", unsafe_allow_html=True)
-        else:
-            st.info("No bullish VOB data available")
-
-        # Display bearish block info
-        if bear_strength:
-            trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
-            strength_color = "#4caf50" if bear_strength['strength_score'] >= 70 else "#ffc107" if bear_strength['strength_score'] >= 50 else "#ff5252"
-            st.markdown(f"**🔴 Bearish VOB:** ₹{latest_bear['lower']:.2f} - ₹{latest_bear['upper']:.2f}")
-            st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bear_strength['strength_score']}/100</span> {trend_emoji} {bear_strength['trend']}", unsafe_allow_html=True)
-        else:
-            st.info("No bearish VOB data available")
-    else:
-        st.info("VOB data loading...")
-
-# Add button to send VOB status to Telegram
-st.markdown("")
-col1, col2, col3 = st.columns([1, 1, 1])
-with col2:
-    if st.button("📱 Send VOB Status to Telegram", use_container_width=True):
-        try:
-            from indicators.vob_strength_tracker import VOBStrengthTracker
-            vob_tracker = VOBStrengthTracker()
-
-            # Prepare NIFTY VOB data
-            nifty_vob_summary = {}
-            if st.session_state.vob_data_nifty:
-                df_nifty = get_cached_chart_data('^NSEI', '1d', '1m')
-                if df_nifty is not None:
-                    bullish_blocks = st.session_state.vob_data_nifty.get('bullish_blocks', [])
-                    bearish_blocks = st.session_state.vob_data_nifty.get('bearish_blocks', [])
-
-                    if bullish_blocks:
-                        latest_bull = bullish_blocks[-1]
-                        bull_strength = vob_tracker.calculate_strength(latest_bull, df_nifty)
-                        nifty_vob_summary['bullish'] = {
-                            'lower': latest_bull['lower'],
-                            'upper': latest_bull['upper'],
-                            'strength_score': bull_strength['strength_score'],
-                            'trend': bull_strength['trend']
-                        }
-
-                    if bearish_blocks:
-                        latest_bear = bearish_blocks[-1]
-                        bear_strength = vob_tracker.calculate_strength(latest_bear, df_nifty)
-                        nifty_vob_summary['bearish'] = {
-                            'lower': latest_bear['lower'],
-                            'upper': latest_bear['upper'],
-                            'strength_score': bear_strength['strength_score'],
-                            'trend': bear_strength['trend']
-                        }
-
-            # Prepare SENSEX VOB data
-            sensex_vob_summary = {}
-            if st.session_state.vob_data_sensex:
-                df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
-                if df_sensex is not None:
-                    bullish_blocks = st.session_state.vob_data_sensex.get('bullish_blocks', [])
-                    bearish_blocks = st.session_state.vob_data_sensex.get('bearish_blocks', [])
-
-                    if bullish_blocks:
-                        latest_bull = bullish_blocks[-1]
-                        bull_strength = vob_tracker.calculate_strength(latest_bull, df_sensex)
-                        sensex_vob_summary['bullish'] = {
-                            'lower': latest_bull['lower'],
-                            'upper': latest_bull['upper'],
-                            'strength_score': bull_strength['strength_score'],
-                            'trend': bull_strength['trend']
-                        }
-
-                    if bearish_blocks:
-                        latest_bear = bearish_blocks[-1]
-                        bear_strength = vob_tracker.calculate_strength(latest_bear, df_sensex)
-                        sensex_vob_summary['bearish'] = {
-                            'lower': latest_bear['lower'],
-                            'upper': latest_bear['upper'],
-                            'strength_score': bear_strength['strength_score'],
-                            'trend': bear_strength['trend']
-                        }
-
-            # Send to Telegram
-            if nifty_vob_summary or sensex_vob_summary:
-                telegram_bot = TelegramBot()
-                success = telegram_bot.send_vob_status_summary(nifty_vob_summary, sensex_vob_summary)
-                if success:
-                    st.success("✅ VOB status sent to Telegram!")
-                else:
-                    st.error("❌ Failed to send to Telegram. Check your Telegram credentials.")
-            else:
-                st.warning("⚠️ No VOB data available to send")
-
-        except Exception as e:
-            st.error(f"❌ Error sending VOB status: {str(e)}")
-
 st.divider()
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1221,111 +859,6 @@ st.divider()
 # ═══════════════════════════════════════════════════════════════════════
 st.markdown("### 📊 HTF Support/Resistance Signals")
 st.markdown("**HTF S/R Based Trading | 5min, 10min, 15min Timeframes**")
-
-# Display VOB and HTF S/R Status Summary
-st.markdown("#### 📊 VOB & HTF S/R Strength Status")
-
-col1, col2 = st.columns(2)
-
-# NIFTY Summary
-with col1:
-    st.markdown("**NIFTY**")
-
-    # VOB Status
-    if st.session_state.vob_data_nifty:
-        from indicators.vob_strength_tracker import VOBStrengthTracker
-        vob_tracker = VOBStrengthTracker()
-        df_nifty = get_cached_chart_data('^NSEI', '1d', '1m')
-
-        bullish_blocks = st.session_state.vob_data_nifty.get('bullish_blocks', [])
-        bearish_blocks = st.session_state.vob_data_nifty.get('bearish_blocks', [])
-
-        if bullish_blocks and df_nifty is not None:
-            latest_bull = bullish_blocks[-1]
-            bull_strength = vob_tracker.calculate_strength(latest_bull, df_nifty)
-            trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
-            st.caption(f"**VOB Bull:** {bull_strength['strength_score']}/100 {trend_emoji} {bull_strength['trend']}")
-
-        if bearish_blocks and df_nifty is not None:
-            latest_bear = bearish_blocks[-1]
-            bear_strength = vob_tracker.calculate_strength(latest_bear, df_nifty)
-            trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
-            st.caption(f"**VOB Bear:** {bear_strength['strength_score']}/100 {trend_emoji} {bear_strength['trend']}")
-
-    # HTF S/R Status
-    if st.session_state.htf_data_nifty:
-        from indicators.htf_sr_strength_tracker import HTFSRStrengthTracker
-        htf_tracker = HTFSRStrengthTracker()
-        df_nifty = get_cached_chart_data('^NSEI', '7d', '1m')
-
-        # Get latest support and resistance levels
-        for timeframe, levels in st.session_state.htf_data_nifty.items():
-            if levels and df_nifty is not None:
-                support = levels.get('support')
-                resistance = levels.get('resistance')
-
-                if support:
-                    support_strength = htf_tracker.calculate_strength(support, 'SUPPORT', df_nifty, lookback_periods=100)
-                    trend_emoji = "🔺" if support_strength['trend'] == "STRENGTHENING" else "🔻" if support_strength['trend'] == "WEAKENING" else "➖"
-                    st.caption(f"**HTF Support ({timeframe}):** {support_strength['strength_score']}/100 {trend_emoji} {support_strength['trend']}")
-
-                if resistance:
-                    resistance_strength = htf_tracker.calculate_strength(resistance, 'RESISTANCE', df_nifty, lookback_periods=100)
-                    trend_emoji = "🔺" if resistance_strength['trend'] == "STRENGTHENING" else "🔻" if resistance_strength['trend'] == "WEAKENING" else "➖"
-                    st.caption(f"**HTF Resistance ({timeframe}):** {resistance_strength['strength_score']}/100 {trend_emoji} {resistance_strength['trend']}")
-
-                break  # Only show one timeframe for brevity
-
-# SENSEX Summary
-with col2:
-    st.markdown("**SENSEX**")
-
-    # VOB Status
-    if st.session_state.vob_data_sensex:
-        from indicators.vob_strength_tracker import VOBStrengthTracker
-        vob_tracker = VOBStrengthTracker()
-        df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
-
-        bullish_blocks = st.session_state.vob_data_sensex.get('bullish_blocks', [])
-        bearish_blocks = st.session_state.vob_data_sensex.get('bearish_blocks', [])
-
-        if bullish_blocks and df_sensex is not None:
-            latest_bull = bullish_blocks[-1]
-            bull_strength = vob_tracker.calculate_strength(latest_bull, df_sensex)
-            trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
-            st.caption(f"**VOB Bull:** {bull_strength['strength_score']}/100 {trend_emoji} {bull_strength['trend']}")
-
-        if bearish_blocks and df_sensex is not None:
-            latest_bear = bearish_blocks[-1]
-            bear_strength = vob_tracker.calculate_strength(latest_bear, df_sensex)
-            trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
-            st.caption(f"**VOB Bear:** {bear_strength['strength_score']}/100 {trend_emoji} {bear_strength['trend']}")
-
-    # HTF S/R Status
-    if st.session_state.htf_data_sensex:
-        from indicators.htf_sr_strength_tracker import HTFSRStrengthTracker
-        htf_tracker = HTFSRStrengthTracker()
-        df_sensex = get_cached_chart_data('^BSESN', '7d', '1m')
-
-        # Get latest support and resistance levels
-        for timeframe, levels in st.session_state.htf_data_sensex.items():
-            if levels and df_sensex is not None:
-                support = levels.get('support')
-                resistance = levels.get('resistance')
-
-                if support:
-                    support_strength = htf_tracker.calculate_strength(support, 'SUPPORT', df_sensex, lookback_periods=100)
-                    trend_emoji = "🔺" if support_strength['trend'] == "STRENGTHENING" else "🔻" if support_strength['trend'] == "WEAKENING" else "➖"
-                    st.caption(f"**HTF Support ({timeframe}):** {support_strength['strength_score']}/100 {trend_emoji} {support_strength['trend']}")
-
-                if resistance:
-                    resistance_strength = htf_tracker.calculate_strength(resistance, 'RESISTANCE', df_sensex, lookback_periods=100)
-                    trend_emoji = "🔺" if resistance_strength['trend'] == "STRENGTHENING" else "🔻" if resistance_strength['trend'] == "WEAKENING" else "➖"
-                    st.caption(f"**HTF Resistance ({timeframe}):** {resistance_strength['strength_score']}/100 {trend_emoji} {resistance_strength['trend']}")
-
-                break  # Only show one timeframe for brevity
-
-st.divider()
 
 if st.session_state.active_htf_sr_signals:
     for signal in st.session_state.active_htf_sr_signals:
@@ -1492,31 +1025,19 @@ with tab2:
     col1, col2 = st.columns(2)
     
     with col1:
-        # Safe default value handling for VOB support level
-        try:
-            default_support = max(0.0, float(nifty_data['spot_price']) - 50.0) if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 0, 'N/A'] else 25000.0
-        except (TypeError, ValueError):
-            default_support = 25000.0
-
         vob_support = st.number_input(
             "VOB Support Level",
             min_value=0.0,
-            value=default_support,
+            value=float(nifty_data['spot_price'] - 50),
             step=10.0,
             key="vob_support"
         )
-
+    
     with col2:
-        # Safe default value handling for VOB resistance level
-        try:
-            default_resistance = max(0.0, float(nifty_data['spot_price']) + 50.0) if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 0, 'N/A'] else 25100.0
-        except (TypeError, ValueError):
-            default_resistance = 25100.0
-
         vob_resistance = st.number_input(
             "VOB Resistance Level",
             min_value=0.0,
-            value=default_resistance,
+            value=float(nifty_data['spot_price'] + 50),
             step=10.0,
             key="vob_resistance"
         )
@@ -1533,20 +1054,12 @@ with tab2:
         vob_resistance,
         STOP_LOSS_OFFSET
     )
-
-    # Safe handling for spot price in strike calculation
-    safe_spot_price = 25000.0  # Default fallback value
-    if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 0, 'N/A']:
-        try:
-            safe_spot_price = float(nifty_data['spot_price'])
-        except (TypeError, ValueError):
-            safe_spot_price = 25000.0
-
+    
     strike_info = calculate_strike(
         selected_index,
-        safe_spot_price,
+        nifty_data['spot_price'],
         selected_direction,
-        nifty_data.get('current_expiry', 'N/A')
+        nifty_data['current_expiry']
     )
     
     col1, col2, col3, col4 = st.columns(4)
@@ -1731,7 +1244,7 @@ with tab3:
                                         'entry': details['entry_level'],
                                         'sl': details['sl_price'],
                                         'target': details['target_price'],
-                                        'timestamp': get_current_time_ist().isoformat(),
+                                        'timestamp': datetime.now().isoformat(),
                                         'status': 'active'
                                     }
 
@@ -1765,21 +1278,10 @@ with tab4:
     if 'active_positions' not in st.session_state:
         st.session_state.active_positions = {}
 
-    # Get current spot prices for monitoring - with safe null handling
-    nifty_spot = 0
-    if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 'N/A']:
-        try:
-            nifty_spot = float(nifty_data['spot_price'])
-        except (TypeError, ValueError):
-            nifty_spot = 0
-
+    # Get current spot prices for monitoring
+    nifty_spot = nifty_data['spot_price']
     sensex_data_obj = get_cached_sensex_data()
-    sensex_spot = 0
-    if sensex_data_obj and sensex_data_obj.get('spot_price') and sensex_data_obj['spot_price'] not in [None, 'N/A']:
-        try:
-            sensex_spot = float(sensex_data_obj['spot_price'])
-        except (TypeError, ValueError):
-            sensex_spot = 0
+    sensex_spot = sensex_data_obj['spot_price'] if sensex_data_obj else 0
 
     # Check for auto-exit conditions
     positions_to_exit = []
@@ -2164,53 +1666,69 @@ with tab5:
 
         col1, col2, col3 = st.columns(3)
 
-        # Optimize: Create DataFrame once and filter using vectorized operations
-        all_bias_df = pd.DataFrame(results['bias_results'])
+        with col1:
+            st.markdown("**⚡ Fast Indicators (8)**")
+            fast_bias = [b for b in results['bias_results'] if b.get('category') == 'fast']
 
-        if not all_bias_df.empty:
-            # Pre-compute bullish/bearish flags for all rows
-            is_bullish = all_bias_df['bias'].str.contains('BULLISH', na=False)
-            is_bearish = all_bias_df['bias'].str.contains('BEARISH', na=False)
+            fast_df = pd.DataFrame(fast_bias)
+            if not fast_df.empty:
+                fast_bull = len(fast_df[fast_df['bias'].str.contains('BULLISH', na=False)])
+                fast_bear = len(fast_df[fast_df['bias'].str.contains('BEARISH', na=False)])
+                fast_neutral = len(fast_df) - fast_bull - fast_bear
 
-            with col1:
-                st.markdown("**⚡ Fast Indicators (8)**")
-                fast_df = all_bias_df[all_bias_df['category'] == 'fast']
-                if not fast_df.empty:
-                    fast_bull = is_bullish[fast_df.index].sum()
-                    fast_bear = is_bearish[fast_df.index].sum()
-                    fast_neutral = len(fast_df) - fast_bull - fast_bear
+                st.write(f"🐂 {fast_bull} | 🐻 {fast_bear} | ⚖️ {fast_neutral}")
+                st.dataframe(fast_df[['indicator', 'bias', 'score']],
+                           use_container_width=True, hide_index=True)
 
-                    st.write(f"🐂 {fast_bull} | 🐻 {fast_bear} | ⚖️ {fast_neutral}")
-                    st.dataframe(fast_df[['indicator', 'bias', 'score']],
-                               use_container_width=True, hide_index=True)
+        with col2:
+            st.markdown("**📊 Medium Indicators (2)**")
+            medium_bias = [b for b in results['bias_results'] if b.get('category') == 'medium']
 
-            with col2:
-                st.markdown("**📊 Medium Indicators (0)**")
-                med_df = all_bias_df[all_bias_df['category'] == 'medium']
-                if not med_df.empty:
-                    med_bull = is_bullish[med_df.index].sum()
-                    med_bear = is_bearish[med_df.index].sum()
-                    med_neutral = len(med_df) - med_bull - med_bear
+            med_df = pd.DataFrame(medium_bias)
+            if not med_df.empty:
+                med_bull = len(med_df[med_df['bias'].str.contains('BULLISH', na=False)])
+                med_bear = len(med_df[med_df['bias'].str.contains('BEARISH', na=False)])
+                med_neutral = len(med_df) - med_bull - med_bear
 
-                    st.write(f"🐂 {med_bull} | 🐻 {med_bear} | ⚖️ {med_neutral}")
-                    st.dataframe(med_df[['indicator', 'bias', 'score']],
-                               use_container_width=True, hide_index=True)
-                else:
-                    st.info("No medium indicators configured")
+                st.write(f"🐂 {med_bull} | 🐻 {med_bear} | ⚖️ {med_neutral}")
+                st.dataframe(med_df[['indicator', 'bias', 'score']],
+                           use_container_width=True, hide_index=True)
 
-            with col3:
-                st.markdown("**🐢 Slow Indicators (0)**")
-                slow_df = all_bias_df[all_bias_df['category'] == 'slow']
-                if not slow_df.empty:
-                    slow_bull = is_bullish[slow_df.index].sum()
-                    slow_bear = is_bearish[slow_df.index].sum()
-                    slow_neutral = len(slow_df) - slow_bull - slow_bear
+        with col3:
+            st.markdown("**🐢 Slow Indicators (3)**")
+            slow_bias = [b for b in results['bias_results'] if b.get('category') == 'slow']
 
-                    st.write(f"🐂 {slow_bull} | 🐻 {slow_bear} | ⚖️ {slow_neutral}")
-                    st.dataframe(slow_df[['indicator', 'bias', 'score']],
-                               use_container_width=True, hide_index=True)
-                else:
-                    st.info("No slow indicators configured")
+            slow_df = pd.DataFrame(slow_bias)
+            if not slow_df.empty:
+                slow_bull = len(slow_df[slow_df['bias'].str.contains('BULLISH', na=False)])
+                slow_bear = len(slow_df[slow_df['bias'].str.contains('BEARISH', na=False)])
+                slow_neutral = len(slow_df) - slow_bull - slow_bear
+
+                st.write(f"🐂 {slow_bull} | 🐻 {slow_bear} | ⚖️ {slow_neutral}")
+                st.dataframe(slow_df[['indicator', 'bias', 'score']],
+                           use_container_width=True, hide_index=True)
+
+        st.divider()
+
+        # =====================================================================
+        # TOP STOCKS PERFORMANCE (from market breadth analysis)
+        # =====================================================================
+        if results.get('stock_data'):
+            st.subheader("📊 Top Stocks Performance")
+
+            stock_df = pd.DataFrame(results['stock_data'])
+            stock_df = stock_df.sort_values('change_pct', ascending=False)
+
+            # Add bias column
+            stock_df['bias'] = stock_df['change_pct'].apply(
+                lambda x: '🐂 BULLISH' if x > 0.5 else '🐻 BEARISH' if x < -0.5 else '⚖️ NEUTRAL'
+            )
+
+            # Format percentage
+            stock_df['change_pct'] = stock_df['change_pct'].apply(lambda x: f"{x:.2f}%")
+            stock_df['weight'] = stock_df['weight'].apply(lambda x: f"{x:.2f}%")
+
+            st.dataframe(stock_df, use_container_width=True, hide_index=True)
 
         st.divider()
 
@@ -2462,7 +1980,7 @@ with tab7:
     st.caption("TradingView-style Chart with 6 Advanced Indicators: Volume Bars, Volume Order Blocks, HTF Support/Resistance (3min, 5min, 10min, 15min levels), Volume Footprint (1D timeframe, 10 bins, Dynamic POC), Ultimate RSI, OM Indicator (Order Flow & Momentum)")
 
     # Chart controls
-    col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
 
     with col1:
         chart_symbol = st.selectbox(
@@ -2489,93 +2007,22 @@ with tab7:
         )
 
     with col4:
-        chart_auto_refresh = st.selectbox(
-            "Auto Refresh",
-            ["Off", "30s", "60s", "2m", "5m"],
-            index=2,
-            key="chart_auto_refresh",
-            help="Automatically refresh chart at selected interval"
-        )
+        if st.button("🔄 Load Chart", type="primary", use_container_width=True):
+            with st.spinner("Loading chart data and calculating indicators..."):
+                try:
+                    # Fetch data using cached function (60s cache)
+                    df = get_cached_chart_data(symbol_code, chart_period, chart_interval)
 
-    with col5:
-        if st.button("🔄 Refresh", type="primary", use_container_width=True, key="manual_refresh_chart"):
-            st.session_state.chart_needs_refresh = True
+                    if df is not None and len(df) > 0:
+                        st.session_state.chart_data = df
+                        st.success(f"✅ Loaded {len(df)} candles")
+                    else:
+                        st.error("❌ Failed to fetch data. Try a different period or interval.")
+                        st.session_state.chart_data = None
 
-    st.divider()
-
-    # Initialize chart session state variables
-    if 'chart_data' not in st.session_state:
-        st.session_state.chart_data = None
-    if 'chart_needs_refresh' not in st.session_state:
-        st.session_state.chart_needs_refresh = True
-    if 'last_chart_params' not in st.session_state:
-        st.session_state.last_chart_params = None
-    if 'last_chart_update' not in st.session_state:
-        st.session_state.last_chart_update = None
-
-    # Check if chart parameters changed
-    current_params = (symbol_code, chart_period, chart_interval)
-    if st.session_state.last_chart_params != current_params:
-        st.session_state.chart_needs_refresh = True
-        st.session_state.last_chart_params = current_params
-
-    # Handle auto-refresh timing
-    should_auto_refresh = False
-    if chart_auto_refresh != "Off" and st.session_state.last_chart_update is not None:
-        # Convert refresh interval to seconds
-        refresh_seconds = {
-            "30s": 30,
-            "60s": 60,
-            "2m": 120,
-            "5m": 300
-        }.get(chart_auto_refresh, 60)
-
-        # Check if enough time has passed
-        from datetime import timedelta
-        time_since_update = (get_current_time_ist() - st.session_state.last_chart_update).total_seconds()
-        if time_since_update >= refresh_seconds:
-            should_auto_refresh = True
-            st.session_state.chart_needs_refresh = True
-
-    # Auto-load chart data on first load or when refresh is needed
-    if st.session_state.chart_needs_refresh:
-        with st.spinner("Loading chart data and calculating indicators..."):
-            try:
-                # Fetch data using cached function (60s cache)
-                df = get_cached_chart_data(symbol_code, chart_period, chart_interval)
-
-                if df is not None and len(df) > 0:
-                    st.session_state.chart_data = df
-                    st.session_state.last_chart_update = get_current_time_ist()
-                    st.success(f"✅ Loaded {len(df)} candles | Last updated (IST): {st.session_state.last_chart_update.strftime('%H:%M:%S %Z')}")
-                else:
-                    st.error("❌ Failed to fetch data. Try a different period or interval.")
+                except Exception as e:
+                    st.error(f"❌ Error loading chart: {e}")
                     st.session_state.chart_data = None
-
-            except Exception as e:
-                st.error(f"❌ Error loading chart: {e}")
-                st.session_state.chart_data = None
-
-        st.session_state.chart_needs_refresh = False
-
-    # Show auto-refresh countdown
-    if chart_auto_refresh != "Off" and st.session_state.chart_data is not None and st.session_state.last_chart_update is not None:
-        refresh_seconds = {
-            "30s": 30,
-            "60s": 60,
-            "2m": 120,
-            "5m": 300
-        }.get(chart_auto_refresh, 60)
-
-        time_since_update = (get_current_time_ist() - st.session_state.last_chart_update).total_seconds()
-        time_until_refresh = max(0, refresh_seconds - time_since_update)
-
-        if time_until_refresh <= 0:
-            # Time for refresh
-            st.session_state.chart_needs_refresh = True
-            st.rerun()
-        else:
-            st.info(f"⏱️ Next auto-refresh in {int(time_until_refresh)} seconds (auto-refresh enabled)")
 
     st.divider()
 
@@ -3016,179 +2463,6 @@ with tab7:
                                 if block['active']:
                                     st.write(f"  - Resistance: {block['lower']:.2f} - {block['upper']:.2f}")
 
-                # Proximity Alerts Section
-                st.divider()
-                st.markdown("**🔔 Proximity Alerts**")
-                st.caption("Automatic Telegram notifications when price is near key levels (Rate limited: 10 minutes)")
-
-                try:
-                    # Get proximity alert system
-                    proximity_system = get_proximity_alert_system(cooldown_minutes=10)
-
-                    # Get current price
-                    current_price = df_stats['close'].iloc[-1]
-
-                    # Determine symbol for alerts
-                    alert_symbol = "NIFTY" if "NSEI" in symbol_code else "SENSEX" if "BSESN" in symbol_code else symbol_code
-
-                    # Get HTF data if enabled
-                    htf_data = []
-                    if show_htf_sr and htf_params and htf_params.get('levels_config'):
-                        from indicators.htf_support_resistance import HTFSupportResistance
-                        for level_config in htf_params['levels_config']:
-                            htf_indicator = HTFSupportResistance(
-                                timeframes=[level_config['timeframe']],
-                                pivot_length=level_config['length']
-                            )
-                            levels = htf_indicator.calculate_levels(df_stats)
-                            htf_data.extend(levels)
-
-                    # Process proximity alerts
-                    all_alerts, notifications_sent = proximity_system.process_market_data(
-                        symbol=alert_symbol,
-                        current_price=current_price,
-                        vob_data=vob_data if show_vob else {},
-                        htf_data=htf_data
-                    )
-
-                    # Display alert summary
-                    col1, col2, col3 = st.columns(3)
-
-                    with col1:
-                        st.metric("Current Price", f"₹{current_price:,.2f}")
-
-                    with col2:
-                        vob_alert_count = len([a for a in all_alerts if a.alert_type == 'VOB'])
-                        st.metric("VOB Alerts", vob_alert_count,
-                                 delta="Within 7 pts" if vob_alert_count > 0 else None)
-
-                    with col3:
-                        htf_alert_count = len([a for a in all_alerts if a.alert_type == 'HTF'])
-                        st.metric("HTF Alerts", htf_alert_count,
-                                 delta="Within 5 pts" if htf_alert_count > 0 else None)
-
-                    # Gather and display comprehensive market context
-                    market_context = proximity_system._gather_market_context()
-
-                    # Display market context in an expander
-                    with st.expander("📊 **Comprehensive Market Context**", expanded=True):
-                        st.markdown("### Overall Market Sentiment")
-
-                        col1, col2 = st.columns(2)
-
-                        with col1:
-                            # Overall sentiment
-                            sentiment = market_context['overall_sentiment']
-                            if sentiment == 'BULLISH':
-                                st.success(f"🐂 **{sentiment}**")
-                            elif sentiment == 'BEARISH':
-                                st.error(f"🐻 **{sentiment}**")
-                            else:
-                                st.info(f"⚖️ **{sentiment}**")
-
-                        with col2:
-                            st.metric("Overall Score", f"{market_context['overall_score']:.1f}")
-
-                        st.divider()
-
-                        # Enhanced Market Analysis
-                        st.markdown("### 📈 Enhanced Market Analysis")
-                        col1, col2 = st.columns(2)
-
-                        with col1:
-                            bias = market_context['technical_indicators_bias']
-                            if bias == 'BULLISH':
-                                st.success(f"🐂 **{bias}**")
-                            elif bias == 'BEARISH':
-                                st.error(f"🐻 **{bias}**")
-                            else:
-                                st.info(f"⚖️ **{bias}**")
-
-                        with col2:
-                            st.metric("Score", f"{market_context['technical_indicators_score']:.1f}")
-
-                        # Market Breadth
-                        st.markdown("### 🔍 Market Breadth")
-                        col1, col2 = st.columns(2)
-
-                        with col1:
-                            bias = market_context['market_breadth_bias']
-                            if bias == 'BULLISH':
-                                st.success(f"🐂 **{bias}**")
-                            elif bias == 'BEARISH':
-                                st.error(f"🐻 **{bias}**")
-                            else:
-                                st.info(f"⚖️ **{bias}**")
-
-                        with col2:
-                            st.metric("Breadth %", f"{market_context['market_breadth_pct']:.1f}%")
-
-                        # PCR Analysis
-                        st.markdown("### 📉 PCR Analysis (Put-Call Ratio)")
-                        col1, col2 = st.columns(2)
-
-                        with col1:
-                            bias = market_context['pcr_analysis_bias']
-                            if bias == 'BULLISH':
-                                st.success(f"🐂 **{bias}**")
-                            elif bias == 'BEARISH':
-                                st.error(f"🐻 **{bias}**")
-                            else:
-                                st.info(f"⚖️ **{bias}**")
-
-                        with col2:
-                            st.metric("Score", f"{market_context['pcr_analysis_score']:.1f}")
-
-                        # NIFTY ATM Zone
-                        st.markdown("### 🎯 NIFTY ATM Zone Summary")
-                        verdict = market_context['nifty_atm_verdict']
-                        if 'Bullish' in verdict:
-                            st.success(f"🐂 **{verdict}**")
-                        elif 'Bearish' in verdict:
-                            st.error(f"🐻 **{verdict}**")
-                        else:
-                            st.info(f"⚖️ **{verdict}**")
-
-                        # Option Chain Analysis
-                        st.markdown("### 🔗 Option Chain ATM Zone Analysis")
-                        col1, col2 = st.columns(2)
-
-                        with col1:
-                            bias = market_context['option_chain_bias']
-                            if bias == 'BULLISH':
-                                st.success(f"🐂 **{bias}**")
-                            elif bias == 'BEARISH':
-                                st.error(f"🐻 **{bias}**")
-                            else:
-                                st.info(f"⚖️ **{bias}**")
-
-                        with col2:
-                            st.metric("Score", f"{market_context['option_chain_score']:.1f}")
-
-                    # Show active alerts
-                    if all_alerts:
-                        st.markdown("**Active Proximity Alerts:**")
-                        for alert in all_alerts[:5]:  # Show top 5 alerts
-                            if alert.alert_type == 'VOB':
-                                emoji = "🟢" if "Bull" in alert.level_type else "🔴"
-                                st.write(f"{emoji} **{alert.alert_type}** {alert.level_type}: "
-                                        f"₹{alert.level:.2f} "
-                                        f"({alert.distance:.2f} pts away)")
-                            else:  # HTF
-                                emoji = "🟢" if alert.level_type == 'Support' else "🔴"
-                                tf_readable = alert.timeframe.replace('T', 'm') if alert.timeframe else ''
-                                st.write(f"{emoji} **{alert.alert_type}** {alert.level_type} ({tf_readable}): "
-                                        f"₹{alert.level:.2f} "
-                                        f"({alert.distance:.2f} pts away)")
-
-                        if notifications_sent > 0:
-                            st.success(f"📱 Sent {notifications_sent} Telegram notification(s) with comprehensive market context")
-                    else:
-                        st.info("ℹ️ No proximity alerts at current price")
-
-                except Exception as e:
-                    st.warning(f"⚠️ Proximity alerts unavailable: {str(e)}")
-
                 # Data table
                 st.divider()
                 st.subheader("📋 Recent Candles Data")
@@ -3210,7 +2484,7 @@ with tab7:
             st.write("Error details:", str(e))
 
     else:
-        st.info("⏳ Loading chart... The chart will automatically load and refresh based on your settings")
+        st.info("👆 Click 'Load Chart' button to display the advanced chart")
 
         st.markdown("""
         ### About Advanced Chart Analysis
@@ -3256,11 +2530,10 @@ with tab7:
         #### 🎯 How to Use
         1. Select market (NIFTY, SENSEX, or DOW)
         2. Choose period and interval (default: 1 day, 1 minute)
-        3. Chart loads automatically - no need to click any button!
-        4. Set auto-refresh interval (default: 60s) or click Refresh for manual update
-        5. Toggle indicators on/off as needed
-        6. Analyze chart and trading signals
-        7. Use signals to inform your trading decisions
+        3. Click "Load Chart" to fetch data
+        4. Toggle indicators on/off as needed
+        5. Analyze chart and trading signals
+        6. Use signals to inform your trading decisions
 
         **Note:** All indicators are converted from Pine Script with high accuracy and optimized for Python/Plotly.
         """)
@@ -3270,4 +2543,4 @@ with tab7:
 # ═══════════════════════════════════════════════════════════════════════
 
 st.divider()
-st.caption(f"Last Updated (IST): {get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')} | Auto-refresh: {AUTO_REFRESH_INTERVAL}s")
+st.caption(f"Last Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Auto-refresh: {AUTO_REFRESH_INTERVAL}s")

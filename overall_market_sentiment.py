@@ -16,6 +16,7 @@ import pandas as pd
 from datetime import datetime
 import time
 import asyncio
+import os  # Add missing import
 from market_hours_scheduler import is_within_trading_hours, scheduler
 from overall_market_sentiment_adapter import run_ai_analysis, shutdown_ai_engine
 
@@ -768,7 +769,7 @@ async def _run_ai_analysis():
         news_api_key = os.environ.get('NEWS_API_KEY') or st.session_state.get('news_api_key')
         groq_api_key = os.environ.get('GROQ_API_KEY') or st.session_state.get('groq_api_key')
         
-        # Run AI analysis
+        # Run AI analysis - THIS IS CORRECTLY USING AWAIT
         with st.spinner("🤖 Running AI Market Analysis..."):
             ai_report = await run_ai_analysis(
                 overall_market="Indian Stock Market (NIFTY 50)",
@@ -840,7 +841,7 @@ async def run_all_analyses(NSE_INSTRUMENTS, show_progress=True):
         
         # Only run AI analysis if it hasn't been run in the last hour
         if current_time - ai_last_run > 3600:  # 1 hour cooldown
-            ai_success, ai_errors = await _run_ai_analysis()
+            ai_success, ai_errors = await _run_ai_analysis()  # THIS IS CORRECTLY USING AWAIT
             success = success and ai_success
             errors.extend(ai_errors)
         else:
@@ -885,7 +886,7 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     if 'sentiment_auto_run_done' not in st.session_state:
         st.session_state.sentiment_auto_run_done = False
 
-    # Auto-run analyses on first load
+    # Auto-run analyses on first load - FIXED: Now properly uses asyncio.run()
     if not st.session_state.sentiment_auto_run_done and NSE_INSTRUMENTS is not None:
         with st.spinner("🔄 Running initial analyses..."):
             success, errors = asyncio.run(run_all_analyses(NSE_INSTRUMENTS))

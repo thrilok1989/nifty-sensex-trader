@@ -1,6 +1,12 @@
+"""
+Configuration settings for NIFTY/SENSEX Manual Trader
+All sensitive credentials are loaded from Streamlit secrets
+"""
+
 import streamlit as st
 import pytz
 from datetime import datetime
+import os
 
 # ═══════════════════════════════════════════════════════════════════════
 # TIMEZONE CONFIGURATION
@@ -14,7 +20,7 @@ def get_current_time_ist():
     return datetime.now(IST)
 
 # ═══════════════════════════════════════════════════════════════════════
-# CREDENTIALS
+# CREDENTIALS - Loaded from Streamlit Secrets
 # ═══════════════════════════════════════════════════════════════════════
 
 def get_dhan_credentials():
@@ -27,7 +33,7 @@ def get_dhan_credentials():
             'api_secret': st.secrets["DHAN"].get("API_SECRET", "")
         }
     except Exception as e:
-        st.error(f"⚠️ DhanHQ credentials missing: {e}")
+        print(f"⚠️ DhanHQ credentials missing: {e}")
         return None
 
 def get_telegram_credentials():
@@ -38,8 +44,40 @@ def get_telegram_credentials():
             'chat_id': st.secrets["TELEGRAM"]["CHAT_ID"],
             'enabled': True
         }
-    except:
+    except Exception as e:
+        print(f"⚠️ Telegram credentials missing: {e}")
         return {'enabled': False}
+
+# ═══════════════════════════════════════════════════════════════════════
+# AI CONFIGURATION - Loaded from Streamlit Secrets
+# ═══════════════════════════════════════════════════════════════════════
+
+def get_groq_credentials():
+    """Load Groq credentials from secrets"""
+    try:
+        return {
+            'api_key': st.secrets["GROQ"]["API_KEY"],
+            'model': st.secrets["GROQ"].get("MODEL", "llama3-70b-8192"),
+            'enabled': True
+        }
+    except Exception as e:
+        print(f"⚠️ Groq credentials missing: {e}")
+        return {'enabled': False}
+
+def get_newsdata_credentials():
+    """Load NewsData credentials from secrets"""
+    try:
+        return {
+            'api_key': st.secrets["NEWSDATA"]["API_KEY"],
+            'enabled': True
+        }
+    except Exception as e:
+        print(f"⚠️ NewsData credentials missing: {e}")
+        return {'enabled': False}
+
+# AI Settings
+AI_RUN_ONLY_DIRECTIONAL = os.environ.get("AI_RUN_ONLY_DIRECTIONAL", "") == "1"
+AI_REPORT_DIR = os.environ.get("AI_REPORT_DIR", "ai_reports")
 
 # ═══════════════════════════════════════════════════════════════════════
 # MARKET HOURS SETTINGS (All times in IST - Indian Standard Time)
@@ -57,11 +95,10 @@ MARKET_HOURS = {
 
 # Session-based refresh intervals (seconds)
 # Optimized to prevent API rate limiting (HTTP 429)
-# Previous intervals caused overlapping cycles (10s interval with 40s execution)
 REFRESH_INTERVALS = {
-    'pre_market': 45,      # 45 seconds during pre-market (was 30)
-    'regular': 45,         # 45 seconds during regular trading (was 10 - CRITICAL FIX)
-    'post_market': 120,    # 120 seconds during post-market (was 60)
+    'pre_market': 45,      # 45 seconds during pre-market
+    'regular': 45,         # 45 seconds during regular trading
+    'post_market': 120,    # 120 seconds during post-market
     'closed': 300          # 5 minutes when market is closed (minimal activity)
 }
 
@@ -90,14 +127,6 @@ VOB_TOUCH_TOLERANCE = 5  # Points
 # ═══════════════════════════════════════════════════════════════════════
 
 # Auto-refresh interval: 5 minutes (300 seconds)
-# Data Loading Strategy (OPTIMIZED FOR PERFORMANCE):
-# - Background threading with smart caching
-# - Market data (NIFTY/SENSEX): Refreshes every 10 seconds in background
-# - Analysis data (Dashboard/Bias): Refreshes every 60 seconds in background
-# - UI updates: Page reloads every 5 minutes to display fresh cached data
-# - All tabs show pre-loaded data immediately (no waiting for button clicks)
-# - Tab/button clicks are INSTANT - no blocking, no data fetching
-# - Manual refresh available via "Refresh Now" buttons
 AUTO_REFRESH_INTERVAL = 300  # seconds (5 minutes - optimized for fast clicks)
 DEMO_MODE = False
 
@@ -109,3 +138,22 @@ COLORS = {
     'bearish': '#f23645',
     'neutral': '#787B86'
 }
+
+# ═══════════════════════════════════════════════════════════════════════
+# HELPER FUNCTIONS
+# ═══════════════════════════════════════════════════════════════════════
+
+def get_all_credentials():
+    """Get all credentials in a single call"""
+    return {
+        'dhan': get_dhan_credentials(),
+        'telegram': get_telegram_credentials(),
+        'groq': get_groq_credentials(),
+        'newsdata': get_newsdata_credentials()
+    }
+
+def is_ai_enabled():
+    """Check if AI features are enabled"""
+    groq_creds = get_groq_credentials()
+    newsdata_creds = get_newsdata_credentials()
+    return groq_creds.get('enabled', False) and newsdata_creds.get('enabled', False)

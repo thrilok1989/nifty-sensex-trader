@@ -209,9 +209,8 @@ if 'performance_mode' not in st.session_state:
 # AI MARKET ANALYSIS CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════
 
-# Get API keys from Streamlit secrets
-NEWSDATA_API_KEY = st.secrets.get("NEWSDATA_API_KEY", "")
-GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
+NEWSDATA_API_KEY = os.environ.get("NEWSDATA_API_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 # Initialize AI analysis tracking
 if 'last_ai_analysis_time' not in st.session_state:
@@ -276,8 +275,8 @@ async def run_ai_market_analysis():
             overall_market, 
             module_biases, 
             market_meta, 
-            news_api_key=NEWSDATA_API_KEY,  # Uses the variable from secrets
-            groq_api_key=GROQ_API_KEY,      # Uses the variable from secrets
+            news_api_key=NEWSDATA_API_KEY, 
+            groq_api_key=GROQ_API_KEY, 
             save_report=True, 
             telegram_send=True
         )
@@ -602,7 +601,7 @@ with st.sidebar:
                     st.error(f"❌ AI analysis failed: {e}")
     else:
         st.warning("⚠️ API Keys Required")
-        st.caption("Set NEWSDATA_API_KEY and GROQ_API_KEY in Streamlit secrets (.streamlit/secrets.toml)")
+        st.caption("Set NEWSDATA_API_KEY and GROQ_API_KEY in environment variables")
     
     st.divider()
 

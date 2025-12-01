@@ -559,7 +559,7 @@ with st.sidebar:
     st.write(f"**SENSEX Lot Size:** {LOT_SIZES['SENSEX']}")
     st.write(f"**SL Offset:** {STOP_LOSS_OFFSET} points")
     
-        st.divider()
+    st.divider()
     
     # AI Analysis Status
     st.subheader("🤖 AI Market Analysis")

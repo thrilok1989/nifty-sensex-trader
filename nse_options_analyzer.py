@@ -675,7 +675,7 @@ def analyze_instrument(instrument):
         # Check if market is within trading hours using centralized scheduler
         if not is_within_trading_hours():
             status = scheduler.get_market_status()
-            st.warning(f"⏳ Market Closed - Trading Hours: 8:30 AM - 3:45 PM IST (Mon-Fri)")
+            st.warning(f"⏳ Market Closed - Trading Hours: 8:30 AM - 9:00 PM IST (Mon-Fri)")
             return
 
         headers = {"User-Agent": "Mozilla/5.0"}

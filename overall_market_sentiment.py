@@ -16,8 +16,26 @@ import pandas as pd
 from datetime import datetime
 import time
 import asyncio
+import os
+import sys
 from market_hours_scheduler import is_within_trading_hours, scheduler
-from overall_market_sentiment_adapter import run_ai_analysis, shutdown_ai_engine
+
+# ================================================
+# AI ANALYSIS ADAPTER IMPORTS
+# ================================================
+# Add the parent directory to the path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import AI analysis functions
+try:
+    from ai_analysis_adapter import run_ai_analysis, shutdown_ai_engine
+    AI_ANALYSIS_AVAILABLE = True
+    print("✅ AI Analysis adapter loaded successfully")
+except ImportError as e:
+    AI_ANALYSIS_AVAILABLE = False
+    run_ai_analysis = None
+    shutdown_ai_engine = None
+    print(f"⚠️ AI Analysis adapter not available: {e}")
 
 
 def calculate_stock_performance_sentiment(stock_data):
@@ -737,6 +755,11 @@ async def _run_ai_analysis():
     Returns: (success, errors)
     """
     errors = []
+    
+    if not AI_ANALYSIS_AVAILABLE or run_ai_analysis is None:
+        errors.append("AI analysis feature is not available")
+        return False, errors
+    
     try:
         # Check if AI engine should run (environment variable control)
         ai_run_only_directional = os.environ.get('AI_RUN_ONLY_DIRECTIONAL', 'true').lower() == 'true'
@@ -780,11 +803,14 @@ async def _run_ai_analysis():
                 telegram_send=False  # Disable telegram for auto-refresh
             )
             
-            st.session_state.ai_market_analysis = ai_report
-            st.session_state.ai_last_run = time.time()
+            if ai_report.get('success', False):
+                st.session_state.ai_market_analysis = ai_report
+                st.session_state.ai_last_run = time.time()
+                return True, []
+            else:
+                errors.append(f"AI Analysis: {ai_report.get('error', 'Unknown error')}")
+                return False, errors
             
-        return True, []
-        
     except Exception as e:
         errors.append(f"AI Market Analysis: {str(e)}")
         return False, errors
@@ -1995,7 +2021,7 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
         if st.button("🧠 Run AI Analysis Only", use_container_width=True):
             with st.spinner("🤖 Running AI Market Analysis..."):
                 try:
-                    ai_success, ai_errors = asyncio.run(_run_ai_analysis())
+                    ai_success, ai_errors = await _run_ai_analysis()
                     if ai_success:
                         st.success("✅ AI analysis completed!")
                         st.rerun()

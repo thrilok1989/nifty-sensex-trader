@@ -1,7 +1,11 @@
 import requests
+import os
+import aiohttp
+import html
 import streamlit as st
 from config import get_telegram_credentials, IST, get_current_time_ist
 from datetime import datetime
+from typing import Dict, Any, Optional
 
 class TelegramBot:
     def __init__(self):
@@ -28,6 +32,24 @@ class TelegramBot:
             }
             response = requests.post(url, json=payload, timeout=5)
             return response.status_code == 200
+        except:
+            return False
+    
+    async def send_message_async(self, message: str, parse_mode: str = "HTML"):
+        """Send Telegram message asynchronously"""
+        if not self.enabled:
+            return False
+        
+        try:
+            url = f"{self.base_url}/sendMessage"
+            payload = {
+                "chat_id": self.chat_id,
+                "text": message,
+                "parse_mode": parse_mode
+            }
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload, timeout=10) as response:
+                    return response.status == 200
         except:
             return False
     
@@ -193,7 +215,6 @@ class TelegramBot:
         """
         return self.send_message(message.strip())
 
-
     def send_vob_status_summary(self, nifty_data: dict, sensex_data: dict):
         """Send VOB status summary for both NIFTY and SENSEX"""
 
@@ -313,6 +334,76 @@ class TelegramBot:
         message = "\n".join(message_parts)
         return self.send_message(message)
 
+    async def send_ai_market_alert(self, report: Dict[str, Any], confidence_thresh: float = 0.60) -> bool:
+        """
+        Send AI market alert to Telegram
+        """
+        if not report:
+            return False
+        
+        confidence = float(report.get("confidence", 0.0) or 0.0)
+        if confidence < confidence_thresh:
+            return False
+        
+        label = report.get("label", "UNKNOWN")
+        rec = report.get("recommendation", "HOLD")
+        tech = report.get("technical_score", 0.0)
+        news = report.get("news_score", 0.0)
+        ai_score = report.get("ai_score", 0.0)
+        reasons = report.get("ai_reasons", []) or []
+        ai_summary = report.get("ai_summary", "") or ""
+
+        # Format top reasons
+        top_reasons = "\n".join(f"{i+1}. {html.escape(str(r))}" for i, r in enumerate(reasons[:4]))
+        
+        # Format technical contributions
+        tech_lines = []
+        contribs = report.get("technical_contributions", {}) or {}
+        for k, v in contribs.items():
+            sign = "Bullish" if v > 0 else "Bearish" if v < 0 else "Neutral"
+            tech_lines.append(f"{html.escape(k)}: {sign} ({v:.3f})")
+        
+        tech_block = "\n".join(tech_lines[:6]) or "N/A"
+        
+        # Determine emoji based on bias
+        if "BULLISH" in label.upper():
+            bias_emoji = "🟢"
+        elif "BEARISH" in label.upper():
+            bias_emoji = "🔴"
+        else:
+            bias_emoji = "⚪"
+
+        # Create the message
+        text = f"""
+{bias_emoji} <b>🤖 AI MARKET REPORT</b>
+
+<b>Market:</b> {html.escape(str(report.get('market','')))}
+<b>Bias:</b> <b>{bias_emoji} {html.escape(label)}</b>
+<b>Recommendation:</b> <b>{html.escape(rec)}</b>
+
+📊 <b>SCORES</b>
+<b>Confidence:</b> {confidence:.2f}
+<b>AI Score:</b> {ai_score:.3f}
+<b>Technical Score:</b> {tech:.3f}
+<b>News Score:</b> {news:.3f}
+
+⚙️ <b>TECHNICAL SUMMARY</b>
+{tech_block}
+
+📰 <b>NEWS SUMMARY</b>
+{html.escape(str(report.get('news_summary',''))[:600])}
+
+🧠 <b>AI REASONING</b>
+{top_reasons}
+
+📋 <b>SUMMARY</b>
+{html.escape(ai_summary[:800])}
+
+⏰ <b>Time (IST):</b> {get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')}
+        """
+        
+        return await self.send_message_async(text.strip())
+
 
 def send_test_message():
     """Send test message to verify Telegram setup"""
@@ -326,3 +417,14 @@ Your trading alerts are now active.
 <b>Test Time (IST):</b> """ + get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')
         return bot.send_message(message.strip())
     return False
+
+
+# Async wrapper function for backward compatibility
+async def send_ai_market_alert_async(report: Dict[str, Any], confidence_thresh: float = 0.60) -> bool:
+    """
+    Async wrapper function for sending AI market alerts
+    """
+    bot = TelegramBot()
+    if not bot.enabled:
+        return False
+    return await bot.send_ai_market_alert(report, confidence_thresh)

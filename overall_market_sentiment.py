@@ -8,13 +8,16 @@ Data Sources:
 2. Technical Indicators (Bias Analysis Pro - 13 indicators matching Pine Script)
 3. Option Chain ATM Zone Analysis (Multiple bias metrics)
 4. PCR Analysis (Put-Call Ratio for indices)
+5. AI Market Analysis (Enhanced with news, global data, and reasoning)
 """
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 import time
+import asyncio
 from market_hours_scheduler import is_within_trading_hours, scheduler
+from overall_market_sentiment_adapter import run_ai_analysis, shutdown_ai_engine
 
 
 def calculate_stock_performance_sentiment(stock_data):
@@ -481,6 +484,53 @@ def calculate_nifty_advanced_metrics_sentiment():
     }
 
 
+def calculate_ai_analysis_sentiment(ai_report):
+    """
+    Calculate sentiment from AI Market Analysis
+    Returns: dict with sentiment, score, and details
+    """
+    if not ai_report:
+        return None
+    
+    # Extract sentiment from AI report
+    ai_sentiment = ai_report.get('sentiment', 'NEUTRAL').upper()
+    ai_score = ai_report.get('score', 0)
+    ai_confidence = ai_report.get('confidence', 0)
+    
+    # Extract reasoning and key metrics
+    reasoning = ai_report.get('reasoning', [])
+    final_verdict = ai_report.get('final_verdict', '')
+    
+    # Convert AI sentiment to our format
+    if 'BULLISH' in ai_sentiment:
+        bias = "BULLISH"
+        icon = "🤖🐂"
+    elif 'BEARISH' in ai_sentiment:
+        bias = "BEARISH"
+        icon = "🤖🐻"
+    else:
+        bias = "NEUTRAL"
+        icon = "🤖⚖️"
+    
+    # Prepare details
+    details = []
+    if 'news_sentiment' in ai_report:
+        details.append(f"News Analysis: {ai_report['news_sentiment'].get('overall', 'Neutral')}")
+    if 'global_markets' in ai_report:
+        details.append(f"Global Markets: {ai_report['global_markets'].get('overall_sentiment', 'Neutral')}")
+    
+    return {
+        'bias': bias,
+        'score': ai_score,
+        'confidence': ai_confidence,
+        'icon': icon,
+        'reasoning': reasoning,
+        'final_verdict': final_verdict,
+        'details': details,
+        'full_report': ai_report
+    }
+
+
 def calculate_overall_sentiment():
     """
     Calculate overall market sentiment by combining all data sources
@@ -516,10 +566,16 @@ def calculate_overall_sentiment():
     if oc_sentiment and oc_sentiment['total_instruments'] > 0:
         sentiment_sources['Option Chain Analysis'] = oc_sentiment
 
-    # 5. NIFTY Advanced Metrics Sentiment (NEW)
+    # 5. NIFTY Advanced Metrics Sentiment
     nifty_advanced_sentiment = calculate_nifty_advanced_metrics_sentiment()
     if nifty_advanced_sentiment:
         sentiment_sources['NIFTY Advanced Metrics'] = nifty_advanced_sentiment
+        
+    # 6. AI Market Analysis Sentiment (NEW)
+    if 'ai_market_analysis' in st.session_state:
+        ai_sentiment = calculate_ai_analysis_sentiment(st.session_state.ai_market_analysis)
+        if ai_sentiment:
+            sentiment_sources['🤖 AI Market Analysis'] = ai_sentiment
 
     # If no data available
     if not sentiment_sources:
@@ -541,7 +597,8 @@ def calculate_overall_sentiment():
         'Technical Indicators': 3.0,
         'PCR Analysis': 2.5,
         'Option Chain Analysis': 2.0,
-        'NIFTY Advanced Metrics': 2.5  # High weight for comprehensive metrics
+        'NIFTY Advanced Metrics': 2.5,
+        '🤖 AI Market Analysis': 4.0  # Highest weight for AI analysis
     }
 
     total_weighted_score = 0
@@ -674,11 +731,71 @@ def _run_option_chain_analysis(NSE_INSTRUMENTS, show_progress=True):
         return False, errors
 
 
-def run_all_analyses(NSE_INSTRUMENTS, show_progress=True):
+async def _run_ai_analysis():
+    """
+    Helper function to run AI market analysis
+    Returns: (success, errors)
+    """
+    errors = []
+    try:
+        # Check if AI engine should run (environment variable control)
+        ai_run_only_directional = os.environ.get('AI_RUN_ONLY_DIRECTIONAL', 'true').lower() == 'true'
+        
+        if ai_run_only_directional:
+            # Get current sentiment to decide if we should run AI analysis
+            current_sentiment = calculate_overall_sentiment()
+            overall_sentiment = current_sentiment.get('overall_sentiment', 'NEUTRAL')
+            
+            # Only run AI if sentiment is strongly directional
+            if overall_sentiment not in ['BULLISH', 'BEARISH']:
+                return True, ["AI Analysis: Skipped (non-directional market)"]
+        
+        # Prepare module biases from existing analysis
+        module_biases = {}
+        sources = current_sentiment.get('sources', {})
+        for source_name, source_data in sources.items():
+            if 'score' in source_data:
+                module_biases[source_name] = source_data['score']
+        
+        # Prepare market metadata
+        market_meta = {
+            'timestamp': datetime.now().isoformat(),
+            'market_session': scheduler.get_market_session(),
+            'trading_hours': is_within_trading_hours()
+        }
+        
+        # Get API keys from environment or session state
+        news_api_key = os.environ.get('NEWS_API_KEY') or st.session_state.get('news_api_key')
+        groq_api_key = os.environ.get('GROQ_API_KEY') or st.session_state.get('groq_api_key')
+        
+        # Run AI analysis
+        with st.spinner("🤖 Running AI Market Analysis..."):
+            ai_report = await run_ai_analysis(
+                overall_market="Indian Stock Market (NIFTY 50)",
+                module_biases=module_biases,
+                market_meta=market_meta,
+                news_api_key=news_api_key,
+                groq_api_key=groq_api_key,
+                save_report=True,
+                telegram_send=False  # Disable telegram for auto-refresh
+            )
+            
+            st.session_state.ai_market_analysis = ai_report
+            st.session_state.ai_last_run = time.time()
+            
+        return True, []
+        
+    except Exception as e:
+        errors.append(f"AI Market Analysis: {str(e)}")
+        return False, errors
+
+
+async def run_all_analyses(NSE_INSTRUMENTS, show_progress=True):
     """
     Runs all analyses and stores results in session state:
     1. Bias Analysis Pro (includes stock data and technical indicators)
     2. Option Chain Analysis (includes PCR and ATM zone analysis)
+    3. AI Market Analysis (enhanced with news, global data, and reasoning)
 
     Args:
         NSE_INSTRUMENTS: Instrument configuration
@@ -716,6 +833,19 @@ def run_all_analyses(NSE_INSTRUMENTS, show_progress=True):
             # When market is closed, skip option chain analysis to save API quota
             if show_progress:
                 st.info("ℹ️ Option chain analysis skipped (market closed). Using cached data.")
+
+        # 3. Run AI Market Analysis (only once per hour to save API quota)
+        current_time = time.time()
+        ai_last_run = st.session_state.get('ai_last_run', 0)
+        
+        # Only run AI analysis if it hasn't been run in the last hour
+        if current_time - ai_last_run > 3600:  # 1 hour cooldown
+            ai_success, ai_errors = await _run_ai_analysis()
+            success = success and ai_success
+            errors.extend(ai_errors)
+        else:
+            if show_progress:
+                st.info("🤖 AI analysis recently run. Using cached results.")
 
     except Exception as e:
         errors.append(f"Overall error: {str(e)}")
@@ -758,7 +888,7 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     # Auto-run analyses on first load
     if not st.session_state.sentiment_auto_run_done and NSE_INSTRUMENTS is not None:
         with st.spinner("🔄 Running initial analyses..."):
-            success, errors = run_all_analyses(NSE_INSTRUMENTS)
+            success, errors = asyncio.run(run_all_analyses(NSE_INSTRUMENTS))
             st.session_state.sentiment_auto_run_done = True
             st.session_state.sentiment_last_refresh = time.time()
             if not success:
@@ -776,7 +906,7 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     # Only auto-refresh during trading hours to conserve resources
     if time_since_refresh >= refresh_interval and NSE_INSTRUMENTS is not None and is_within_trading_hours():
         # Use show_progress=False for faster background refresh
-        success, errors = run_all_analyses(NSE_INSTRUMENTS, show_progress=False)
+        success, errors = asyncio.run(run_all_analyses(NSE_INSTRUMENTS, show_progress=False))
         st.session_state.sentiment_last_refresh = time.time()
         if success:
             st.rerun()
@@ -790,7 +920,7 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
         # Automatically run analyses
         if NSE_INSTRUMENTS is not None:
             with st.spinner("🔄 Running all analyses..."):
-                success, errors = run_all_analyses(NSE_INSTRUMENTS)
+                success, errors = asyncio.run(run_all_analyses(NSE_INSTRUMENTS))
 
                 if success:
                     st.session_state.sentiment_last_refresh = time.time()
@@ -1483,6 +1613,103 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
                 st.markdown(f"- {detail}")
 
     # ─────────────────────────────────────────────────────────────────
+    # 6. AI MARKET ANALYSIS (NEW SECTION)
+    # ─────────────────────────────────────────────────────────────────
+    if '🤖 AI Market Analysis' in sources:
+        source_data = sources['🤖 AI Market Analysis']
+        with st.expander("**🤖 AI Market Analysis (Enhanced with News & Global Data)**", expanded=True):
+            bias = source_data.get('bias', 'NEUTRAL')
+            score = source_data.get('score', 0)
+            confidence = source_data.get('confidence', 0)
+            icon = source_data.get('icon', '🤖')
+            
+            # Color based on bias
+            if bias == 'BULLISH':
+                bg_color = '#00ff88'
+                text_color = 'black'
+            elif bias == 'BEARISH':
+                bg_color = '#ff4444'
+                text_color = 'white'
+            else:
+                bg_color = '#ffa500'
+                text_color = 'white'
+
+            # Display source card
+            col1, col2, col3 = st.columns([2, 1, 1])
+
+            with col1:
+                st.markdown(f"""
+                <div style='background: {bg_color}; padding: 15px; border-radius: 10px;'>
+                    <h3 style='margin: 0; color: {text_color};'>{icon} AI: {bias}</h3>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col2:
+                st.metric("Score", f"{score:+.1f}")
+
+            with col3:
+                st.metric("Confidence", f"{confidence:.1f}%")
+
+            # Display AI Reasoning
+            reasoning = source_data.get('reasoning', [])
+            if reasoning:
+                st.markdown("#### 🤔 AI Reasoning")
+                for i, reason in enumerate(reasoning, 1):
+                    st.markdown(f"{i}. {reason}")
+
+            # Display Final Verdict
+            final_verdict = source_data.get('final_verdict', '')
+            if final_verdict:
+                st.markdown("#### 🎯 Final Verdict")
+                st.info(final_verdict)
+
+            # Display Detailed Metrics
+            full_report = source_data.get('full_report', {})
+            
+            if 'news_sentiment' in full_report:
+                st.markdown("#### 📰 News Sentiment Analysis")
+                news_data = full_report['news_sentiment']
+                news_score = news_data.get('score', 0)
+                news_articles = news_data.get('articles', [])
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Overall News Sentiment", f"{news_score:+.2f}")
+                with col2:
+                    st.metric("Articles Analyzed", len(news_articles))
+                with col3:
+                    st.metric("Top Keywords", ", ".join(news_data.get('top_keywords', [])[:3]))
+                
+                if news_articles:
+                    with st.expander("📋 Top News Articles"):
+                        for article in news_articles[:5]:
+                            st.markdown(f"**{article.get('title', 'No title')}**")
+                            st.markdown(f"*Source: {article.get('source', 'Unknown')}*")
+                            st.markdown(f"Sentiment: {article.get('sentiment', 'Neutral')}")
+                            st.markdown("---")
+
+            if 'global_markets' in full_report:
+                st.markdown("#### 🌍 Global Market Analysis")
+                global_data = full_report['global_markets']
+                
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("US Markets", f"{global_data.get('us_markets', {}).get('sentiment', 'N/A')}")
+                with col2:
+                    st.metric("Asian Markets", f"{global_data.get('asian_markets', {}).get('sentiment', 'N/A')}")
+                with col3:
+                    st.metric("European Markets", f"{global_data.get('european_markets', {}).get('sentiment', 'N/A')}")
+                with col4:
+                    st.metric("Commodities", f"{global_data.get('commodities', {}).get('sentiment', 'N/A')}")
+
+            # Display Technical Analysis Integration
+            if 'technical_integration' in full_report:
+                st.markdown("#### 🔧 Technical Analysis Integration")
+                tech_data = full_report['technical_integration']
+                st.markdown(f"**Patterns Identified:** {', '.join(tech_data.get('patterns', []))}")
+                st.markdown(f"**Key Levels:** {tech_data.get('key_levels', 'N/A')}")
+
+    # ─────────────────────────────────────────────────────────────────
     # 4. OPTION CHAIN ANALYSIS TABLE
     # ─────────────────────────────────────────────────────────────────
     if 'Option Chain Analysis' in sources:
@@ -1746,7 +1973,7 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     with col2:
         if NSE_INSTRUMENTS is not None:
             if st.button("🎯 Re-run All Analyses", type="primary", use_container_width=True, key="rerun_bias_button"):
-                success, errors = run_all_analyses(NSE_INSTRUMENTS)
+                success, errors = asyncio.run(run_all_analyses(NSE_INSTRUMENTS))
                 st.session_state.sentiment_last_refresh = time.time()
 
                 if success:
@@ -1757,6 +1984,39 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
                     st.error("❌ Some analyses failed:")
                     for error in errors:
                         st.error(f"  - {error}")
+
+    # Add AI-specific control
+    st.markdown("---")
+    st.markdown("### 🤖 AI Analysis Controls")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🧠 Run AI Analysis Only", use_container_width=True):
+            with st.spinner("🤖 Running AI Market Analysis..."):
+                try:
+                    ai_success, ai_errors = asyncio.run(_run_ai_analysis())
+                    if ai_success:
+                        st.success("✅ AI analysis completed!")
+                        st.rerun()
+                    else:
+                        for error in ai_errors:
+                            st.error(f"  - {error}")
+                except Exception as e:
+                    st.error(f"❌ AI analysis failed: {str(e)}")
+    
+    with col2:
+        # API Key Configuration
+        with st.expander("🔧 Configure API Keys"):
+            news_api_key = st.text_input("News API Key", type="password", 
+                                         value=st.session_state.get('news_api_key', ''))
+            groq_api_key = st.text_input("Groq API Key", type="password",
+                                        value=st.session_state.get('groq_api_key', ''))
+            
+            if st.button("💾 Save API Keys"):
+                st.session_state.news_api_key = news_api_key
+                st.session_state.groq_api_key = groq_api_key
+                st.success("✅ API keys saved to session state")
 
     # Auto-refresh handled by the refresh logic at the top of this function
     # No need for additional sleep/rerun here as it causes duplicate rendering

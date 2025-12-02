@@ -27,7 +27,7 @@ from bias_analysis import BiasAnalysisPro
 from option_chain_analysis import OptionChainAnalyzer
 from nse_options_helpers import *
 from advanced_chart_analysis import AdvancedChartAnalysis
-from overall_market_sentiment import render_overall_market_sentiment, calculate_overall_sentiment, run_ai_analysis, shutdown_ai_engine
+from overall_market_sentiment import render_overall_market_sentiment, calculate_overall_sentiment, run_ai_analysis, shutdown_ai_engine, check_bias_alignment
 from advanced_proximity_alerts import get_proximity_alert_system
 from data_cache_manager import (
     get_cache_manager,
@@ -574,7 +574,39 @@ with st.sidebar:
         st.warning("⚠️ Not Configured")
     
     st.divider()
-    
+
+    # Bias Alignment Status
+    st.subheader("🎯 Bias Alignment")
+    try:
+        alignment = check_bias_alignment()
+
+        if alignment:
+            if alignment['aligned']:
+                direction = alignment['direction']
+                confidence = alignment['confidence']
+
+                if direction == 'BULLISH':
+                    st.success(f"🟢 {direction}")
+                    st.caption(f"Confidence: {confidence:.1f}%")
+                elif direction == 'BEARISH':
+                    st.error(f"🔴 {direction}")
+                    st.caption(f"Confidence: {confidence:.1f}%")
+            else:
+                st.info("⚖️ Not Aligned")
+                # Show individual biases
+                tech = alignment.get('technical_bias', 'N/A')
+                pcr = alignment.get('pcr_bias', 'N/A')
+                atm = alignment.get('atm_bias', 'N/A')
+                st.caption(f"Tech: {tech}")
+                st.caption(f"PCR: {pcr}")
+                st.caption(f"ATM: {atm}")
+        else:
+            st.warning("⏳ No Data")
+    except Exception as e:
+        st.warning("⏳ Loading...")
+
+    st.divider()
+
     # Settings
     st.subheader("⚙️ Settings")
     st.write(f"**Auto Refresh:** {AUTO_REFRESH_INTERVAL}s")

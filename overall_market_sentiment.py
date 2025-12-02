@@ -870,6 +870,84 @@ def calculate_overall_sentiment():
     }
 
 
+def check_bias_alignment():
+    """
+    Check if all three bias indicators (Technical, PCR, ATM) are aligned (all bullish or all bearish)
+
+    Returns:
+        dict: Alignment status with details, or None if data not available
+            {
+                'aligned': bool,
+                'direction': 'BULLISH' or 'BEARISH',
+                'technical_bias': str,
+                'technical_score': float,
+                'pcr_bias': str,
+                'pcr_score': float,
+                'atm_bias': str,
+                'atm_score': float,
+                'confidence': float
+            }
+    """
+    # Get Technical Indicators bias
+    technical_bias = None
+    technical_score = 0
+    if 'bias_analysis_results' in st.session_state and st.session_state.bias_analysis_results:
+        analysis = st.session_state.bias_analysis_results
+        if analysis.get('success'):
+            technical_bias = analysis.get('overall_bias', 'NEUTRAL')
+            technical_score = analysis.get('overall_score', 0)
+
+    # Get PCR Analysis bias
+    pcr_sentiment = calculate_option_chain_pcr_sentiment(None)
+    pcr_bias = None
+    pcr_score = 0
+    if pcr_sentiment:
+        pcr_bias = pcr_sentiment.get('bias', 'NEUTRAL')
+        pcr_score = pcr_sentiment.get('score', 0)
+
+    # Get ATM Option Chain bias
+    atm_sentiment = calculate_option_chain_atm_sentiment(None)
+    atm_bias = None
+    atm_score = 0
+    if atm_sentiment and atm_sentiment.get('total_instruments', 0) > 0:
+        atm_bias = atm_sentiment.get('bias', 'NEUTRAL')
+        atm_score = atm_sentiment.get('score', 0)
+
+    # Check if all data is available
+    if technical_bias is None or pcr_bias is None or atm_bias is None:
+        return None
+
+    # Check for alignment (all bullish or all bearish)
+    aligned = False
+    direction = None
+
+    if technical_bias == 'BULLISH' and pcr_bias == 'BULLISH' and atm_bias == 'BULLISH':
+        aligned = True
+        direction = 'BULLISH'
+    elif technical_bias == 'BEARISH' and pcr_bias == 'BEARISH' and atm_bias == 'BEARISH':
+        aligned = True
+        direction = 'BEARISH'
+
+    # Calculate overall confidence based on the strength of each bias
+    confidence = 0
+    if aligned:
+        # Average the absolute scores and normalize to 0-100
+        avg_score = (abs(technical_score) + abs(pcr_score) + abs(atm_score)) / 3
+        confidence = min(100, avg_score)
+
+    return {
+        'aligned': aligned,
+        'direction': direction,
+        'technical_bias': technical_bias,
+        'technical_score': technical_score,
+        'pcr_bias': pcr_bias,
+        'pcr_score': pcr_score,
+        'atm_bias': atm_bias,
+        'atm_score': atm_score,
+        'confidence': confidence
+    }
+
+
 def _run_bias_analysis():
     """
     Helper function to run bias analysis
@@ -1067,10 +1145,25 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     market_session = scheduler.get_market_session()
     refresh_interval = scheduler.get_refresh_interval(market_session)
 
-    if is_within_trading_hours():
-        st.caption(f"🔄 Auto-refreshing every {refresh_interval} seconds during trading hours")
-    else:
-        st.caption("⏸️ Auto-refresh paused (market closed). Using cached data.")
+    # Add UI controls row
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        if is_within_trading_hours():
+            st.caption(f"🔄 Auto-refreshing every {refresh_interval} seconds during trading hours")
+        else:
+            st.caption("⏸️ Auto-refresh paused (market closed). Using cached data.")
+    with col2:
+        # Initialize alignment alerts setting in session state
+        if 'enable_alignment_alerts' not in st.session_state:
+            st.session_state.enable_alignment_alerts = True
+
+        # Toggle for alignment alerts
+        enable_alerts = st.checkbox(
+            "🔔 Alignment Alerts",
+            value=st.session_state.enable_alignment_alerts,
+            help="Send Telegram alerts when Technical Indicators, PCR Analysis, and ATM Option Chain all align (bullish or bearish)"
+        )
+        st.session_state.enable_alignment_alerts = enable_alerts
 
     st.markdown("---")
 
@@ -1227,6 +1320,72 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     """, unsafe_allow_html=True)
 
     st.markdown("---")
+
+    # ═══════════════════════════════════════════════════════════════════
+    # BIAS ALIGNMENT CHECK & TELEGRAM ALERT
+    # ═══════════════════════════════════════════════════════════════════
+
+    # Initialize alignment tracking in session state
+    if 'last_alignment_alert' not in st.session_state:
+        st.session_state.last_alignment_alert = None
+    if 'last_alignment_direction' not in st.session_state:
+        st.session_state.last_alignment_direction = None
+
+    # Check for bias alignment
+    alignment_status = check_bias_alignment()
+
+    if alignment_status and alignment_status['aligned']:
+        # Show alignment indicator in UI
+        direction = alignment_status['direction']
+        confidence = alignment_status['confidence']
+
+        if direction == 'BULLISH':
+            alert_color = '#00ff88'
+            alert_icon = '🚀'
+            alert_emoji = '🟢'
+        else:  # BEARISH
+            alert_color = '#ff4444'
+            alert_icon = '⚠️'
+            alert_emoji = '🔴'
+
+        st.markdown(f"""
+        <div style='background: linear-gradient(135deg, {alert_color}22 0%, {alert_color}11 100%);
+                    padding: 20px; border-radius: 10px; margin-bottom: 20px;
+                    border: 2px solid {alert_color};'>
+            <div style='text-align: center;'>
+                <div style='font-size: 32px; margin-bottom: 10px;'>{alert_icon}</div>
+                <h3 style='margin: 0; color: {alert_color}; font-size: 24px;'>
+                    {alert_emoji} ALL 3 INDICATORS ALIGNED {alert_emoji}
+                </h3>
+                <p style='margin: 10px 0 0 0; color: #888; font-size: 16px;'>
+                    {direction} - Confidence: {confidence:.1f}%
+                </p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Send Telegram alert if:
+        # 1. Alignment alerts are enabled, AND
+        # 2. Never sent before OR direction has changed since last alert
+        current_alert_key = f"{direction}_{int(confidence)}"
+        should_send_alert = (
+            st.session_state.get('enable_alignment_alerts', True) and
+            (st.session_state.last_alignment_alert != current_alert_key or
+             st.session_state.last_alignment_direction != direction)
+        )
+
+        if should_send_alert:
+            try:
+                from telegram_alerts import TelegramBot
+                bot = TelegramBot()
+                if bot.enabled:
+                    success = bot.send_bias_alignment_alert(alignment_status)
+                    if success:
+                        st.session_state.last_alignment_alert = current_alert_key
+                        st.session_state.last_alignment_direction = direction
+                        st.success(f"✅ Telegram alert sent for {direction} alignment!")
+            except Exception as e:
+                st.warning(f"⚠️ Could not send Telegram alert: {str(e)}")
 
     # ═══════════════════════════════════════════════════════════════════
     # HEADER METRICS

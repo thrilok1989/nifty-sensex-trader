@@ -340,11 +340,11 @@ class TelegramBot:
         """
         if not report:
             return False
-        
+
         confidence = float(report.get("confidence", 0.0) or 0.0)
         if confidence < confidence_thresh:
             return False
-        
+
         label = report.get("label", "UNKNOWN")
         rec = report.get("recommendation", "HOLD")
         tech = report.get("technical_score", 0.0)
@@ -355,16 +355,16 @@ class TelegramBot:
 
         # Format top reasons
         top_reasons = "\n".join(f"{i+1}. {html.escape(str(r))}" for i, r in enumerate(reasons[:4]))
-        
+
         # Format technical contributions
         tech_lines = []
         contribs = report.get("technical_contributions", {}) or {}
         for k, v in contribs.items():
             sign = "Bullish" if v > 0 else "Bearish" if v < 0 else "Neutral"
             tech_lines.append(f"{html.escape(k)}: {sign} ({v:.3f})")
-        
+
         tech_block = "\n".join(tech_lines[:6]) or "N/A"
-        
+
         # Determine emoji based on bias
         if "BULLISH" in label.upper():
             bias_emoji = "🟢"
@@ -401,8 +401,82 @@ class TelegramBot:
 
 ⏰ <b>Time (IST):</b> {get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')}
         """
-        
+
         return await self.send_message_async(text.strip())
+
+    def send_bias_alignment_alert(self, alignment_data: Dict[str, Any]) -> bool:
+        """
+        Send alert when all three bias indicators align (all bullish or all bearish)
+
+        Args:
+            alignment_data: Dictionary containing:
+                - direction: 'BULLISH' or 'BEARISH'
+                - technical_bias: str
+                - technical_score: float
+                - pcr_bias: str
+                - pcr_score: float
+                - atm_bias: str
+                - atm_score: float
+                - confidence: float (0-100)
+        """
+        if not self.enabled:
+            return False
+
+        direction = alignment_data.get('direction', 'UNKNOWN')
+
+        # Determine emoji based on direction
+        if direction == 'BULLISH':
+            direction_emoji = "🟢"
+            signal_emoji = "🚀"
+            direction_label = "BULLISH ALIGNMENT"
+        elif direction == 'BEARISH':
+            direction_emoji = "🔴"
+            signal_emoji = "⚠️"
+            direction_label = "BEARISH ALIGNMENT"
+        else:
+            direction_emoji = "⚪"
+            signal_emoji = "📊"
+            direction_label = "MARKET ALIGNMENT"
+
+        # Extract data
+        tech_bias = alignment_data.get('technical_bias', 'N/A')
+        tech_score = alignment_data.get('technical_score', 0)
+        pcr_bias = alignment_data.get('pcr_bias', 'N/A')
+        pcr_score = alignment_data.get('pcr_score', 0)
+        atm_bias = alignment_data.get('atm_bias', 'N/A')
+        atm_score = alignment_data.get('atm_score', 0)
+        confidence = alignment_data.get('confidence', 0)
+
+        message = f"""
+{signal_emoji} <b>BIAS ALIGNMENT ALERT</b> {signal_emoji}
+
+{direction_emoji} <b>{direction_label}</b> {direction_emoji}
+
+<b>━━━━━━━━━━━━━━━━━━━━</b>
+
+<b>ALL 3 INDICATORS ALIGNED!</b>
+
+📊 <b>TECHNICAL INDICATORS</b>
+  Bias: <b>{tech_bias}</b>
+  Score: {tech_score:+.2f}
+
+📈 <b>PCR ANALYSIS</b>
+  Bias: <b>{pcr_bias}</b>
+  Score: {pcr_score:+.2f}
+
+⚡ <b>ATM OPTION CHAIN</b>
+  Bias: <b>{atm_bias}</b>
+  Score: {atm_score:+.2f}
+
+<b>━━━━━━━━━━━━━━━━━━━━</b>
+
+<b>Confidence:</b> {confidence:.1f}%
+
+<b>⏰ Time (IST):</b> {get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')}
+
+{signal_emoji} <b>This is a strong {direction} signal!</b>
+        """
+        return self.send_message(message.strip())
 
 
 def send_test_message():

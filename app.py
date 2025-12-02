@@ -209,9 +209,23 @@ if 'performance_mode' not in st.session_state:
 # AI MARKET ANALYSIS CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════
 
-# Get API keys from Streamlit secrets
-NEWSDATA_API_KEY = st.secrets.get("NEWSDATA_API_KEY", "")
-GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
+# Get API keys from Streamlit secrets - check both flat and nested formats
+NEWSDATA_API_KEY = (
+    st.secrets.get("NEWSDATA_API_KEY", "") or 
+    st.secrets.get("NEWSDATA", {}).get("API_KEY", "")
+)
+
+GROQ_API_KEY = (
+    st.secrets.get("GROQ_API_KEY", "") or 
+    st.secrets.get("GROQ", {}).get("API_KEY", "")
+)
+
+# Add validation to help with debugging
+if not NEWSDATA_API_KEY:
+    logger.warning("NEWSDATA_API_KEY not found in secrets. AI news analysis will be limited.")
+    
+if not GROQ_API_KEY:
+    logger.warning("GROQ_API_KEY not found in secrets. AI analysis will not work.")
 
 # Initialize AI analysis tracking
 if 'last_ai_analysis_time' not in st.session_state:
@@ -355,7 +369,6 @@ if 'active_htf_sr_signals' not in st.session_state:
 
 if 'last_htf_sr_check_time' not in st.session_state:
     st.session_state.last_htf_sr_check_time = 0
-
 
 # VOB and HTF data storage
 if 'vob_data_nifty' not in st.session_state:
@@ -563,6 +576,27 @@ with st.sidebar:
     
     # AI Analysis Status
     st.subheader("🤖 AI Market Analysis")
+    
+    # API Key Status Debug
+    st.subheader("🔑 API Key Status")
+    
+    if NEWSDATA_API_KEY:
+        if len(NEWSDATA_API_KEY) > 10:  # Simple check if key exists
+            st.success("✅ NEWSDATA API Key: Configured")
+        else:
+            st.error("❌ NEWSDATA API Key: Invalid (too short)")
+    else:
+        st.error("❌ NEWSDATA API Key: Missing")
+        
+    if GROQ_API_KEY:
+        if len(GROQ_API_KEY) > 10:  # Simple check if key exists
+            st.success("✅ GROQ API Key: Configured")
+        else:
+            st.error("❌ GROQ API Key: Invalid (too short)")
+    else:
+        st.error("❌ GROQ API Key: Missing")
+    
+    # AI Analysis Controls
     if NEWSDATA_API_KEY and GROQ_API_KEY:
         st.success("✅ API Keys Configured")
         
@@ -921,7 +955,6 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
         except Exception as prox_e:
             # Silently fail proximity alerts
             pass
-
 
     except Exception as e:
         # Silently fail - don't disrupt the app
@@ -3474,7 +3507,7 @@ with tab7:
                 if 'timestamp' in display_df.columns:
                     display_df['timestamp'] = display_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M')
                 elif display_df.index.name == 'Datetime':
-                    display_df['Time'] = display_df.index.strftime('%Y-%m-%d %H:%M')
+                    display_df['Time'] = display_df.index.strftime('%Y-%m-d %H:%M')
 
                 st.dataframe(display_df[['open', 'high', 'low', 'close', 'volume']].tail(20),
                            use_container_width=True)

@@ -49,35 +49,14 @@ Handles API key management internally from Streamlit secrets
 
 # Try to import AI engine
 try:
-    # Try to import from ai_market_engine directly
-    try:
-        from integrations.ai_market_engine import AIMarketEngine
-        from integrations.ai_market_engine import run_ai_analysis as adapter_run_ai_analysis
-        from integrations.ai_market_engine import shutdown_ai_engine as adapter_shutdown_ai_engine
-        AI_AVAILABLE = True
-        print("✅ Successfully imported AI engine from ai_market_engine.py")
-    except ImportError as e:
-        print(f"❌ Failed to import from ai_market_engine: {e}")
-        # Try alternative import paths
-        try:
-            # Check if ai_analysis_adapter.py exists and has the functions
-            import sys
-            import os
-            sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-            from ai_analysis_adapter import run_ai_analysis as adapter_run_ai_analysis
-            from ai_analysis_adapter import shutdown_ai_engine as adapter_shutdown_ai_engine
-            AI_AVAILABLE = True
-            print("✅ Successfully imported AI engine from ai_analysis_adapter.py")
-        except ImportError as e2:
-            print(f"❌ Failed to import from ai_analysis_adapter: {e2}")
-            AI_AVAILABLE = False
-            adapter_run_ai_analysis = None
-            adapter_shutdown_ai_engine = None
-except Exception as e:
-    print(f"❌ General AI import error: {e}")
+    # Import AIMarketEngine class directly (correct import)
+    from integrations.ai_market_engine import AIMarketEngine
+    AI_AVAILABLE = True
+    print("✅ Successfully imported AIMarketEngine from ai_market_engine.py")
+except ImportError as e:
+    print(f"❌ Failed to import AIMarketEngine: {e}")
     AI_AVAILABLE = False
-    adapter_run_ai_analysis = None
-    adapter_shutdown_ai_engine = None
+    AIMarketEngine = None
 
 
 async def run_ai_analysis(
@@ -101,9 +80,9 @@ async def run_ai_analysis(
         Dictionary with analysis results
     """
     print(f"🤖 AI analysis called. AI_AVAILABLE: {AI_AVAILABLE}")
-    
-    if not AI_AVAILABLE or adapter_run_ai_analysis is None:
-        print("❌ AI engine not available or function is None")
+
+    if not AI_AVAILABLE or AIMarketEngine is None:
+        print("❌ AI engine not available")
         return {
             'success': False,
             'triggered': False,
@@ -236,18 +215,10 @@ async def run_ai_analysis(
 def shutdown_ai_engine():
     """
     Shutdown AI engine if available
+    Note: AIMarketEngine instances are designed to auto-cleanup via garbage collection.
+    This function is kept for compatibility but doesn't need to do anything special.
     """
-    if AI_AVAILABLE and adapter_shutdown_ai_engine:
-        try:
-            # Check if the function is actually callable
-            if callable(adapter_shutdown_ai_engine):
-                return adapter_shutdown_ai_engine()
-            else:
-                print(f"⚠️ adapter_shutdown_ai_engine is not callable: {type(adapter_shutdown_ai_engine)}")
-                return None
-        except Exception as e:
-            print(f"❌ Error shutting down AI engine: {e}")
-            return None
+    print("✅ AI Engine shutdown (auto-cleanup via garbage collection)")
     return None
 
 

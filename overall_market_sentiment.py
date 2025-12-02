@@ -19,6 +19,24 @@ import asyncio
 import os
 from typing import Dict, Any, Optional
 from market_hours_scheduler import is_within_trading_hours, scheduler
+import requests
+
+# === Telegram Config ===
+TELEGRAM_BOT_TOKEN = "8133685842:AAGdHCpi9QRIsS-fWW5Y1AJvS95QL9xU"
+TELEGRAM_CHAT_ID = "57096584"
+
+def send_telegram_message(message):
+    """Send Telegram message for PCR analysis alerts"""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    data = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
+    try:
+        response = requests.post(url, data=data)
+        if response.status_code == 200:
+            print(f"✅ Telegram message sent successfully")
+        else:
+            print(f"⚠️ Telegram message failed with status {response.status_code}")
+    except Exception as e:
+        print(f"❌ Telegram error: {e}")
 
 
 # ============================================================================
@@ -220,7 +238,16 @@ def shutdown_ai_engine():
     Shutdown AI engine if available
     """
     if AI_AVAILABLE and adapter_shutdown_ai_engine:
-        return adapter_shutdown_ai_engine()
+        try:
+            # Check if the function is actually callable
+            if callable(adapter_shutdown_ai_engine):
+                return adapter_shutdown_ai_engine()
+            else:
+                print(f"⚠️ adapter_shutdown_ai_engine is not callable: {type(adapter_shutdown_ai_engine)}")
+                return None
+        except Exception as e:
+            print(f"❌ Error shutting down AI engine: {e}")
+            return None
     return None
 
 
@@ -463,6 +490,45 @@ def calculate_option_chain_pcr_sentiment(NSE_INSTRUMENTS):
 
     # Calculate confidence
     confidence = min(100, abs(overall_score))
+
+    # =====================================================================
+    # SEND TELEGRAM ALERT FOR PCR ANALYSIS
+    # =====================================================================
+    # Send message when PCR shows strong bias (both NIFTY & SENSEX aligned)
+    if bias != "NEUTRAL" and instruments_analyzed >= 2:
+        # Check if both indices are aligned (same bias)
+        aligned_count = bullish_instruments if bias == "BULLISH" else bearish_instruments
+
+        if aligned_count >= 2:  # Both NIFTY and SENSEX aligned
+            try:
+                # Format PCR details
+                pcr_text = []
+                for detail in pcr_details:
+                    pcr_text.append(
+                        f"  <b>{detail['Instrument']}:</b>\n"
+                        f"    • Spot: {detail['Spot']}\n"
+                        f"    • PCR (OI): {detail['PCR (OI)']} - {detail['OI Bias']}\n"
+                        f"    • PCR (Δ OI): {detail['PCR (Δ OI)']} - {detail['Δ OI Bias']}"
+                    )
+
+                pcr_details_text = "\n\n".join(pcr_text)
+
+                message = (
+                    f"📊 <b>PCR ANALYSIS ALERT</b> 📊\n\n"
+                    f"<b>Overall Bias:</b> {bias} {'🐂' if bias == 'BULLISH' else '🐻'}\n"
+                    f"<b>Score:</b> {overall_score:.1f}\n"
+                    f"<b>Confidence:</b> {confidence:.1f}%\n\n"
+                    f"<b>Instruments Analyzed:</b> {instruments_analyzed}\n"
+                    f"  🐂 Bullish: {bullish_instruments}\n"
+                    f"  🐻 Bearish: {bearish_instruments}\n"
+                    f"  ⚖️ Neutral: {neutral_instruments}\n\n"
+                    f"<b>PCR Details:</b>\n{pcr_details_text}\n\n"
+                    f"<i>Time: {datetime.now().strftime('%I:%M:%S %p')}</i>"
+                )
+
+                send_telegram_message(message)
+            except Exception as e:
+                print(f"Error sending PCR analysis alert: {e}")
 
     return {
         'bias': bias,
@@ -1024,18 +1090,18 @@ async def _run_ai_analysis():
     """
     errors = []
     try:
+        # Get current sentiment for both conditional check and module biases
+        current_sentiment = calculate_overall_sentiment()
+        overall_sentiment = current_sentiment.get('overall_sentiment', 'NEUTRAL')
+
         # Check if AI engine should run (environment variable control)
         ai_run_only_directional = os.environ.get('AI_RUN_ONLY_DIRECTIONAL', 'true').lower() == 'true'
-        
+
         if ai_run_only_directional:
-            # Get current sentiment to decide if we should run AI analysis
-            current_sentiment = calculate_overall_sentiment()
-            overall_sentiment = current_sentiment.get('overall_sentiment', 'NEUTRAL')
-            
             # Only run AI if sentiment is strongly directional
             if overall_sentiment not in ['BULLISH', 'BEARISH']:
                 return True, ["AI Analysis: Skipped (non-directional market)"]
-        
+
         # Prepare module biases from existing analysis
         module_biases = {}
         sources = current_sentiment.get('sources', {})

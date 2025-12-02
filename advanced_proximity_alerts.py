@@ -210,62 +210,70 @@ class AdvancedProximityAlertSystem:
         """
         Send Telegram notification for proximity alert (if rate limit allows)
 
+        DISABLED: Only sending alerts for specific indicator conditions
+        (Technical Indicators, PCR Analysis, ATM Option Chain)
+
         Args:
             alert: ProximityAlert object
             current_price: Current market price
 
         Returns:
-            True if notification was sent, False if rate limited
+            False (alerts disabled)
         """
-        if not self.telegram.enabled:
-            return False
+        # Proximity alerts are disabled - only send specific indicator condition alerts
+        print(f"Proximity alert detected but not sent (disabled): {alert.symbol} {alert.alert_type} @ {alert.level:.2f}")
+        return False
 
-        # Create alert key for rate limiting
-        alert_key = f"{alert.alert_type.lower()}_proximity"
-
-        # Check rate limit
-        if not self.rate_limiter.can_send_notification(
-            alert_type=alert_key,
-            symbol=alert.symbol,
-            level=alert.level
-        ):
-            # Get time remaining
-            seconds_remaining = self.rate_limiter.get_time_until_next_notification(
-                alert_type=alert_key,
-                symbol=alert.symbol,
-                level=alert.level
-            )
-
-            if seconds_remaining:
-                minutes_remaining = seconds_remaining // 60
-                print(f"Rate limited: {alert.symbol} {alert.alert_type} @ {alert.level:.2f} "
-                      f"(next notification in {minutes_remaining} min)")
-
-            return False
-
-        # Build notification message
-        message = self._build_alert_message(alert, current_price)
-
-        # Send Telegram notification
-        try:
-            success = self.telegram.send_message(message)
-
-            if success:
-                # Record notification
-                self.rate_limiter.record_notification(
-                    alert_type=alert_key,
-                    symbol=alert.symbol,
-                    level=alert.level
-                )
-                print(f"Sent proximity alert: {alert.symbol} {alert.alert_type} @ {alert.level:.2f}")
-                return True
-            else:
-                print(f"Failed to send proximity alert: {alert.symbol} {alert.alert_type}")
-                return False
-
-        except Exception as e:
-            print(f"Error sending proximity alert: {e}")
-            return False
+        # Original code commented out
+        # if not self.telegram.enabled:
+        #     return False
+        #
+        # # Create alert key for rate limiting
+        # alert_key = f"{alert.alert_type.lower()}_proximity"
+        #
+        # # Check rate limit
+        # if not self.rate_limiter.can_send_notification(
+        #     alert_type=alert_key,
+        #     symbol=alert.symbol,
+        #     level=alert.level
+        # ):
+        #     # Get time remaining
+        #     seconds_remaining = self.rate_limiter.get_time_until_next_notification(
+        #         alert_type=alert_key,
+        #         symbol=alert.symbol,
+        #         level=alert.level
+        #     )
+        #
+        #     if seconds_remaining:
+        #         minutes_remaining = seconds_remaining // 60
+        #         print(f"Rate limited: {alert.symbol} {alert.alert_type} @ {alert.level:.2f} "
+        #               f"(next notification in {minutes_remaining} min)")
+        #
+        #     return False
+        #
+        # # Build notification message
+        # message = self._build_alert_message(alert, current_price)
+        #
+        # # Send Telegram notification
+        # try:
+        #     success = self.telegram.send_message(message)
+        #
+        #     if success:
+        #         # Record notification
+        #         self.rate_limiter.record_notification(
+        #             alert_type=alert_key,
+        #             symbol=alert.symbol,
+        #             level=alert.level
+        #         )
+        #         print(f"Sent proximity alert: {alert.symbol} {alert.alert_type} @ {alert.level:.2f}")
+        #         return True
+        #     else:
+        #         print(f"Failed to send proximity alert: {alert.symbol} {alert.alert_type}")
+        #         return False
+        #
+        # except Exception as e:
+        #     print(f"Error sending proximity alert: {e}")
+        #     return False
 
     def _gather_market_context(self) -> Dict:
         """

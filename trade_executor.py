@@ -78,13 +78,14 @@ class TradeExecutor:
             
             if result['success']:
                 # Send Telegram alert
-                self.telegram.send_order_placed(
-                    setup,
-                    result['order_id'],
-                    order_details['strike'],
-                    order_details['sl_price'],
-                    order_details['target_price']
-                )
+                # Removed telegram order notifications - only send for specific indicator conditions
+                # self.telegram.send_order_placed(
+                #     setup,
+                #     result['order_id'],
+                #     order_details['strike'],
+                #     order_details['sl_price'],
+                #     order_details['target_price']
+                # )
                 
                 return {
                     'success': True,
@@ -94,7 +95,8 @@ class TradeExecutor:
                 }
             else:
                 # Send failure alert
-                self.telegram.send_order_failed(setup, result.get('error', 'Unknown error'))
+                # Removed telegram order failure notifications - only send for specific indicator conditions
+                # self.telegram.send_order_failed(setup, result.get('error', 'Unknown error'))
                 
                 return {
                     'success': False,

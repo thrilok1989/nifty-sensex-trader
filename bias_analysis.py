@@ -13,10 +13,28 @@ import yfinance as yf
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pytz
+import requests
 warnings.filterwarnings('ignore')
 
 # Indian Standard Time (IST)
 IST = pytz.timezone('Asia/Kolkata')
+
+# === Telegram Config ===
+TELEGRAM_BOT_TOKEN = "8133685842:AAGdHCpi9QRIsS-fWW5Y1AJvS95QL9xU"
+TELEGRAM_CHAT_ID = "57096584"
+
+def send_telegram_message(message):
+    """Send Telegram message for indicator alignment alerts"""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    data = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}
+    try:
+        response = requests.post(url, data=data)
+        if response.status_code == 200:
+            print(f"✅ Telegram message sent successfully")
+        else:
+            print(f"⚠️ Telegram message failed with status {response.status_code}")
+    except Exception as e:
+        print(f"❌ Telegram error: {e}")
 
 # Import Dhan API for Indian indices volume data
 try:
@@ -958,6 +976,38 @@ class BiasAnalysisPro:
             overall_bias = "NEUTRAL"
             overall_score = 0
             overall_confidence = 100 - max(bullish_bias_pct, bearish_bias_pct)
+
+        # =====================================================================
+        # SEND TELEGRAM ALERT FOR TECHNICAL INDICATORS ALIGNMENT
+        # =====================================================================
+        # Send message when bias is strong (>= 60% threshold) and at least 6 of 8 fast indicators agree
+        if overall_bias != "NEUTRAL" and (bullish_count >= 6 or bearish_count >= 6):
+            try:
+                # Format indicator details
+                indicator_summary = []
+                for bias in bias_results:
+                    if bias['category'] == 'fast':
+                        indicator_summary.append(f"  • {bias['indicator']}: {bias['bias']} ({bias['value']})")
+
+                indicator_text = "\n".join(indicator_summary)
+
+                message = (
+                    f"🎯 <b>TECHNICAL INDICATORS ALIGNMENT</b> 🎯\n\n"
+                    f"<b>Symbol:</b> {symbol}\n"
+                    f"<b>Current Price:</b> ₹{current_price:.2f}\n"
+                    f"<b>Overall Bias:</b> {overall_bias}\n"
+                    f"<b>Bias Score:</b> {overall_score:.1f}%\n"
+                    f"<b>Confidence:</b> {overall_confidence:.1f}%\n\n"
+                    f"<b>Fast Indicators (8):</b>\n"
+                    f"  🐂 Bullish: {fast_bull}/{fast_total}\n"
+                    f"  🐻 Bearish: {fast_bear}/{fast_total}\n\n"
+                    f"<b>Indicator Details:</b>\n{indicator_text}\n\n"
+                    f"<i>Time: {datetime.now(IST).strftime('%I:%M:%S %p')}</i>"
+                )
+
+                send_telegram_message(message)
+            except Exception as e:
+                print(f"Error sending technical indicators alert: {e}")
 
         return {
             'success': True,

@@ -914,13 +914,14 @@ def calculate_overall_sentiment():
 
 def check_bias_alignment():
     """
-    Check if all three bias indicators (Technical, PCR, ATM) are aligned (all bullish or all bearish)
+    Check if all three bias indicators (Technical, PCR, ATM) are aligned for NIFTY (all bullish or all bearish)
 
     Returns:
         dict: Alignment status with details, or None if data not available
             {
                 'aligned': bool,
                 'direction': 'BULLISH' or 'BEARISH',
+                'instrument': 'NIFTY',
                 'technical_bias': str,
                 'technical_score': float,
                 'pcr_bias': str,
@@ -930,7 +931,7 @@ def check_bias_alignment():
                 'confidence': float
             }
     """
-    # Get Technical Indicators bias
+    # Get Technical Indicators bias for NIFTY
     technical_bias = None
     technical_score = 0
     if 'bias_analysis_results' in st.session_state and st.session_state.bias_analysis_results:
@@ -939,21 +940,60 @@ def check_bias_alignment():
             technical_bias = analysis.get('overall_bias', 'NEUTRAL')
             technical_score = analysis.get('overall_score', 0)
 
-    # Get PCR Analysis bias
-    pcr_sentiment = calculate_option_chain_pcr_sentiment(None)
+    # Get PCR Analysis bias for NIFTY specifically
     pcr_bias = None
     pcr_score = 0
-    if pcr_sentiment:
-        pcr_bias = pcr_sentiment.get('bias', 'NEUTRAL')
-        pcr_score = pcr_sentiment.get('score', 0)
+    if 'overall_option_data' in st.session_state and st.session_state.overall_option_data:
+        nifty_data = st.session_state.overall_option_data.get('NIFTY', {})
+        if nifty_data.get('success'):
+            # Calculate PCR for NIFTY
+            total_ce_oi = nifty_data.get('total_ce_oi', 0)
+            total_pe_oi = nifty_data.get('total_pe_oi', 0)
+            pcr_oi = total_pe_oi / total_ce_oi if total_ce_oi > 0 else 1
 
-    # Get ATM Option Chain bias
-    atm_sentiment = calculate_option_chain_atm_sentiment(None)
+            total_ce_change = nifty_data.get('total_ce_change', 0)
+            total_pe_change = nifty_data.get('total_pe_change', 0)
+            pcr_change_oi = abs(total_pe_change) / abs(total_ce_change) if abs(total_ce_change) > 0 else 1
+
+            # Calculate bias score (weighted: OI=30%, Change OI=70%)
+            oi_score = 0
+            if pcr_oi > 1.2:
+                oi_score = min(50, (pcr_oi - 1) * 50)
+            elif pcr_oi < 0.8:
+                oi_score = -min(50, (1 - pcr_oi) * 50)
+
+            change_score = 0
+            if pcr_change_oi > 1.2:
+                change_score = min(50, (pcr_change_oi - 1) * 50)
+            elif pcr_change_oi < 0.8:
+                change_score = -min(50, (1 - pcr_change_oi) * 50)
+
+            pcr_score = (oi_score * 0.3 + change_score * 0.7)
+
+            # Determine bias
+            if pcr_score > 10:
+                pcr_bias = "BULLISH"
+            elif pcr_score < -10:
+                pcr_bias = "BEARISH"
+            else:
+                pcr_bias = "NEUTRAL"
+
+    # Get ATM Option Chain bias for NIFTY specifically
     atm_bias = None
     atm_score = 0
-    if atm_sentiment and atm_sentiment.get('total_instruments', 0) > 0:
-        atm_bias = atm_sentiment.get('bias', 'NEUTRAL')
-        atm_score = atm_sentiment.get('score', 0)
+    if 'NIFTY_atm_zone_bias' in st.session_state:
+        atm_data = st.session_state.NIFTY_atm_zone_bias
+        if atm_data and atm_data.get('success'):
+            atm_bias = atm_data.get('verdict', 'NEUTRAL')
+            atm_score = atm_data.get('score', 0)
+
+            # Normalize bias string
+            if 'Bullish' in atm_bias:
+                atm_bias = 'BULLISH'
+            elif 'Bearish' in atm_bias:
+                atm_bias = 'BEARISH'
+            else:
+                atm_bias = 'NEUTRAL'
 
     # Check if all data is available
     if technical_bias is None or pcr_bias is None or atm_bias is None:
@@ -980,6 +1020,7 @@ def check_bias_alignment():
     return {
         'aligned': aligned,
         'direction': direction,
+        'instrument': 'NIFTY',
         'technical_bias': technical_bias,
         'technical_score': technical_score,
         'pcr_bias': pcr_bias,
@@ -992,7 +1033,7 @@ def check_bias_alignment():
 
 def _run_bias_analysis():
     """
-    Helper function to run bias analysis
+    Helper function to run bias analysis for NIFTY
     Returns: (success, errors)
     """
     errors = []

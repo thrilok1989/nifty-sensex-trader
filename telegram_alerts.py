@@ -410,6 +410,7 @@ class TelegramBot:
 
         Args:
             alignment_data: Dictionary containing:
+                - instrument: 'NIFTY' or 'SENSEX'
                 - direction: 'BULLISH' or 'BEARISH'
                 - technical_bias: str
                 - technical_score: float
@@ -422,6 +423,7 @@ class TelegramBot:
         if not self.enabled:
             return False
 
+        instrument = alignment_data.get('instrument', 'NIFTY')
         direction = alignment_data.get('direction', 'UNKNOWN')
 
         # Determine emoji based on direction
@@ -448,13 +450,13 @@ class TelegramBot:
         confidence = alignment_data.get('confidence', 0)
 
         message = f"""
-{signal_emoji} <b>BIAS ALIGNMENT ALERT</b> {signal_emoji}
+{signal_emoji} <b>{instrument} BIAS ALIGNMENT ALERT</b> {signal_emoji}
 
 {direction_emoji} <b>{direction_label}</b> {direction_emoji}
 
 <b>━━━━━━━━━━━━━━━━━━━━</b>
 
-<b>ALL 3 INDICATORS ALIGNED!</b>
+<b>ALL 3 INDICATORS ALIGNED FOR {instrument}!</b>
 
 📊 <b>TECHNICAL INDICATORS</b>
   Bias: <b>{tech_bias}</b>
@@ -474,7 +476,7 @@ class TelegramBot:
 
 <b>⏰ Time (IST):</b> {get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')}
 
-{signal_emoji} <b>This is a strong {direction} signal!</b>
+{signal_emoji} <b>Strong {direction} signal for {instrument}!</b>
         """
         return self.send_message(message.strip())
 

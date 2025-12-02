@@ -657,10 +657,7 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
                 if is_new:
                     # Add to active signals
                     st.session_state.active_vob_signals.append(nifty_signal)
-
-                    # Send telegram notification
-                    telegram_bot = TelegramBot()
-                    telegram_bot.send_vob_entry_signal(nifty_signal)
+                    # VOB Telegram alert removed - only Bias Alignment Alert is sent
 
         # Fetch chart data and calculate VOB for SENSEX (using cached function)
         df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
@@ -709,10 +706,7 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
                     if is_new:
                         # Add to active signals
                         st.session_state.active_vob_signals.append(sensex_signal)
-
-                        # Send telegram notification
-                        telegram_bot = TelegramBot()
-                        telegram_bot.send_vob_entry_signal(sensex_signal)
+                        # VOB Telegram alert removed - only Bias Alignment Alert is sent
 
         # Clean up old signals (older than 30 minutes)
         st.session_state.active_vob_signals = [
@@ -861,10 +855,7 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
                     if is_new:
                         # Add to active signals
                         st.session_state.active_htf_sr_signals.append(nifty_htf_signal)
-
-                        # Send telegram notification
-                        telegram_bot = TelegramBot()
-                        telegram_bot.send_htf_sr_entry_signal(nifty_htf_signal)
+                        # HTF S/R Telegram alert removed - only Bias Alignment Alert is sent
 
             # Fetch chart data for SENSEX (using cached function)
             df_sensex = get_cached_chart_data('^BSESN', '7d', '1m')
@@ -912,10 +903,7 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
                     if is_new:
                         # Add to active signals
                         st.session_state.active_htf_sr_signals.append(sensex_htf_signal)
-
-                        # Send telegram notification
-                        telegram_bot = TelegramBot()
-                        telegram_bot.send_htf_sr_entry_signal(sensex_htf_signal)
+                        # HTF S/R Telegram alert removed - only Bias Alignment Alert is sent
 
             # Clean up old HTF S/R signals (older than 30 minutes)
             st.session_state.active_htf_sr_signals = [

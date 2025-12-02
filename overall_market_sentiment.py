@@ -278,44 +278,7 @@ def calculate_option_chain_pcr_sentiment(NSE_INSTRUMENTS):
     # Calculate confidence
     confidence = min(100, abs(overall_score))
 
-    # =====================================================================
-    # SEND TELEGRAM ALERT FOR PCR ANALYSIS
-    # =====================================================================
-    # Send message when PCR shows strong bias (both NIFTY & SENSEX aligned)
-    if bias != "NEUTRAL" and instruments_analyzed >= 2:
-        # Check if both indices are aligned (same bias)
-        aligned_count = bullish_instruments if bias == "BULLISH" else bearish_instruments
-
-        if aligned_count >= 2:  # Both NIFTY and SENSEX aligned
-            try:
-                # Format PCR details
-                pcr_text = []
-                for detail in pcr_details:
-                    pcr_text.append(
-                        f"  <b>{detail['Instrument']}:</b>\n"
-                        f"    • Spot: {detail['Spot']}\n"
-                        f"    • PCR (OI): {detail['PCR (OI)']} - {detail['OI Bias']}\n"
-                        f"    • PCR (Δ OI): {detail['PCR (Δ OI)']} - {detail['Δ OI Bias']}"
-                    )
-
-                pcr_details_text = "\n\n".join(pcr_text)
-
-                message = (
-                    f"📊 <b>PCR ANALYSIS ALERT</b> 📊\n\n"
-                    f"<b>Overall Bias:</b> {bias} {'🐂' if bias == 'BULLISH' else '🐻'}\n"
-                    f"<b>Score:</b> {overall_score:.1f}\n"
-                    f"<b>Confidence:</b> {confidence:.1f}%\n\n"
-                    f"<b>Instruments Analyzed:</b> {instruments_analyzed}\n"
-                    f"  🐂 Bullish: {bullish_instruments}\n"
-                    f"  🐻 Bearish: {bearish_instruments}\n"
-                    f"  ⚖️ Neutral: {neutral_instruments}\n\n"
-                    f"<b>PCR Details:</b>\n{pcr_details_text}\n\n"
-                    f"<i>Time: {datetime.now().strftime('%I:%M:%S %p')}</i>"
-                )
-
-                send_telegram_message(message)
-            except Exception as e:
-                print(f"Error sending PCR analysis alert: {e}")
+    # PCR Analysis Telegram alert removed - only Bias Alignment Alert is sent
 
     return {
         'bias': bias,

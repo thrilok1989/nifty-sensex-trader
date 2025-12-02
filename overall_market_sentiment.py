@@ -16,10 +16,139 @@ import pandas as pd
 from datetime import datetime
 import time
 import asyncio
-import os  # Add missing import
+import os
+from typing import Dict, Any, Optional
 from market_hours_scheduler import is_within_trading_hours, scheduler
-from overall_market_sentiment_adapter import run_ai_analysis, shutdown_ai_engine
 
+
+# ============================================================================
+# AI MARKET ANALYSIS ADAPTER
+# ============================================================================
+"""
+Adapter for AI Market Analysis integration
+Handles API key management internally from Streamlit secrets
+"""
+
+# Try to import AI engine
+try:
+    from ai_analysis_adapter import run_ai_analysis as adapter_run_ai_analysis
+    from ai_analysis_adapter import shutdown_ai_engine
+    AI_AVAILABLE = True
+except ImportError:
+    AI_AVAILABLE = False
+    adapter_run_ai_analysis = None
+    shutdown_ai_engine = None
+
+
+async def run_ai_analysis_adapter(
+    overall_market: str,
+    module_biases: Dict[str, float],
+    market_meta: Optional[Dict[str, Any]] = None,
+    save_report: bool = True,
+    telegram_send: bool = True
+) -> Dict[str, Any]:
+    """
+    Run AI market analysis with API keys from Streamlit secrets
+    
+    Args:
+        overall_market: Market description (e.g., "Indian Stock Market")
+        module_biases: Dictionary of module biases/scores
+        market_meta: Additional market metadata
+        save_report: Whether to save the report
+        telegram_send: Whether to send to Telegram
+    
+    Returns:
+        Dictionary with analysis results
+    """
+    if not AI_AVAILABLE:
+        return {
+            'success': False,
+            'triggered': False,
+            'error': 'AI Engine not available',
+            'sentiment': 'NEUTRAL',
+            'score': 0,
+            'confidence': 0,
+            'reasoning': ['AI analysis feature is disabled'],
+            'final_verdict': 'AI analysis unavailable. Using traditional analysis only.'
+        }
+    
+    # Get API keys from Streamlit secrets
+    try:
+        # Try both formats: nested and flat
+        news_api_key = None
+        groq_api_key = None
+        
+        # Try nested format first
+        if "NEWSDATA" in st.secrets and "API_KEY" in st.secrets["NEWSDATA"]:
+            news_api_key = st.secrets["NEWSDATA"]["API_KEY"]
+        elif "NEWSDATA_API_KEY" in st.secrets:
+            news_api_key = st.secrets["NEWSDATA_API_KEY"]
+        
+        if "GROQ" in st.secrets and "API_KEY" in st.secrets["GROQ"]:
+            groq_api_key = st.secrets["GROQ"]["API_KEY"]
+        elif "GROQ_API_KEY" in st.secrets:
+            groq_api_key = st.secrets["GROQ_API_KEY"]
+        
+        # Check environment variables as fallback
+        if not news_api_key:
+            news_api_key = os.environ.get('NEWSDATA_API_KEY')
+        if not groq_api_key:
+            groq_api_key = os.environ.get('GROQ_API_KEY')
+        
+        # Verify we have API keys
+        if not news_api_key or not groq_api_key:
+            return {
+                'success': False,
+                'triggered': False,
+                'error': 'API keys not configured',
+                'sentiment': 'NEUTRAL',
+                'score': 0,
+                'confidence': 0,
+                'reasoning': ['Missing NEWSDATA_API_KEY or GROQ_API_KEY in Streamlit secrets'],
+                'final_verdict': 'Configure API keys in .streamlit/secrets.toml to enable AI analysis.'
+            }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'triggered': False,
+            'error': f'Error loading API keys: {str(e)}',
+            'sentiment': 'NEUTRAL',
+            'score': 0,
+            'confidence': 0,
+            'reasoning': ['Failed to load API keys from secrets'],
+            'final_verdict': 'Error loading API keys. Check Streamlit secrets configuration.'
+        }
+    
+    # Run AI analysis with API keys
+    try:
+        report = await adapter_run_ai_analysis(
+            overall_market=overall_market,
+            module_biases=module_biases,
+            market_meta=market_meta,
+            news_api_key=news_api_key,
+            groq_api_key=groq_api_key,
+            weights=None,  # Use default weights
+            save_report=save_report,
+            telegram_send=telegram_send
+        )
+        return report
+    except Exception as e:
+        return {
+            'success': False,
+            'triggered': False,
+            'error': f'AI analysis failed: {str(e)}',
+            'sentiment': 'NEUTRAL',
+            'score': 0,
+            'confidence': 0,
+            'reasoning': [f'Error: {str(e)}'],
+            'final_verdict': 'AI analysis encountered an error. Please check logs.'
+        }
+
+
+# ============================================================================
+# ORIGINAL SENTIMENT ANALYSIS FUNCTIONS
+# ============================================================================
 
 def calculate_stock_performance_sentiment(stock_data):
     """
@@ -765,18 +894,12 @@ async def _run_ai_analysis():
             'trading_hours': is_within_trading_hours()
         }
         
-        # Get API keys from environment or session state
-        news_api_key = os.environ.get('NEWS_API_KEY') or st.session_state.get('news_api_key')
-        groq_api_key = os.environ.get('GROQ_API_KEY') or st.session_state.get('groq_api_key')
-        
-        # Run AI analysis - THIS IS CORRECTLY USING AWAIT
+        # Use the adapter function (which handles API keys from secrets)
         with st.spinner("🤖 Running AI Market Analysis..."):
-            ai_report = await run_ai_analysis(
+            ai_report = await run_ai_analysis_adapter(
                 overall_market="Indian Stock Market (NIFTY 50)",
                 module_biases=module_biases,
                 market_meta=market_meta,
-                news_api_key=news_api_key,
-                groq_api_key=groq_api_key,
                 save_report=True,
                 telegram_send=False  # Disable telegram for auto-refresh
             )
@@ -2021,3 +2144,21 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
 
     # Auto-refresh handled by the refresh logic at the top of this function
     # No need for additional sleep/rerun here as it causes duplicate rendering
+
+
+# Export shutdown function for external use
+def shutdown_ai_engine():
+    """Shutdown AI engine if available"""
+    if AI_AVAILABLE and shutdown_ai_engine:
+        return shutdown_ai_engine()
+    return None
+
+
+# Export functions for external use
+__all__ = [
+    'run_ai_analysis_adapter',
+    'shutdown_ai_engine',
+    'calculate_overall_sentiment',
+    'run_all_analyses',
+    'render_overall_market_sentiment'
+]

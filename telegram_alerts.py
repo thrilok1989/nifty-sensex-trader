@@ -334,82 +334,13 @@ class TelegramBot:
         message = "\n".join(message_parts)
         return self.send_message(message)
 
-    async def send_ai_market_alert(self, report: Dict[str, Any], confidence_thresh: float = 0.60) -> bool:
-        """
-        Send AI market alert to Telegram
-        """
-        if not report:
-            return False
-
-        confidence = float(report.get("confidence", 0.0) or 0.0)
-        if confidence < confidence_thresh:
-            return False
-
-        label = report.get("label", "UNKNOWN")
-        rec = report.get("recommendation", "HOLD")
-        tech = report.get("technical_score", 0.0)
-        news = report.get("news_score", 0.0)
-        ai_score = report.get("ai_score", 0.0)
-        reasons = report.get("ai_reasons", []) or []
-        ai_summary = report.get("ai_summary", "") or ""
-
-        # Format top reasons
-        top_reasons = "\n".join(f"{i+1}. {html.escape(str(r))}" for i, r in enumerate(reasons[:4]))
-
-        # Format technical contributions
-        tech_lines = []
-        contribs = report.get("technical_contributions", {}) or {}
-        for k, v in contribs.items():
-            sign = "Bullish" if v > 0 else "Bearish" if v < 0 else "Neutral"
-            tech_lines.append(f"{html.escape(k)}: {sign} ({v:.3f})")
-
-        tech_block = "\n".join(tech_lines[:6]) or "N/A"
-
-        # Determine emoji based on bias
-        if "BULLISH" in label.upper():
-            bias_emoji = "🟢"
-        elif "BEARISH" in label.upper():
-            bias_emoji = "🔴"
-        else:
-            bias_emoji = "⚪"
-
-        # Create the message
-        text = f"""
-{bias_emoji} <b>🤖 AI MARKET REPORT</b>
-
-<b>Market:</b> {html.escape(str(report.get('market','')))}
-<b>Bias:</b> <b>{bias_emoji} {html.escape(label)}</b>
-<b>Recommendation:</b> <b>{html.escape(rec)}</b>
-
-📊 <b>SCORES</b>
-<b>Confidence:</b> {confidence:.2f}
-<b>AI Score:</b> {ai_score:.3f}
-<b>Technical Score:</b> {tech:.3f}
-<b>News Score:</b> {news:.3f}
-
-⚙️ <b>TECHNICAL SUMMARY</b>
-{tech_block}
-
-📰 <b>NEWS SUMMARY</b>
-{html.escape(str(report.get('news_summary',''))[:600])}
-
-🧠 <b>AI REASONING</b>
-{top_reasons}
-
-📋 <b>SUMMARY</b>
-{html.escape(ai_summary[:800])}
-
-⏰ <b>Time (IST):</b> {get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')}
-        """
-
-        return await self.send_message_async(text.strip())
-
     def send_bias_alignment_alert(self, alignment_data: Dict[str, Any]) -> bool:
         """
         Send alert when all three bias indicators align (all bullish or all bearish)
 
         Args:
             alignment_data: Dictionary containing:
+                - instrument: 'NIFTY' or 'SENSEX'
                 - direction: 'BULLISH' or 'BEARISH'
                 - technical_bias: str
                 - technical_score: float
@@ -422,6 +353,7 @@ class TelegramBot:
         if not self.enabled:
             return False
 
+        instrument = alignment_data.get('instrument', 'NIFTY')
         direction = alignment_data.get('direction', 'UNKNOWN')
 
         # Determine emoji based on direction
@@ -448,13 +380,13 @@ class TelegramBot:
         confidence = alignment_data.get('confidence', 0)
 
         message = f"""
-{signal_emoji} <b>BIAS ALIGNMENT ALERT</b> {signal_emoji}
+{signal_emoji} <b>{instrument} BIAS ALIGNMENT ALERT</b> {signal_emoji}
 
 {direction_emoji} <b>{direction_label}</b> {direction_emoji}
 
 <b>━━━━━━━━━━━━━━━━━━━━</b>
 
-<b>ALL 3 INDICATORS ALIGNED!</b>
+<b>ALL 3 INDICATORS ALIGNED FOR {instrument}!</b>
 
 📊 <b>TECHNICAL INDICATORS</b>
   Bias: <b>{tech_bias}</b>
@@ -474,7 +406,7 @@ class TelegramBot:
 
 <b>⏰ Time (IST):</b> {get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')}
 
-{signal_emoji} <b>This is a strong {direction} signal!</b>
+{signal_emoji} <b>Strong {direction} signal for {instrument}!</b>
         """
         return self.send_message(message.strip())
 
@@ -491,14 +423,3 @@ Your trading alerts are now active.
 <b>Test Time (IST):</b> """ + get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')
         return bot.send_message(message.strip())
     return False
-
-
-# Async wrapper function for backward compatibility
-async def send_ai_market_alert_async(report: Dict[str, Any], confidence_thresh: float = 0.60) -> bool:
-    """
-    Async wrapper function for sending AI market alerts
-    """
-    bot = TelegramBot()
-    if not bot.enabled:
-        return False
-    return await bot.send_ai_market_alert(report, confidence_thresh)

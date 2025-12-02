@@ -27,7 +27,7 @@ from bias_analysis import BiasAnalysisPro
 from option_chain_analysis import OptionChainAnalyzer
 from nse_options_helpers import *
 from advanced_chart_analysis import AdvancedChartAnalysis
-from overall_market_sentiment import render_overall_market_sentiment, calculate_overall_sentiment, run_ai_analysis, shutdown_ai_engine
+from overall_market_sentiment import render_overall_market_sentiment, calculate_overall_sentiment
 from advanced_proximity_alerts import get_proximity_alert_system
 from data_cache_manager import (
     get_cache_manager,
@@ -210,300 +210,8 @@ if 'performance_mode' not in st.session_state:
 # ═══════════════════════════════════════════════════════════════════════
 
 # Get API keys from Streamlit secrets - check both flat and nested formats
-NEWSDATA_API_KEY = (
-    st.secrets.get("NEWSDATA_API_KEY", "") or 
-    st.secrets.get("NEWSDATA", {}).get("API_KEY", "")
-)
 
-GROQ_API_KEY = (
-    st.secrets.get("GROQ_API_KEY", "") or 
-    st.secrets.get("GROQ", {}).get("API_KEY", "")
-)
 
-# Debug API keys
-print(f"🔍 Debug - NEWSDATA_API_KEY exists: {bool(NEWSDATA_API_KEY)}")
-print(f"🔍 Debug - NEWSDATA_API_KEY length: {len(NEWSDATA_API_KEY) if NEWSDATA_API_KEY else 0}")
-print(f"🔍 Debug - GROQ_API_KEY exists: {bool(GROQ_API_KEY)}")
-print(f"🔍 Debug - GROQ_API_KEY length: {len(GROQ_API_KEY) if GROQ_API_KEY else 0}")
-
-# Also check environment variables:
-print(f"🔍 ENV - NEWSDATA_API_KEY: {os.environ.get('NEWSDATA_API_KEY', 'Not set')}")
-print(f"🔍 ENV - GROQ_API_KEY: {os.environ.get('GROQ_API_KEY', 'Not set')}")
-
-# Add validation to help with debugging
-if not NEWSDATA_API_KEY:
-    logger.warning("NEWSDATA_API_KEY not found in secrets. AI news analysis will be limited.")
-    
-if not GROQ_API_KEY:
-    logger.warning("GROQ_API_KEY not found in secrets. AI analysis will not work.")
-
-# Initialize AI analysis tracking
-if 'last_ai_analysis_time' not in st.session_state:
-    st.session_state.last_ai_analysis_time = 0
-
-if 'ai_analysis_interval' not in st.session_state:
-    # Run AI analysis every 30 minutes (1800 seconds)
-    st.session_state.ai_analysis_interval = 1800
-
-if 'ai_analysis_results' not in st.session_state:
-    st.session_state.ai_analysis_results = None
-
-async def run_ai_market_analysis(force_run=False):
-    """
-    Run comprehensive AI market analysis collecting data from ALL tabs
-
-    Args:
-        force_run: If True, run analysis regardless of bias alignment (for manual trigger)
-
-    Returns:
-        AI analysis report or None
-    """
-    try:
-        logger.info("🤖 Starting comprehensive AI market analysis...")
-
-        # ============================================================================
-        # STEP 1: Collect Technical Indicators Bias (from Bias Analysis Pro)
-        # ============================================================================
-        technical_bias = "NEUTRAL"
-        technical_score = 0
-        technical_details = {}
-
-        if st.session_state.bias_analysis_results and st.session_state.bias_analysis_results.get('success'):
-            bias_results = st.session_state.bias_analysis_results
-            technical_bias = bias_results.get('overall_bias', 'NEUTRAL')
-            technical_score = bias_results.get('overall_score', 0)
-            technical_details = {
-                'bullish_count': bias_results.get('bullish_count', 0),
-                'bearish_count': bias_results.get('bearish_count', 0),
-                'neutral_count': bias_results.get('neutral_count', 0),
-                'total_indicators': bias_results.get('total_indicators', 0),
-                'confidence': bias_results.get('overall_confidence', 0),
-                'indicators': bias_results.get('bias_results', [])
-            }
-            logger.info(f"📊 Technical Indicators: {technical_bias} (Score: {technical_score:.2f})")
-
-        # ============================================================================
-        # STEP 2: Collect PCR Analysis Bias
-        # ============================================================================
-        pcr_bias = "NEUTRAL"
-        pcr_score = 0
-        pcr_details = {}
-
-        if st.session_state.cached_sentiment:
-            sources = st.session_state.cached_sentiment.get('sources', {})
-            if 'PCR Analysis' in sources:
-                pcr_data = sources['PCR Analysis']
-                pcr_bias = pcr_data.get('bias', 'NEUTRAL')
-                pcr_score = pcr_data.get('score', 0)
-                pcr_details = {
-                    'bullish_instruments': pcr_data.get('bullish_instruments', 0),
-                    'bearish_instruments': pcr_data.get('bearish_instruments', 0),
-                    'neutral_instruments': pcr_data.get('neutral_instruments', 0),
-                    'confidence': pcr_data.get('confidence', 0),
-                    'pcr_details': pcr_data.get('pcr_details', [])
-                }
-                logger.info(f"📈 PCR Analysis: {pcr_bias} (Score: {pcr_score:.2f})")
-
-        # ============================================================================
-        # STEP 3: Collect ATM Option Chain Analysis Bias
-        # ============================================================================
-        atm_bias = "NEUTRAL"
-        atm_score = 0
-        atm_details = {}
-
-        if st.session_state.cached_sentiment:
-            sources = st.session_state.cached_sentiment.get('sources', {})
-            if 'Option Chain Analysis' in sources:
-                atm_data = sources['Option Chain Analysis']
-                atm_bias = atm_data.get('bias', 'NEUTRAL')
-                atm_score = atm_data.get('score', 0)
-                atm_details = {
-                    'bullish_instruments': atm_data.get('bullish_instruments', 0),
-                    'bearish_instruments': atm_data.get('bearish_instruments', 0),
-                    'neutral_instruments': atm_data.get('neutral_instruments', 0),
-                    'confidence': atm_data.get('confidence', 0),
-                    'atm_details': atm_data.get('atm_details', [])
-                }
-                logger.info(f"🎯 ATM Option Chain: {atm_bias} (Score: {atm_score:.2f})")
-
-        # ============================================================================
-        # STEP 4: Check if biases are aligned (all BULL or all BEAR)
-        # ============================================================================
-        biases_aligned = False
-        alignment_type = "NONE"
-
-        # Check for bullish alignment
-        if technical_bias == "BULLISH" and pcr_bias == "BULLISH" and atm_bias == "BULLISH":
-            biases_aligned = True
-            alignment_type = "BULLISH"
-            logger.info("🎯 ✅ ALL BIASES ALIGNED BULLISH! Triggering AI analysis...")
-
-        # Check for bearish alignment
-        elif technical_bias == "BEARISH" and pcr_bias == "BEARISH" and atm_bias == "BEARISH":
-            biases_aligned = True
-            alignment_type = "BEARISH"
-            logger.info("🎯 ✅ ALL BIASES ALIGNED BEARISH! Triggering AI analysis...")
-
-        else:
-            logger.info(f"⚠️ Biases NOT aligned: Technical={technical_bias}, PCR={pcr_bias}, ATM={atm_bias}")
-            if not force_run:
-                return {
-                    'success': False,
-                    'triggered': False,
-                    'reason': f'Biases not aligned: Technical={technical_bias}, PCR={pcr_bias}, ATM={atm_bias}',
-                    'technical_bias': technical_bias,
-                    'pcr_bias': pcr_bias,
-                    'atm_bias': atm_bias,
-                    'alignment_status': 'NOT_ALIGNED'
-                }
-
-        # ============================================================================
-        # STEP 5: Collect ALL data from ALL tabs
-        # ============================================================================
-
-        # Get overall market sentiment
-        overall_market = "NEUTRAL"
-        if st.session_state.cached_sentiment:
-            sentiment_map = {
-                'BULLISH': 'BULL',
-                'BEARISH': 'BEAR',
-                'NEUTRAL': 'NEUTRAL'
-            }
-            overall_market = sentiment_map.get(st.session_state.cached_sentiment.get('overall_sentiment', 'NEUTRAL'), 'NEUTRAL')
-
-        # Override with alignment if biases are aligned
-        if biases_aligned:
-            overall_market = "BULL" if alignment_type == "BULLISH" else "BEAR"
-
-        # Calculate comprehensive module biases from ALL sources
-        module_biases = {
-            "technical_indicators": 0.5,  # Default neutral
-            "pcr_analysis": 0.5,
-            "atm_option_chain": 0.5,
-            "overall_sentiment": 0.5,
-            "htf_sr": 0.5,
-            "vob": 0.5,
-            "proximity_alerts": 0.5,
-        }
-
-        # Convert technical indicators score to bias (-100 to 100 -> 0 to 1)
-        if technical_score != 0:
-            module_biases["technical_indicators"] = max(0.0, min(1.0, (technical_score + 100) / 200))
-
-        # Convert PCR score to bias
-        if pcr_score != 0:
-            module_biases["pcr_analysis"] = max(0.0, min(1.0, (pcr_score + 100) / 200))
-
-        # Convert ATM score to bias
-        if atm_score != 0:
-            module_biases["atm_option_chain"] = max(0.0, min(1.0, (atm_score + 100) / 200))
-
-        # Overall sentiment
-        if st.session_state.cached_sentiment:
-            overall_score = st.session_state.cached_sentiment.get('overall_score', 0)
-            if overall_score != 0:
-                module_biases["overall_sentiment"] = max(0.0, min(1.0, (overall_score + 100) / 200))
-
-        # Market metadata with comprehensive data
-        nifty_data = get_cached_nifty_data()
-        market_meta = {
-            "volatility": 0.15,
-            "volume_change": 0.05,
-            "query": "NSE India NIFTY market",
-            "current_price": nifty_data.get('spot_price', 0) if nifty_data else 0,
-            "market_status": get_market_status().get('session', 'unknown'),
-
-            # Add comprehensive bias information
-            "technical_bias": technical_bias,
-            "technical_score": technical_score,
-            "technical_details": technical_details,
-
-            "pcr_bias": pcr_bias,
-            "pcr_score": pcr_score,
-            "pcr_details": pcr_details,
-
-            "atm_bias": atm_bias,
-            "atm_score": atm_score,
-            "atm_details": atm_details,
-
-            "biases_aligned": biases_aligned,
-            "alignment_type": alignment_type,
-            "force_run": force_run
-        }
-
-        logger.info(f"🤖 Running AI analysis with comprehensive data...")
-        logger.info(f"📊 Overall Market: {overall_market}")
-        logger.info(f"📈 Module Biases: {module_biases}")
-
-        # Run AI analysis with comprehensive data
-        report = await run_ai_analysis(
-            overall_market,
-            module_biases,
-            market_meta,
-            news_api_key=NEWSDATA_API_KEY,
-            groq_api_key=GROQ_API_KEY,
-            save_report=True,
-            telegram_send=True
-        )
-
-        # Add alignment information to report
-        if report and report.get("triggered"):
-            report['biases_aligned'] = biases_aligned
-            report['alignment_type'] = alignment_type
-            report['technical_bias'] = technical_bias
-            report['pcr_bias'] = pcr_bias
-            report['atm_bias'] = atm_bias
-
-        if not report.get("triggered"):
-            logger.info("AI not triggered: %s", report.get("reason"))
-            return None
-
-        logger.info("✅ AI Market Report: label=%s confidence=%.2f recommendation=%s",
-                   report.get("label"), report.get("confidence"), report.get("recommendation"))
-
-        return report
-
-    except Exception as e:
-        logger.error(f"❌ Error in AI market analysis: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return None
-
-# Function to check and run AI analysis if needed
-def check_and_run_ai_analysis():
-    """Check if it's time to run AI analysis and run it if needed"""
-    current_time = time.time()
-    
-    # Check if enough time has passed since last analysis
-    if current_time - st.session_state.last_ai_analysis_time > st.session_state.ai_analysis_interval:
-        # Only run during market hours for more relevant analysis
-        market_status = get_market_status()
-        if market_status.get('open', False) and market_status.get('session') == 'regular':
-            # Update last analysis time
-            st.session_state.last_ai_analysis_time = current_time
-            
-            # Run AI analysis asynchronously
-            try:
-                # We'll run it in a separate thread to not block the main app
-                import threading
-                
-                async def run_async():
-                    report = await run_ai_market_analysis()
-                    if report:
-                        st.session_state.ai_analysis_results = report
-                
-                # Start the async task in a new thread
-                thread = threading.Thread(
-                    target=lambda: asyncio.run(run_async()),
-                    daemon=True
-                )
-                thread.start()
-                
-                return True
-            except Exception as e:
-                logger.error(f"Failed to start AI analysis thread: {e}")
-    
-    return False
 
 # ═══════════════════════════════════════════════════════════════════════
 # INITIALIZE SESSION STATE
@@ -645,7 +353,6 @@ st.title(APP_TITLE)
 st.caption(APP_SUBTITLE)
 
 # Check and run AI analysis if needed
-check_and_run_ai_analysis()
 
 # ═══════════════════════════════════════════════════════════════════════
 # MARKET HOURS WARNING BANNER
@@ -761,52 +468,6 @@ with st.sidebar:
         st.success("✅ API Keys Configured")
         
         # Show last AI analysis time
-        if st.session_state.last_ai_analysis_time > 0:
-            last_time = datetime.fromtimestamp(st.session_state.last_ai_analysis_time)
-            time_str = last_time.strftime("%H:%M:%S")
-            time_ago = int(time.time() - st.session_state.last_ai_analysis_time)
-            
-            if time_ago < 60:
-                st.info(f"Last analysis: {time_ago}s ago")
-            elif time_ago < 3600:
-                st.info(f"Last analysis: {time_ago//60}m ago")
-            else:
-                st.info(f"Last analysis: {time_ago//3600}h ago")
-        else:
-            st.info("⏳ Never run")
-        
-        # Manual trigger button - runs regardless of bias alignment
-        if st.button("🤖 Run AI Analysis Now (Manual)", key="run_ai_analysis", type="primary", use_container_width=True):
-            with st.spinner("Running comprehensive AI market analysis..."):
-                try:
-                    # Run AI analysis with force_run=True to analyze even if biases not aligned
-                    async def run_ai():
-                        report = await run_ai_market_analysis(force_run=True)
-                        if report and report.get('triggered'):
-                            st.session_state.ai_analysis_results = report
-                            st.session_state.ai_market_analysis = report  # Store for overall sentiment
-                            st.session_state.last_ai_analysis_time = time.time()
-
-                            # Show alignment status
-                            if report.get('biases_aligned'):
-                                st.success(f"🎯 ✅ ALL BIASES ALIGNED {report.get('alignment_type')}!")
-
-                            st.success(f"✅ AI Analysis Complete: {report.get('label')} (Confidence: {report.get('confidence', 0):.0f}%)")
-
-                            # Show key details
-                            st.info(f"📊 Technical: {report.get('technical_bias')} | 📈 PCR: {report.get('pcr_bias')} | 🎯 ATM: {report.get('atm_bias')}")
-                        else:
-                            reason = report.get('reason', 'Unknown') if report else 'No report generated'
-                            st.warning(f"⚠️ AI analysis not triggered: {reason}")
-
-                    # Run async in current event loop
-                    import asyncio
-                    asyncio.run(run_ai())
-                    st.rerun()  # Refresh to show results
-                except Exception as e:
-                    st.error(f"❌ AI analysis failed: {e}")
-                    import traceback
-                    st.error(traceback.format_exc())
     else:
         st.warning("⚠️ API Keys Required")
         st.caption("Set NEWSDATA_API_KEY and GROQ_API_KEY in Streamlit secrets (.streamlit/secrets.toml)")
@@ -996,10 +657,7 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
                 if is_new:
                     # Add to active signals
                     st.session_state.active_vob_signals.append(nifty_signal)
-
-                    # Send telegram notification
-                    telegram_bot = TelegramBot()
-                    telegram_bot.send_vob_entry_signal(nifty_signal)
+                    # VOB Telegram alert removed - only Bias Alignment Alert is sent
 
         # Fetch chart data and calculate VOB for SENSEX (using cached function)
         df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
@@ -1048,10 +706,7 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
                     if is_new:
                         # Add to active signals
                         st.session_state.active_vob_signals.append(sensex_signal)
-
-                        # Send telegram notification
-                        telegram_bot = TelegramBot()
-                        telegram_bot.send_vob_entry_signal(sensex_signal)
+                        # VOB Telegram alert removed - only Bias Alignment Alert is sent
 
         # Clean up old signals (older than 30 minutes)
         st.session_state.active_vob_signals = [
@@ -1200,10 +855,7 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
                     if is_new:
                         # Add to active signals
                         st.session_state.active_htf_sr_signals.append(nifty_htf_signal)
-
-                        # Send telegram notification
-                        telegram_bot = TelegramBot()
-                        telegram_bot.send_htf_sr_entry_signal(nifty_htf_signal)
+                        # HTF S/R Telegram alert removed - only Bias Alignment Alert is sent
 
             # Fetch chart data for SENSEX (using cached function)
             df_sensex = get_cached_chart_data('^BSESN', '7d', '1m')
@@ -1251,10 +903,7 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
                     if is_new:
                         # Add to active signals
                         st.session_state.active_htf_sr_signals.append(sensex_htf_signal)
-
-                        # Send telegram notification
-                        telegram_bot = TelegramBot()
-                        telegram_bot.send_htf_sr_entry_signal(sensex_htf_signal)
+                        # HTF S/R Telegram alert removed - only Bias Alignment Alert is sent
 
             # Clean up old HTF S/R signals (older than 30 minutes)
             st.session_state.active_htf_sr_signals = [
@@ -1606,121 +1255,6 @@ st.divider()
 # AI MARKET ANALYSIS RESULTS DISPLAY
 # ═══════════════════════════════════════════════════════════════════════
 
-# Display AI analysis results if available
-if st.session_state.ai_analysis_results:
-    report = st.session_state.ai_analysis_results
-
-    st.markdown("### 🤖 AI Market Analysis")
-
-    # Show bias alignment status if available
-    if report.get('biases_aligned'):
-        alignment_type = report.get('alignment_type', 'UNKNOWN')
-        if alignment_type == 'BULLISH':
-            alignment_color = "#00ff88"
-            alignment_icon = "🎯🚀"
-        else:
-            alignment_color = "#ff4444"
-            alignment_icon = "🎯⚠️"
-
-        st.markdown(f"""
-        <div style='background: linear-gradient(135deg, {alignment_color}22 0%, {alignment_color}11 100%);
-                    padding: 15px; border-radius: 10px; margin-bottom: 15px;
-                    border: 2px solid {alignment_color}; text-align: center;'>
-            <h4 style='margin: 0; color: {alignment_color}; font-size: 18px;'>
-                {alignment_icon} ALL BIASES ALIGNED {alignment_type} {alignment_icon}
-            </h4>
-            <p style='margin: 5px 0 0 0; color: #888; font-size: 14px;'>
-                Technical: {report.get('technical_bias', 'N/A')} |
-                PCR: {report.get('pcr_bias', 'N/A')} |
-                ATM: {report.get('atm_bias', 'N/A')}
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # Determine color based on label
-    label = report.get('label', 'NEUTRAL')
-    if label == 'BULLISH':
-        label_color = "#4caf50"
-        label_emoji = "🐂"
-    elif label == 'BEARISH':
-        label_color = "#f44336"
-        label_emoji = "🐻"
-    else:
-        label_color = "#ff9800"
-        label_emoji = "⚖️"
-
-    # Confidence level
-    confidence = report.get('confidence', 0)
-    if confidence >= 80:
-        confidence_color = "#4caf50"
-        confidence_text = "High"
-    elif confidence >= 60:
-        confidence_color = "#ff9800"
-        confidence_text = "Moderate"
-    else:
-        confidence_color = "#f44336"
-        confidence_text = "Low"
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.markdown(f"<h2 style='color:{label_color}; text-align: center;'>{label_emoji} {label}</h2>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align: center;'>Market Direction</p>", unsafe_allow_html=True)
-
-    with col2:
-        st.markdown(f"<h2 style='color:{confidence_color}; text-align: center;'>{confidence:.0f}%</h2>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align: center;'>Confidence ({confidence_text})</p>", unsafe_allow_html=True)
-
-    with col3:
-        # Show report age
-        if 'timestamp' in report:
-            try:
-                report_time = datetime.fromisoformat(str(report['timestamp']).replace('Z', '+00:00'))
-                now = datetime.now(report_time.tzinfo) if report_time.tzinfo else datetime.now()
-                age_minutes = int((now - report_time).total_seconds() / 60)
-
-                if age_minutes < 1:
-                    age_text = "Just now"
-                elif age_minutes == 1:
-                    age_text = "1 minute ago"
-                else:
-                    age_text = f"{age_minutes} minutes ago"
-
-                st.markdown(f"<h4 style='text-align: center;'>{age_text}</h4>", unsafe_allow_html=True)
-                st.markdown("<p style='text-align: center;'>Last Updated</p>", unsafe_allow_html=True)
-            except:
-                st.markdown("<p style='text-align: center;'>Time unknown</p>", unsafe_allow_html=True)
-    
-    # Recommendation
-    st.markdown("#### 💡 AI Recommendation")
-    recommendation = report.get('recommendation', 'No specific recommendation')
-    st.info(recommendation)
-    
-    # Key Findings
-    if 'key_findings' in report and report['key_findings']:
-        with st.expander("📊 Key Findings", expanded=False):
-            for finding in report['key_findings'][:5]:  # Show top 5 findings
-                st.write(f"• {finding}")
-    
-    # Risk Assessment
-    if 'risk_assessment' in report:
-        with st.expander("⚠️ Risk Assessment", expanded=False):
-            risk = report['risk_assessment']
-            st.write(f"**Level:** {risk.get('level', 'Medium')}")
-            st.write(f"**Score:** {risk.get('score', 50)}/100")
-            if 'factors' in risk:
-                st.write("**Factors:**")
-                for factor in risk.get('factors', []):
-                    st.write(f"  - {factor}")
-    
-    # View full report button
-    if st.button("📄 View Full AI Report", key="view_full_ai_report"):
-        # Show the full report in a modal or expander
-        with st.expander("Full AI Market Analysis Report", expanded=True):
-            st.json(report)
-    
-    st.divider()
-
 # ═══════════════════════════════════════════════════════════════════════
 # HTF S/R TRADING SIGNALS DISPLAY
 # ═══════════════════════════════════════════════════════════════════════
@@ -1969,34 +1503,6 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
 with tab1:
     render_overall_market_sentiment(NSE_INSTRUMENTS)
 
-    # ═══════════════════════════════════════════════════════════════════
-    # AUTO-RUN AI ANALYSIS WHEN BIASES ALIGN (triggered from overall_market_sentiment.py)
-    # ═══════════════════════════════════════════════════════════════════
-    if st.session_state.get('ai_should_auto_run', False):
-        # Reset flag
-        st.session_state.ai_should_auto_run = False
-
-        # Check if API keys are available
-        if NEWSDATA_API_KEY and GROQ_API_KEY:
-            with st.spinner("🤖 Running AI analysis due to bias alignment..."):
-                try:
-                    async def run_ai_auto():
-                        # Run without force_run since biases are aligned
-                        report = await run_ai_market_analysis(force_run=False)
-                        if report and report.get('triggered'):
-                            st.session_state.ai_analysis_results = report
-                            st.session_state.ai_market_analysis = report
-                            st.session_state.last_ai_analysis_time = time.time()
-
-                            st.success(f"✅ AI Analysis Auto-Complete: {report.get('label')} (Confidence: {report.get('confidence', 0):.0f}%)")
-                            st.info(f"🎯 Triggered by {report.get('alignment_type')} alignment!")
-
-                    import asyncio
-                    asyncio.run(run_ai_auto())
-                except Exception as e:
-                    st.error(f"❌ AI auto-analysis failed: {e}")
-                    import traceback
-                    st.error(traceback.format_exc())
 
 # ═══════════════════════════════════════════════════════════════════════
 # TAB 2: TRADE SETUP
@@ -3807,4 +3313,3 @@ with tab7:
 
 st.divider()
 st.caption(f"Last Updated (IST): {get_current_time_ist().strftime('%Y-%m-%d %H:%M:%S %Z')} | Auto-refresh: {AUTO_REFRESH_INTERVAL}s")
-st.caption(f"🤖 AI Market Analysis: Runs every 30 minutes during market hours | Last AI analysis: {datetime.fromtimestamp(st.session_state.last_ai_analysis_time).strftime('%H:%M:%S') if st.session_state.last_ai_analysis_time > 0 else 'Never'}")

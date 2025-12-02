@@ -1387,6 +1387,60 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
             except Exception as e:
                 st.warning(f"⚠️ Could not send Telegram alert: {str(e)}")
 
+        # ═══════════════════════════════════════════════════════════════
+        # AUTO-TRIGGER AI ANALYSIS WHEN BIASES ALIGN
+        # ═══════════════════════════════════════════════════════════════
+
+        # Initialize AI analysis tracking
+        if 'last_ai_auto_trigger' not in st.session_state:
+            st.session_state.last_ai_auto_trigger = None
+
+        # Check if we should auto-trigger AI analysis
+        # Only trigger if:
+        # 1. We haven't triggered for this alignment yet
+        # 2. API keys are configured
+        # 3. During market hours (optional - can run anytime)
+        should_trigger_ai = (
+            st.session_state.last_ai_auto_trigger != current_alert_key
+        )
+
+        if should_trigger_ai:
+            # Check if API keys are configured
+            try:
+                news_api_key = None
+                groq_api_key = None
+
+                # Try nested format first
+                if "NEWSDATA" in st.secrets and "API_KEY" in st.secrets["NEWSDATA"]:
+                    news_api_key = st.secrets["NEWSDATA"]["API_KEY"]
+                elif "NEWSDATA_API_KEY" in st.secrets:
+                    news_api_key = st.secrets["NEWSDATA_API_KEY"]
+
+                if "GROQ" in st.secrets and "API_KEY" in st.secrets["GROQ"]:
+                    groq_api_key = st.secrets["GROQ"]["API_KEY"]
+                elif "GROQ_API_KEY" in st.secrets:
+                    groq_api_key = st.secrets["GROQ_API_KEY"]
+
+                # Check environment variables as fallback
+                if not news_api_key:
+                    news_api_key = os.environ.get('NEWSDATA_API_KEY')
+                if not groq_api_key:
+                    groq_api_key = os.environ.get('GROQ_API_KEY')
+
+                if news_api_key and groq_api_key:
+                    st.info(f"🤖 Biases aligned {direction}! Auto-triggering AI analysis...")
+
+                    # Import run_ai_market_analysis from app.py
+                    # We'll use a workaround to trigger it
+                    st.session_state.last_ai_auto_trigger = current_alert_key
+                    st.session_state.ai_should_auto_run = True
+                    st.session_state.ai_auto_run_direction = direction
+
+                    st.success(f"✅ AI analysis will run automatically on next refresh!")
+
+            except Exception as e:
+                pass  # Silently fail if API keys not configured
+
     # ═══════════════════════════════════════════════════════════════════
     # HEADER METRICS
     # ═══════════════════════════════════════════════════════════════════

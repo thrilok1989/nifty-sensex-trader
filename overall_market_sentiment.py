@@ -31,10 +31,32 @@ Handles API key management internally from Streamlit secrets
 
 # Try to import AI engine
 try:
-    from ai_analysis_adapter import run_ai_analysis as adapter_run_ai_analysis
-    from ai_analysis_adapter import shutdown_ai_engine as adapter_shutdown_ai_engine
-    AI_AVAILABLE = True
-except ImportError:
+    # Try to import from ai_market_engine directly
+    try:
+        from integrations.ai_market_engine import AIMarketEngine
+        from integrations.ai_market_engine import run_ai_analysis as adapter_run_ai_analysis
+        from integrations.ai_market_engine import shutdown_ai_engine as adapter_shutdown_ai_engine
+        AI_AVAILABLE = True
+        print("✅ Successfully imported AI engine from ai_market_engine.py")
+    except ImportError as e:
+        print(f"❌ Failed to import from ai_market_engine: {e}")
+        # Try alternative import paths
+        try:
+            # Check if ai_analysis_adapter.py exists and has the functions
+            import sys
+            import os
+            sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+            from ai_analysis_adapter import run_ai_analysis as adapter_run_ai_analysis
+            from ai_analysis_adapter import shutdown_ai_engine as adapter_shutdown_ai_engine
+            AI_AVAILABLE = True
+            print("✅ Successfully imported AI engine from ai_analysis_adapter.py")
+        except ImportError as e2:
+            print(f"❌ Failed to import from ai_analysis_adapter: {e2}")
+            AI_AVAILABLE = False
+            adapter_run_ai_analysis = None
+            adapter_shutdown_ai_engine = None
+except Exception as e:
+    print(f"❌ General AI import error: {e}")
     AI_AVAILABLE = False
     adapter_run_ai_analysis = None
     adapter_shutdown_ai_engine = None
@@ -60,7 +82,10 @@ async def run_ai_analysis(
     Returns:
         Dictionary with analysis results
     """
-    if not AI_AVAILABLE:
+    print(f"🤖 AI analysis called. AI_AVAILABLE: {AI_AVAILABLE}")
+    
+    if not AI_AVAILABLE or adapter_run_ai_analysis is None:
+        print("❌ AI engine not available or function is None")
         return {
             'success': False,
             'triggered': False,
@@ -95,6 +120,8 @@ async def run_ai_analysis(
         if not groq_api_key:
             groq_api_key = os.environ.get('GROQ_API_KEY')
         
+        print(f"🔑 API Key Status - NewsData: {'✅' if news_api_key else '❌'}, Groq: {'✅' if groq_api_key else '❌'}")
+        
         # Verify we have API keys
         if not news_api_key or not groq_api_key:
             return {
@@ -109,6 +136,7 @@ async def run_ai_analysis(
             }
         
     except Exception as e:
+        print(f"❌ Error loading API keys: {e}")
         return {
             'success': False,
             'triggered': False,
@@ -122,18 +150,59 @@ async def run_ai_analysis(
     
     # Run AI analysis with API keys
     try:
-        report = await adapter_run_ai_analysis(
+        print(f"🤖 Running AI analysis with: overall_market={overall_market}")
+        print(f"🤖 Module biases: {module_biases}")
+        print(f"🤖 Market meta: {market_meta}")
+        
+        # The AIMarketEngine.analyze method expects different parameters
+        # Let's call it directly
+        from integrations.ai_market_engine import AIMarketEngine
+        
+        # Create engine instance
+        engine = AIMarketEngine(
+            news_api_key=news_api_key,
+            groq_api_key=groq_api_key
+        )
+        
+        # Call analyze method
+        report = await engine.analyze(
             overall_market=overall_market,
             module_biases=module_biases,
             market_meta=market_meta,
-            news_api_key=news_api_key,
-            groq_api_key=groq_api_key,
-            weights=None,  # Use default weights
             save_report=save_report,
             telegram_send=telegram_send
         )
-        return report
+        
+        print(f"✅ AI analysis completed: {report.get('triggered', False)}")
+        
+        # Format response to match expected structure
+        if report.get('triggered', False):
+            return {
+                'success': True,
+                'triggered': True,
+                'sentiment': report.get('label', 'NEUTRAL'),
+                'score': report.get('ai_score', 0),
+                'confidence': report.get('confidence', 0) * 100,  # Convert to percentage
+                'reasoning': report.get('ai_reasons', []),
+                'final_verdict': f"{report.get('recommendation', 'HOLD')} - {report.get('ai_summary', '')}",
+                'full_report': report
+            }
+        else:
+            return {
+                'success': True,
+                'triggered': False,
+                'error': report.get('reason', 'Not triggered'),
+                'sentiment': 'NEUTRAL',
+                'score': 0,
+                'confidence': 0,
+                'reasoning': [report.get('reason', 'AI not triggered')],
+                'final_verdict': report.get('reason', 'AI analysis not triggered')
+            }
+        
     except Exception as e:
+        print(f"❌ AI analysis failed: {str(e)}")
+        import traceback
+        print(f"❌ Traceback: {traceback.format_exc()}")
         return {
             'success': False,
             'triggered': False,

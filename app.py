@@ -2155,8 +2155,10 @@ with tab3:
                             # Check if ready and send Telegram
                             updated_setup = st.session_state.signal_manager.get_setup(signal_id)
                             if updated_setup['status'] == 'ready':
-                                telegram = TelegramBot()
-                                telegram.send_signal_ready(updated_setup)
+                                # Removed telegram signal ready notifications - only send for specific indicator conditions
+                                # telegram = TelegramBot()
+                                # telegram.send_signal_ready(updated_setup)
+                                pass
 
                             st.rerun()
 

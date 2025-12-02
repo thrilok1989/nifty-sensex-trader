@@ -971,7 +971,8 @@ def analyze_instrument(instrument):
 
     except Exception as e:
         st.error(f"❌ {instrument} Error: {e}")
-        send_telegram_message(f"❌ {instrument} Error: {str(e)}")
+        # Removed error telegram message - only send for specific indicator conditions
+        # send_telegram_message(f"❌ {instrument} Error: {str(e)}")
 
 # === Main Function Call ===
 if __name__ == "__main__":

@@ -806,7 +806,8 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
 
     except Exception as e:
         st.error(f"❌ {instrument} Error: {e}")
-        send_telegram_message(f"❌ {instrument} Error: {str(e)}")
+        # Removed error telegram message - only send for specific indicator conditions
+        # send_telegram_message(f"❌ {instrument} Error: {str(e)}")
 def display_overall_option_chain_analysis(NSE_INSTRUMENTS):
     """Display overall option chain analysis with PCR ratios"""
     st.header("🌐 Overall Market Option Chain Analysis")

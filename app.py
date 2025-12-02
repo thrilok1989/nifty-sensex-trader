@@ -220,6 +220,16 @@ GROQ_API_KEY = (
     st.secrets.get("GROQ", {}).get("API_KEY", "")
 )
 
+# Debug API keys
+print(f"🔍 Debug - NEWSDATA_API_KEY exists: {bool(NEWSDATA_API_KEY)}")
+print(f"🔍 Debug - NEWSDATA_API_KEY length: {len(NEWSDATA_API_KEY) if NEWSDATA_API_KEY else 0}")
+print(f"🔍 Debug - GROQ_API_KEY exists: {bool(GROQ_API_KEY)}")
+print(f"🔍 Debug - GROQ_API_KEY length: {len(GROQ_API_KEY) if GROQ_API_KEY else 0}")
+
+# Also check environment variables:
+print(f"🔍 ENV - NEWSDATA_API_KEY: {os.environ.get('NEWSDATA_API_KEY', 'Not set')}")
+print(f"🔍 ENV - GROQ_API_KEY: {os.environ.get('GROQ_API_KEY', 'Not set')}")
+
 # Add validation to help with debugging
 if not NEWSDATA_API_KEY:
     logger.warning("NEWSDATA_API_KEY not found in secrets. AI news analysis will be limited.")

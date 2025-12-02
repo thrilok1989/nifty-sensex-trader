@@ -8,7 +8,6 @@ Data Sources:
 2. Technical Indicators (Bias Analysis Pro - 13 indicators matching Pine Script)
 3. Option Chain ATM Zone Analysis (Multiple bias metrics)
 4. PCR Analysis (Put-Call Ratio for indices)
-5. AI Market Analysis (Enhanced with news, global data, and reasoning)
 """
 
 import streamlit as st
@@ -40,195 +39,7 @@ def send_telegram_message(message):
 
 
 # ============================================================================
-# AI MARKET ANALYSIS ADAPTER
-# ============================================================================
-"""
-Adapter for AI Market Analysis integration
-Handles API key management internally from Streamlit secrets
-"""
-
-# Try to import AI engine
-try:
-    # Import AIMarketEngine class (the only export from ai_market_engine module)
-    from integrations.ai_market_engine import AIMarketEngine
-    AI_AVAILABLE = True
-    print("✅ Successfully imported AIMarketEngine from ai_market_engine.py")
-except ImportError as e:
-    print(f"❌ Failed to import AIMarketEngine: {e}")
-    AIMarketEngine = None
-    AI_AVAILABLE = False
-except Exception as e:
-    print(f"❌ General AI import error: {e}")
-    AIMarketEngine = None
-    AI_AVAILABLE = False
-
-
-async def run_ai_analysis(
-    overall_market: str,
-    module_biases: Dict[str, float],
-    market_meta: Optional[Dict[str, Any]] = None,
-    save_report: bool = True,
-    telegram_send: bool = True
-) -> Dict[str, Any]:
-    """
-    Run AI market analysis with API keys from Streamlit secrets
-    
-    Args:
-        overall_market: Market description (e.g., "Indian Stock Market")
-        module_biases: Dictionary of module biases/scores
-        market_meta: Additional market metadata
-        save_report: Whether to save the report
-        telegram_send: Whether to send to Telegram
-    
-    Returns:
-        Dictionary with analysis results
-    """
-    print(f"🤖 AI analysis called. AI_AVAILABLE: {AI_AVAILABLE}")
-
-    if not AI_AVAILABLE or AIMarketEngine is None:
-        print("❌ AI engine not available")
-        return {
-            'success': False,
-            'triggered': False,
-            'error': 'AI Engine not available',
-            'sentiment': 'NEUTRAL',
-            'score': 0,
-            'confidence': 0,
-            'reasoning': ['AI analysis feature is disabled'],
-            'final_verdict': 'AI analysis unavailable. Using traditional analysis only.'
-        }
-    
-    # Get API keys from Streamlit secrets
-    try:
-        # Try both formats: nested and flat
-        news_api_key = None
-        groq_api_key = None
-        
-        # Try nested format first
-        if "NEWSDATA" in st.secrets and "API_KEY" in st.secrets["NEWSDATA"]:
-            news_api_key = st.secrets["NEWSDATA"]["API_KEY"]
-        elif "NEWSDATA_API_KEY" in st.secrets:
-            news_api_key = st.secrets["NEWSDATA_API_KEY"]
-        
-        if "GROQ" in st.secrets and "API_KEY" in st.secrets["GROQ"]:
-            groq_api_key = st.secrets["GROQ"]["API_KEY"]
-        elif "GROQ_API_KEY" in st.secrets:
-            groq_api_key = st.secrets["GROQ_API_KEY"]
-        
-        # Check environment variables as fallback
-        if not news_api_key:
-            news_api_key = os.environ.get('NEWSDATA_API_KEY')
-        if not groq_api_key:
-            groq_api_key = os.environ.get('GROQ_API_KEY')
-        
-        print(f"🔑 API Key Status - NewsData: {'✅' if news_api_key else '❌'}, Groq: {'✅' if groq_api_key else '❌'}")
-        
-        # Verify we have API keys
-        if not news_api_key or not groq_api_key:
-            return {
-                'success': False,
-                'triggered': False,
-                'error': 'API keys not configured',
-                'sentiment': 'NEUTRAL',
-                'score': 0,
-                'confidence': 0,
-                'reasoning': ['Missing NEWSDATA_API_KEY or GROQ_API_KEY in Streamlit secrets'],
-                'final_verdict': 'Configure API keys in .streamlit/secrets.toml to enable AI analysis.'
-            }
-        
-    except Exception as e:
-        print(f"❌ Error loading API keys: {e}")
-        return {
-            'success': False,
-            'triggered': False,
-            'error': f'Error loading API keys: {str(e)}',
-            'sentiment': 'NEUTRAL',
-            'score': 0,
-            'confidence': 0,
-            'reasoning': ['Failed to load API keys from secrets'],
-            'final_verdict': 'Error loading API keys. Check Streamlit secrets configuration.'
-        }
-    
-    # Run AI analysis with API keys
-    try:
-        print(f"🤖 Running AI analysis with: overall_market={overall_market}")
-        print(f"🤖 Module biases: {module_biases}")
-        print(f"🤖 Market meta: {market_meta}")
-        
-        # The AIMarketEngine.analyze method expects different parameters
-        # Let's call it directly
-        from integrations.ai_market_engine import AIMarketEngine
-        
-        # Create engine instance
-        engine = AIMarketEngine(
-            news_api_key=news_api_key,
-            groq_api_key=groq_api_key
-        )
-        
-        # Call analyze method
-        report = await engine.analyze(
-            overall_market=overall_market,
-            module_biases=module_biases,
-            market_meta=market_meta,
-            save_report=save_report,
-            telegram_send=telegram_send
-        )
-        
-        print(f"✅ AI analysis completed: {report.get('triggered', False)}")
-        
-        # Format response to match expected structure
-        if report.get('triggered', False):
-            return {
-                'success': True,
-                'triggered': True,
-                'sentiment': report.get('label', 'NEUTRAL'),
-                'score': report.get('ai_score', 0),
-                'confidence': report.get('confidence', 0) * 100,  # Convert to percentage
-                'reasoning': report.get('ai_reasons', []),
-                'final_verdict': f"{report.get('recommendation', 'HOLD')} - {report.get('ai_summary', '')}",
-                'full_report': report
-            }
-        else:
-            return {
-                'success': True,
-                'triggered': False,
-                'error': report.get('reason', 'Not triggered'),
-                'sentiment': 'NEUTRAL',
-                'score': 0,
-                'confidence': 0,
-                'reasoning': [report.get('reason', 'AI not triggered')],
-                'final_verdict': report.get('reason', 'AI analysis not triggered')
-            }
-        
-    except Exception as e:
-        print(f"❌ AI analysis failed: {str(e)}")
-        import traceback
-        print(f"❌ Traceback: {traceback.format_exc()}")
-        return {
-            'success': False,
-            'triggered': False,
-            'error': f'AI analysis failed: {str(e)}',
-            'sentiment': 'NEUTRAL',
-            'score': 0,
-            'confidence': 0,
-            'reasoning': [f'Error: {str(e)}'],
-            'final_verdict': 'AI analysis encountered an error. Please check logs.'
-        }
-
-
-def shutdown_ai_engine():
-    """
-    Shutdown AI engine if available
-
-    Note: AIMarketEngine instances are designed to auto-cleanup via garbage collection.
-    This function is kept for compatibility but doesn't need to do anything special.
-    """
-    print("✅ AI Engine shutdown (auto-cleanup via garbage collection)")
-    return None
-
-
-# ============================================================================
-# ORIGINAL SENTIMENT ANALYSIS FUNCTIONS
+# SENTIMENT ANALYSIS FUNCTIONS
 # ============================================================================
 
 def calculate_stock_performance_sentiment(stock_data):
@@ -734,53 +545,6 @@ def calculate_nifty_advanced_metrics_sentiment():
     }
 
 
-def calculate_ai_analysis_sentiment(ai_report):
-    """
-    Calculate sentiment from AI Market Analysis
-    Returns: dict with sentiment, score, and details
-    """
-    if not ai_report:
-        return None
-    
-    # Extract sentiment from AI report
-    ai_sentiment = ai_report.get('sentiment', 'NEUTRAL').upper()
-    ai_score = ai_report.get('score', 0)
-    ai_confidence = ai_report.get('confidence', 0)
-    
-    # Extract reasoning and key metrics
-    reasoning = ai_report.get('reasoning', [])
-    final_verdict = ai_report.get('final_verdict', '')
-    
-    # Convert AI sentiment to our format
-    if 'BULLISH' in ai_sentiment:
-        bias = "BULLISH"
-        icon = "🤖🐂"
-    elif 'BEARISH' in ai_sentiment:
-        bias = "BEARISH"
-        icon = "🤖🐻"
-    else:
-        bias = "NEUTRAL"
-        icon = "🤖⚖️"
-    
-    # Prepare details
-    details = []
-    if 'news_sentiment' in ai_report:
-        details.append(f"News Analysis: {ai_report['news_sentiment'].get('overall', 'Neutral')}")
-    if 'global_markets' in ai_report:
-        details.append(f"Global Markets: {ai_report['global_markets'].get('overall_sentiment', 'Neutral')}")
-    
-    return {
-        'bias': bias,
-        'score': ai_score,
-        'confidence': ai_confidence,
-        'icon': icon,
-        'reasoning': reasoning,
-        'final_verdict': final_verdict,
-        'details': details,
-        'full_report': ai_report
-    }
-
-
 def calculate_overall_sentiment():
     """
     Calculate overall market sentiment by combining all data sources
@@ -820,12 +584,6 @@ def calculate_overall_sentiment():
     nifty_advanced_sentiment = calculate_nifty_advanced_metrics_sentiment()
     if nifty_advanced_sentiment:
         sentiment_sources['NIFTY Advanced Metrics'] = nifty_advanced_sentiment
-        
-    # 6. AI Market Analysis Sentiment (NEW)
-    if 'ai_market_analysis' in st.session_state:
-        ai_sentiment = calculate_ai_analysis_sentiment(st.session_state.ai_market_analysis)
-        if ai_sentiment:
-            sentiment_sources['🤖 AI Market Analysis'] = ai_sentiment
 
     # If no data available
     if not sentiment_sources:
@@ -847,8 +605,7 @@ def calculate_overall_sentiment():
         'Technical Indicators': 3.0,
         'PCR Analysis': 2.5,
         'Option Chain Analysis': 2.0,
-        'NIFTY Advanced Metrics': 2.5,
-        '🤖 AI Market Analysis': 4.0  # Highest weight for AI analysis
+        'NIFTY Advanced Metrics': 2.5
     }
 
     total_weighted_score = 0
@@ -1100,65 +857,11 @@ def _run_option_chain_analysis(NSE_INSTRUMENTS, show_progress=True):
         return False, errors
 
 
-async def _run_ai_analysis():
-    """
-    Helper function to run AI market analysis
-    Returns: (success, errors)
-    """
-    errors = []
-    try:
-        # Get current sentiment for both conditional check and module biases
-        current_sentiment = calculate_overall_sentiment()
-        overall_sentiment = current_sentiment.get('overall_sentiment', 'NEUTRAL')
-
-        # Check if AI engine should run (environment variable control)
-        ai_run_only_directional = os.environ.get('AI_RUN_ONLY_DIRECTIONAL', 'true').lower() == 'true'
-
-        if ai_run_only_directional:
-            # Only run AI if sentiment is strongly directional
-            if overall_sentiment not in ['BULLISH', 'BEARISH']:
-                return True, ["AI Analysis: Skipped (non-directional market)"]
-
-        # Prepare module biases from existing analysis
-        module_biases = {}
-        sources = current_sentiment.get('sources', {})
-        for source_name, source_data in sources.items():
-            if 'score' in source_data:
-                module_biases[source_name] = source_data['score']
-        
-        # Prepare market metadata
-        market_meta = {
-            'timestamp': datetime.now().isoformat(),
-            'market_session': scheduler.get_market_session(),
-            'trading_hours': is_within_trading_hours()
-        }
-        
-        # Use the adapter function (which handles API keys from secrets)
-        with st.spinner("🤖 Running AI Market Analysis..."):
-            ai_report = await run_ai_analysis(
-                overall_market="Indian Stock Market (NIFTY 50)",
-                module_biases=module_biases,
-                market_meta=market_meta,
-                save_report=True,
-                telegram_send=False  # Disable telegram for auto-refresh
-            )
-            
-            st.session_state.ai_market_analysis = ai_report
-            st.session_state.ai_last_run = time.time()
-            
-        return True, []
-        
-    except Exception as e:
-        errors.append(f"AI Market Analysis: {str(e)}")
-        return False, errors
-
-
 async def run_all_analyses(NSE_INSTRUMENTS, show_progress=True):
     """
     Runs all analyses and stores results in session state:
     1. Bias Analysis Pro (includes stock data and technical indicators)
     2. Option Chain Analysis (includes PCR and ATM zone analysis)
-    3. AI Market Analysis (enhanced with news, global data, and reasoning)
 
     Args:
         NSE_INSTRUMENTS: Instrument configuration
@@ -1196,19 +899,6 @@ async def run_all_analyses(NSE_INSTRUMENTS, show_progress=True):
             # When market is closed, skip option chain analysis to save API quota
             if show_progress:
                 st.info("ℹ️ Option chain analysis skipped (market closed). Using cached data.")
-
-        # 3. Run AI Market Analysis (only once per hour to save API quota)
-        current_time = time.time()
-        ai_last_run = st.session_state.get('ai_last_run', 0)
-        
-        # Only run AI analysis if it hasn't been run in the last hour
-        if current_time - ai_last_run > 3600:  # 1 hour cooldown
-            ai_success, ai_errors = await _run_ai_analysis()  # THIS IS CORRECTLY USING AWAIT
-            success = success and ai_success
-            errors.extend(ai_errors)
-        else:
-            if show_progress:
-                st.info("🤖 AI analysis recently run. Using cached results.")
 
     except Exception as e:
         errors.append(f"Overall error: {str(e)}")
@@ -1469,60 +1159,6 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
                         st.success(f"✅ Telegram alert sent for {direction} alignment!")
             except Exception as e:
                 st.warning(f"⚠️ Could not send Telegram alert: {str(e)}")
-
-        # ═══════════════════════════════════════════════════════════════
-        # AUTO-TRIGGER AI ANALYSIS WHEN BIASES ALIGN
-        # ═══════════════════════════════════════════════════════════════
-
-        # Initialize AI analysis tracking
-        if 'last_ai_auto_trigger' not in st.session_state:
-            st.session_state.last_ai_auto_trigger = None
-
-        # Check if we should auto-trigger AI analysis
-        # Only trigger if:
-        # 1. We haven't triggered for this alignment yet
-        # 2. API keys are configured
-        # 3. During market hours (optional - can run anytime)
-        should_trigger_ai = (
-            st.session_state.last_ai_auto_trigger != current_alert_key
-        )
-
-        if should_trigger_ai:
-            # Check if API keys are configured
-            try:
-                news_api_key = None
-                groq_api_key = None
-
-                # Try nested format first
-                if "NEWSDATA" in st.secrets and "API_KEY" in st.secrets["NEWSDATA"]:
-                    news_api_key = st.secrets["NEWSDATA"]["API_KEY"]
-                elif "NEWSDATA_API_KEY" in st.secrets:
-                    news_api_key = st.secrets["NEWSDATA_API_KEY"]
-
-                if "GROQ" in st.secrets and "API_KEY" in st.secrets["GROQ"]:
-                    groq_api_key = st.secrets["GROQ"]["API_KEY"]
-                elif "GROQ_API_KEY" in st.secrets:
-                    groq_api_key = st.secrets["GROQ_API_KEY"]
-
-                # Check environment variables as fallback
-                if not news_api_key:
-                    news_api_key = os.environ.get('NEWSDATA_API_KEY')
-                if not groq_api_key:
-                    groq_api_key = os.environ.get('GROQ_API_KEY')
-
-                if news_api_key and groq_api_key:
-                    st.info(f"🤖 Biases aligned {direction}! Auto-triggering AI analysis...")
-
-                    # Import run_ai_market_analysis from app.py
-                    # We'll use a workaround to trigger it
-                    st.session_state.last_ai_auto_trigger = current_alert_key
-                    st.session_state.ai_should_auto_run = True
-                    st.session_state.ai_auto_run_direction = direction
-
-                    st.success(f"✅ AI analysis will run automatically on next refresh!")
-
-            except Exception as e:
-                pass  # Silently fail if API keys not configured
 
     # ═══════════════════════════════════════════════════════════════════
     # HEADER METRICS
@@ -2111,102 +1747,6 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
                 st.markdown(f"- {detail}")
 
     # ─────────────────────────────────────────────────────────────────
-    # 6. AI MARKET ANALYSIS (NEW SECTION)
-    # ─────────────────────────────────────────────────────────────────
-    if '🤖 AI Market Analysis' in sources:
-        source_data = sources['🤖 AI Market Analysis']
-        with st.expander("**🤖 AI Market Analysis (Enhanced with News & Global Data)**", expanded=True):
-            bias = source_data.get('bias', 'NEUTRAL')
-            score = source_data.get('score', 0)
-            confidence = source_data.get('confidence', 0)
-            icon = source_data.get('icon', '🤖')
-            
-            # Color based on bias
-            if bias == 'BULLISH':
-                bg_color = '#00ff88'
-                text_color = 'black'
-            elif bias == 'BEARISH':
-                bg_color = '#ff4444'
-                text_color = 'white'
-            else:
-                bg_color = '#ffa500'
-                text_color = 'white'
-
-            # Display source card
-            col1, col2, col3 = st.columns([2, 1, 1])
-
-            with col1:
-                st.markdown(f"""
-                <div style='background: {bg_color}; padding: 15px; border-radius: 10px;'>
-                    <h3 style='margin: 0; color: {text_color};'>{icon} AI: {bias}</h3>
-                </div>
-                """, unsafe_allow_html=True)
-
-            with col2:
-                st.metric("Score", f"{score:+.1f}")
-
-            with col3:
-                st.metric("Confidence", f"{confidence:.1f}%")
-
-            # Display AI Reasoning
-            reasoning = source_data.get('reasoning', [])
-            if reasoning:
-                st.markdown("#### 🤔 AI Reasoning")
-                for i, reason in enumerate(reasoning, 1):
-                    st.markdown(f"{i}. {reason}")
-
-            # Display Final Verdict
-            final_verdict = source_data.get('final_verdict', '')
-            if final_verdict:
-                st.markdown("#### 🎯 Final Verdict")
-                st.info(final_verdict)
-
-            # Display Detailed Metrics
-            full_report = source_data.get('full_report', {})
-            
-            if 'news_sentiment' in full_report:
-                st.markdown("#### 📰 News Sentiment Analysis")
-                news_data = full_report['news_sentiment']
-                news_score = news_data.get('score', 0)
-                news_articles = news_data.get('articles', [])
-                
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Overall News Sentiment", f"{news_score:+.2f}")
-                with col2:
-                    st.metric("Articles Analyzed", len(news_articles))
-                with col3:
-                    st.metric("Top Keywords", ", ".join(news_data.get('top_keywords', [])[:3]))
-                
-                if news_articles:
-                    with st.expander("📋 Top News Articles"):
-                        for article in news_articles[:5]:
-                            st.markdown(f"**{article.get('title', 'No title')}**")
-                            st.markdown(f"*Source: {article.get('source', 'Unknown')}*")
-                            st.markdown(f"Sentiment: {article.get('sentiment', 'Neutral')}")
-                            st.markdown("---")
-
-            if 'global_markets' in full_report:
-                st.markdown("#### 🌍 Global Market Analysis")
-                global_data = full_report['global_markets']
-                
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("US Markets", f"{global_data.get('us_markets', {}).get('sentiment', 'N/A')}")
-                with col2:
-                    st.metric("Asian Markets", f"{global_data.get('asian_markets', {}).get('sentiment', 'N/A')}")
-                with col3:
-                    st.metric("European Markets", f"{global_data.get('european_markets', {}).get('sentiment', 'N/A')}")
-                with col4:
-                    st.metric("Commodities", f"{global_data.get('commodities', {}).get('sentiment', 'N/A')}")
-
-            # Display Technical Analysis Integration
-            if 'technical_integration' in full_report:
-                st.markdown("#### 🔧 Technical Analysis Integration")
-                tech_data = full_report['technical_integration']
-                st.markdown(f"**Patterns Identified:** {', '.join(tech_data.get('patterns', []))}")
-                st.markdown(f"**Key Levels:** {tech_data.get('key_levels', 'N/A')}")
-
     # ─────────────────────────────────────────────────────────────────
     # 4. OPTION CHAIN ANALYSIS TABLE
     # ─────────────────────────────────────────────────────────────────
@@ -2483,47 +2023,12 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
                     for error in errors:
                         st.error(f"  - {error}")
 
-    # Add AI-specific control
-    st.markdown("---")
-    st.markdown("### 🤖 AI Analysis Controls")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("🧠 Run AI Analysis Only", use_container_width=True):
-            with st.spinner("🤖 Running AI Market Analysis..."):
-                try:
-                    ai_success, ai_errors = asyncio.run(_run_ai_analysis())
-                    if ai_success:
-                        st.success("✅ AI analysis completed!")
-                        st.rerun()
-                    else:
-                        for error in ai_errors:
-                            st.error(f"  - {error}")
-                except Exception as e:
-                    st.error(f"❌ AI analysis failed: {str(e)}")
-    
-    with col2:
-        # API Key Configuration
-        with st.expander("🔧 Configure API Keys"):
-            news_api_key = st.text_input("News API Key", type="password", 
-                                         value=st.session_state.get('news_api_key', ''))
-            groq_api_key = st.text_input("Groq API Key", type="password",
-                                        value=st.session_state.get('groq_api_key', ''))
-            
-            if st.button("💾 Save API Keys"):
-                st.session_state.news_api_key = news_api_key
-                st.session_state.groq_api_key = groq_api_key
-                st.success("✅ API keys saved to session state")
-
     # Auto-refresh handled by the refresh logic at the top of this function
     # No need for additional sleep/rerun here as it causes duplicate rendering
 
 
 # Export functions for external use
 __all__ = [
-    'run_ai_analysis',
-    'shutdown_ai_engine',
     'calculate_overall_sentiment',
     'run_all_analyses',
     'render_overall_market_sentiment'

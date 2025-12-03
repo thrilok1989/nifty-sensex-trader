@@ -16,6 +16,7 @@ import math
 from config import COLORS, get_current_time_ist
 from dhan_option_chain_analyzer import DhanOptionChainAnalyzer
 from nse_options_helpers import calculate_greeks
+from option_chain_manager import get_option_chain_manager
 
 def calculate_strike_strength(strike_data, option_type='CE'):
     """
@@ -206,22 +207,25 @@ def calculate_reversal_score(strike_data):
 
     return score
 
-def fetch_atm_strikes_with_greeks(symbol, atm_range=3):
+def fetch_atm_strikes_with_greeks(symbol, atm_range=3, oc_data=None):
     """
     Fetch ATM ± 3 strikes with Greeks calculation
 
     Args:
         symbol: Trading symbol (NIFTY, SENSEX, etc.)
         atm_range: Number of strikes above/below ATM (default: 3)
+        oc_data: Optional pre-fetched option chain data (from shared manager)
 
     Returns:
         Dictionary with strike data including Greeks
     """
-    analyzer = DhanOptionChainAnalyzer()
-    oc_data = analyzer.fetch_option_chain(symbol)
+    # If no data provided, fetch it (fallback for backward compatibility)
+    if oc_data is None:
+        analyzer = DhanOptionChainAnalyzer()
+        oc_data = analyzer.fetch_option_chain(symbol)
 
-    if not oc_data['success']:
-        return oc_data
+    if not oc_data or not oc_data.get('success'):
+        return oc_data or {'success': False, 'error': 'No option chain data available'}
 
     try:
         records = oc_data['records']
@@ -632,6 +636,7 @@ def render_oi_winding_unwinding_analysis():
     """Main function to render OI Winding/Unwinding Analysis"""
     st.markdown("## 🔥 OI Winding & Unwinding Bias Analysis")
     st.markdown("**Institutional ATM ± 3 Strike Model with Complete Greeks**")
+    st.caption("📌 Using shared option chain data from centralized manager")
     st.markdown("---")
 
     # Symbol selection
@@ -640,29 +645,31 @@ def render_oi_winding_unwinding_analysis():
     # Create tabs for each symbol
     tabs = st.tabs([f"📊 {symbol}" for symbol in symbols])
 
+    # Get option chain manager
+    option_manager = get_option_chain_manager()
+
     for idx, symbol in enumerate(symbols):
         with tabs[idx]:
-            # Add refresh button
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                refresh_btn = st.button(f"🔄 Refresh {symbol}", key=f"refresh_oi_{symbol}")
-
             # Check if data exists in session state
             session_key = f"oi_winding_{symbol}"
 
-            # Load data on refresh or if not in session
-            if refresh_btn or session_key not in st.session_state:
-                with st.spinner(f"📡 Fetching OI data with Greeks for {symbol}..."):
-                    strike_data = fetch_atm_strikes_with_greeks(symbol, atm_range=3)
+            # Get shared option chain data from manager
+            oc_data = option_manager.get_option_chain(symbol, auto_fetch=False)
 
-                    if strike_data.get('success'):
-                        st.session_state[session_key] = strike_data
-                        st.success(f"✅ Data loaded for {symbol}")
-                    else:
-                        st.error(f"❌ Failed to fetch data: {strike_data.get('error', 'Unknown error')}")
+            # If data available, calculate OI winding analysis
+            if oc_data and oc_data.get('success'):
+                # Calculate using the shared data
+                if session_key not in st.session_state or option_manager.get_fetch_timestamp():
+                    try:
+                        strike_data = fetch_atm_strikes_with_greeks(symbol, atm_range=3, oc_data=oc_data)
+
+                        if strike_data.get('success'):
+                            st.session_state[session_key] = strike_data
+                    except Exception as e:
+                        st.error(f"❌ Error calculating OI winding analysis: {str(e)}")
 
             # Display the analysis
             if session_key in st.session_state:
                 display_oi_winding_table(symbol, st.session_state[session_key])
             else:
-                st.info(f"ℹ️ Click 'Refresh {symbol}' to load OI Winding/Unwinding Analysis")
+                st.info(f"ℹ️ Click 'Refresh All' button above to load OI Winding/Unwinding Analysis")

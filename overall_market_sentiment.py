@@ -703,17 +703,21 @@ def check_bias_alignment():
     atm_score = 0
     if 'NIFTY_atm_zone_bias' in st.session_state:
         atm_data = st.session_state.NIFTY_atm_zone_bias
-        if atm_data and atm_data.get('success'):
-            atm_bias = atm_data.get('verdict', 'NEUTRAL')
-            atm_score = atm_data.get('score', 0)
+        # atm_data is a DataFrame, not a dict
+        if atm_data is not None and not atm_data.empty:
+            # Filter for ATM zone
+            atm_row = atm_data[atm_data["Zone"] == "ATM"]
+            if not atm_row.empty:
+                atm_bias = atm_row.iloc[0].get('Verdict', 'NEUTRAL')
+                atm_score = atm_row.iloc[0].get('BiasScore', 0)
 
-            # Normalize bias string
-            if 'Bullish' in atm_bias:
-                atm_bias = 'BULLISH'
-            elif 'Bearish' in atm_bias:
-                atm_bias = 'BEARISH'
-            else:
-                atm_bias = 'NEUTRAL'
+                # Normalize bias string
+                if 'Bullish' in atm_bias:
+                    atm_bias = 'BULLISH'
+                elif 'Bearish' in atm_bias:
+                    atm_bias = 'BEARISH'
+                else:
+                    atm_bias = 'NEUTRAL'
 
     # Check if all data is available
     if technical_bias is None or pcr_bias is None or atm_bias is None:

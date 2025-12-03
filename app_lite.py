@@ -24,7 +24,9 @@ from lite_helpers import (
     get_atm_zone_bias,
     format_number,
     get_bias_color,
-    get_bias_emoji
+    get_bias_emoji,
+    get_pcr_from_supabase,
+    get_atm_zone_from_supabase
 )
 
 # Page configuration
@@ -202,21 +204,31 @@ def load_data():
 
         # Get option chain data (only for NIFTY and BANKNIFTY)
         if underlying in ['NIFTY', 'BANK', 'BANKNIFTY']:
-            expiry = get_nearest_expiry()
             underlying_key = 'BANKNIFTY' if underlying == 'BANK' else underlying
-            data['option_chain'] = fetch_dhan_option_chain(underlying_key, expiry)
 
-            if data['option_chain']:
-                # Calculate PCR metrics
-                data['pcr_metrics'] = calculate_pcr_metrics(data['option_chain'])
+            # Try to fetch PCR data from Supabase first (faster and more reliable)
+            data['pcr_metrics'] = get_pcr_from_supabase(underlying_key)
 
-                # Calculate ATM zone bias
-                if data['current_price']:
-                    data['atm_zone'] = get_atm_zone_bias(
-                        data['option_chain'],
-                        data['current_price'],
-                        num_strikes=5
-                    )
+            # Try to fetch ATM zone data from Supabase first
+            data['atm_zone'] = get_atm_zone_from_supabase(underlying_key, num_strikes=11)
+
+            # Fallback to API if Supabase data not available
+            if not data['pcr_metrics'] or not data['atm_zone']:
+                expiry = get_nearest_expiry()
+                data['option_chain'] = fetch_dhan_option_chain(underlying_key, expiry)
+
+                if data['option_chain']:
+                    # Calculate PCR metrics from API data if not from Supabase
+                    if not data['pcr_metrics']:
+                        data['pcr_metrics'] = calculate_pcr_metrics(data['option_chain'])
+
+                    # Calculate ATM zone bias from API data if not from Supabase
+                    if not data['atm_zone'] and data['current_price']:
+                        data['atm_zone'] = get_atm_zone_bias(
+                            data['option_chain'],
+                            data['current_price'],
+                            num_strikes=5
+                        )
 
     return data
 
@@ -373,6 +385,12 @@ def display_pcr_bias(data: Dict):
 
     pcr = data['pcr_metrics']
 
+    # Display data source and timestamp
+    if pcr.get('timestamp'):
+        st.caption(f"📅 Data Source: Supabase | Last Updated: {pcr.get('timestamp')}")
+    else:
+        st.caption("📅 Data Source: Live API")
+
     # Display PCR bias
     bias = pcr.get('bias', 'NEUTRAL')
     pcr_oi = pcr.get('pcr_oi', 0)
@@ -389,37 +407,54 @@ def display_pcr_bias(data: Dict):
     </div>
     """, unsafe_allow_html=True)
 
-    # Display PCR metrics
-    col1, col2, col3, col4 = st.columns(4)
+    # Display PCR metrics in a table
+    st.markdown("### 📊 PCR Metrics Table")
 
-    with col1:
-        st.metric("PCR (OI)", f"{pcr.get('pcr_oi', 0):.2f}")
-    with col2:
-        st.metric("PCR (OI Change)", f"{pcr.get('pcr_oi_change', 0):.2f}")
-    with col3:
-        st.metric("PCR (Volume)", f"{pcr.get('pcr_volume', 0):.2f}")
-    with col4:
-        st.metric("Bias", bias)
+    pcr_table_data = {
+        'Metric': ['PCR (OI)', 'PCR (OI Change)', 'PCR (Volume)', 'Bias'],
+        'Value': [
+            f"{pcr.get('pcr_oi', 0):.4f}",
+            f"{pcr.get('pcr_oi_change', 0):.4f}",
+            f"{pcr.get('pcr_volume', 0):.4f}",
+            bias
+        ],
+        'Interpretation': [
+            '🟢 Bullish' if pcr.get('pcr_oi', 0) > 1.2 else ('🔴 Bearish' if pcr.get('pcr_oi', 0) < 0.8 else '🟡 Neutral'),
+            '🟢 Bullish Build' if pcr.get('pcr_oi_change', 0) > 0 else '🔴 Bearish Build',
+            '🟢 High Vol' if pcr.get('pcr_volume', 0) > 1.0 else '🔴 Low Vol',
+            f"{bias_emoji} {bias}"
+        ]
+    }
 
-    # Display OI breakdown
-    st.markdown("### 📊 Open Interest Breakdown")
+    pcr_df = pd.DataFrame(pcr_table_data)
+    st.dataframe(pcr_df, use_container_width=True, hide_index=True)
 
-    col1, col2 = st.columns(2)
+    # Display OI breakdown in table format
+    st.markdown("### 📊 Open Interest & Volume Breakdown")
 
-    with col1:
-        st.metric("🔴 Total CE OI", format_number(pcr.get('total_ce_oi', 0)))
-        st.metric("🔴 Total CE Volume", format_number(pcr.get('total_ce_volume', 0)))
+    oi_breakdown_data = {
+        'Type': ['Call (CE)', 'Put (PE)', 'Ratio (PE/CE)'],
+        'Open Interest': [
+            format_number(pcr.get('total_ce_oi', 0)),
+            format_number(pcr.get('total_pe_oi', 0)),
+            f"{pcr.get('pcr_oi', 0):.4f}"
+        ],
+        'Volume': [
+            format_number(pcr.get('total_ce_volume', 0)),
+            format_number(pcr.get('total_pe_volume', 0)),
+            f"{pcr.get('pcr_volume', 0):.4f}"
+        ]
+    }
 
-    with col2:
-        st.metric("🟢 Total PE OI", format_number(pcr.get('total_pe_oi', 0)))
-        st.metric("🟢 Total PE Volume", format_number(pcr.get('total_pe_volume', 0)))
+    oi_df = pd.DataFrame(oi_breakdown_data)
+    st.dataframe(oi_df, use_container_width=True, hide_index=True)
 
     # PCR interpretation
-    st.markdown("### 📖 PCR Interpretation")
+    st.markdown("### 📖 PCR Interpretation Guide")
     st.info("""
-    - **PCR > 1.2**: BULLISH - More puts indicate support building
-    - **PCR < 0.8**: BEARISH - More calls indicate resistance building
-    - **PCR 0.8-1.2**: NEUTRAL - Balanced market
+    - **PCR > 1.2**: 🟢 BULLISH - More puts indicate support building
+    - **PCR < 0.8**: 🔴 BEARISH - More calls indicate resistance building
+    - **PCR 0.8-1.2**: 🟡 NEUTRAL - Balanced market
     """)
 
 
@@ -435,6 +470,12 @@ def display_atm_zone_bias(data: Dict):
     summary = atm_data.get('summary', {})
     strikes = atm_data.get('strikes', [])
 
+    # Display data source and timestamp
+    if summary.get('timestamp'):
+        st.caption(f"📅 Data Source: Supabase | Last Updated: {summary.get('timestamp')}")
+    else:
+        st.caption("📅 Data Source: Live API")
+
     # Display zone bias
     zone_bias = summary.get('zone_bias', 'NEUTRAL')
     zone_pcr = summary.get('zone_pcr', 0)
@@ -446,65 +487,88 @@ def display_atm_zone_bias(data: Dict):
             {bias_emoji} ATM ZONE BIAS: {zone_bias}
         </h2>
         <p style="text-align: center; font-size: 1.5rem; margin: 0.5rem 0 0 0;">
-            Zone PCR: {zone_pcr}
+            Zone PCR: {zone_pcr:.4f}
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    # Display zone summary
-    col1, col2, col3, col4 = st.columns(4)
+    # Display zone summary in table
+    st.markdown("### 📊 Zone Summary")
 
-    with col1:
-        st.metric("Zone PCR", f"{zone_pcr:.2f}")
-    with col2:
-        st.metric("🟢 Bullish Strikes", summary.get('bullish_strikes', 0))
-    with col3:
-        st.metric("🔴 Bearish Strikes", summary.get('bearish_strikes', 0))
-    with col4:
-        st.metric("🟡 Neutral Strikes", summary.get('neutral_strikes', 0))
+    summary_data = {
+        'Metric': ['Zone PCR (OI)', 'Total CE OI', 'Total PE OI', 'Bullish Strikes', 'Bearish Strikes', 'Neutral Strikes'],
+        'Value': [
+            f"{zone_pcr:.4f}",
+            format_number(summary.get('total_ce_oi', 0)),
+            format_number(summary.get('total_pe_oi', 0)),
+            f"🟢 {summary.get('bullish_strikes', 0)}",
+            f"🔴 {summary.get('bearish_strikes', 0)}",
+            f"🟡 {summary.get('neutral_strikes', 0)}"
+        ]
+    }
+
+    summary_df = pd.DataFrame(summary_data)
+    st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
     # Display strike-wise data
-    st.markdown("### 📊 Strike-wise Analysis")
+    st.markdown("### 📊 Strike-wise Analysis (Detailed Table)")
 
     # Create DataFrame for display
     strike_df = pd.DataFrame(strikes)
 
     if not strike_df.empty:
-        # Format columns
-        strike_df['CE OI'] = strike_df['ce_oi'].apply(format_number)
-        strike_df['PE OI'] = strike_df['pe_oi'].apply(format_number)
-        strike_df['CE Vol'] = strike_df['ce_volume'].apply(format_number)
-        strike_df['PE Vol'] = strike_df['pe_volume'].apply(format_number)
+        # Prepare comprehensive display dataframe
+        current_price = data.get('current_price', 0)
 
-        # Select columns for display
-        display_df = strike_df[[
-            'strike', 'CE OI', 'PE OI', 'CE Vol', 'PE Vol',
-            'pcr_oi', 'pcr_volume', 'bias'
-        ]]
+        display_data = []
+        for _, row in strike_df.iterrows():
+            strike_price = row['strike']
+            distance = strike_price - current_price if current_price else 0
+            is_atm = abs(distance) == min(abs(strike_df['strike'] - current_price)) if current_price else False
 
-        # Highlight ATM row
-        current_price = data['current_price']
+            display_data.append({
+                'Strike': f"₹{strike_price:,.0f}" + (" ⭐" if is_atm else ""),
+                'Distance': f"{distance:+.0f}" if current_price else "-",
+                'CE OI': format_number(row['ce_oi']),
+                'PE OI': format_number(row['pe_oi']),
+                'CE OI Δ': format_number(row.get('ce_oi_change', 0)),
+                'PE OI Δ': format_number(row.get('pe_oi_change', 0)),
+                'CE Vol': format_number(row['ce_volume']),
+                'PE Vol': format_number(row['pe_volume']),
+                'PCR OI': f"{row['pcr_oi']:.4f}",
+                'PCR Vol': f"{row['pcr_volume']:.4f}",
+                'Bias': f"{get_bias_emoji(row['bias'])} {row['bias']}"
+            })
+
+        display_df = pd.DataFrame(display_data)
+
+        # Show current price info
         if current_price:
-            display_df['Distance'] = abs(display_df['strike'] - current_price)
-            atm_idx = display_df['Distance'].idxmin()
-
-            st.markdown(f"**Current Price: {current_price:.2f}** | **ATM Strike: {display_df.loc[atm_idx, 'strike']:.0f}**")
+            st.info(f"💰 **Current Price:** ₹{current_price:,.2f} | ⭐ indicates ATM strike")
 
         # Display table with styling
-        def highlight_bias(row):
-            if row['bias'] == 'BULLISH':
-                return ['background-color: #00ff0033'] * len(row)
-            elif row['bias'] == 'BEARISH':
-                return ['background-color: #ff000033'] * len(row)
+        def highlight_atm_row(row):
+            if '⭐' in str(row['Strike']):
+                return ['background-color: #ffff0033; font-weight: bold'] * len(row)
             else:
                 return [''] * len(row)
 
-        styled_df = display_df.drop('Distance', axis=1) if 'Distance' in display_df.columns else display_df
         st.dataframe(
-            styled_df.style.apply(highlight_bias, axis=1),
+            display_df.style.apply(highlight_atm_row, axis=1),
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
+            height=400
         )
+
+        # Add interpretation guide
+        st.markdown("### 📖 ATM Zone Interpretation")
+        st.info("""
+        - **PCR > 1.2**: 🟢 BULLISH - More Put OI suggests support at this level
+        - **PCR < 0.8**: 🔴 BEARISH - More Call OI suggests resistance at this level
+        - **PCR 0.8-1.2**: 🟡 NEUTRAL - Balanced option activity
+        - **⭐ ATM Strike**: Closest strike to current price
+        - **CE OI Δ / PE OI Δ**: Change in Open Interest (positive = increase, negative = decrease)
+        """)
 
 
 def display_overall_market_bias(data: Dict):

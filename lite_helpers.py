@@ -14,6 +14,7 @@ import time
 # Import from existing modules
 from config import IST, get_dhan_credentials
 from market_hours_scheduler import is_market_open
+from supabase_manager import get_supabase_manager
 
 # Get Dhan credentials
 _dhan_creds = get_dhan_credentials()
@@ -380,3 +381,139 @@ def get_bias_emoji(bias: str) -> str:
         return '🔴'
     else:
         return '🟡'
+
+
+def get_pcr_from_supabase(underlying: str) -> Optional[Dict]:
+    """
+    Get PCR metrics from the latest option chain snapshot in Supabase
+
+    Args:
+        underlying: Underlying symbol ('NIFTY', 'BANKNIFTY', 'SENSEX')
+
+    Returns:
+        Dictionary with PCR metrics or None if not available
+    """
+    try:
+        supabase = get_supabase_manager()
+
+        if not supabase.is_enabled():
+            print("Supabase not enabled, cannot fetch PCR data")
+            return None
+
+        # Get latest option chain snapshot
+        response = (
+            supabase.client.table('option_chain_snapshots')
+            .select('*')
+            .eq('symbol', underlying)
+            .order('timestamp', desc=True)
+            .limit(1)
+            .execute()
+        )
+
+        if response.data and len(response.data) > 0:
+            snapshot = response.data[0]
+
+            # Extract PCR metrics from snapshot
+            pcr_metrics = {
+                'pcr_oi': snapshot.get('pcr_oi', 0),
+                'pcr_oi_change': snapshot.get('pcr_oi_change', 0),
+                'pcr_volume': snapshot.get('pcr_volume', 0),
+                'total_ce_oi': snapshot.get('total_ce_oi', 0),
+                'total_pe_oi': snapshot.get('total_pe_oi', 0),
+                'total_ce_volume': snapshot.get('data', {}).get('total_ce_volume', 0),
+                'total_pe_volume': snapshot.get('data', {}).get('total_pe_volume', 0),
+                'bias': snapshot.get('overall_bias', 'NEUTRAL'),
+                'timestamp': snapshot.get('timestamp', '')
+            }
+
+            print(f"✅ Fetched PCR data from Supabase for {underlying}")
+            return pcr_metrics
+        else:
+            print(f"⚠️ No PCR data found in Supabase for {underlying}")
+            return None
+
+    except Exception as e:
+        print(f"❌ Error fetching PCR data from Supabase: {e}")
+        return None
+
+
+def get_atm_zone_from_supabase(underlying: str, num_strikes: int = 11) -> Optional[Dict]:
+    """
+    Get ATM zone bias data from Supabase
+
+    Args:
+        underlying: Underlying symbol ('NIFTY', 'BANKNIFTY', 'SENSEX')
+        num_strikes: Number of strikes to retrieve (default 11 for ATM ±5)
+
+    Returns:
+        Dictionary with ATM zone analysis or None if not available
+    """
+    try:
+        supabase = get_supabase_manager()
+
+        if not supabase.is_enabled():
+            print("Supabase not enabled, cannot fetch ATM zone data")
+            return None
+
+        # Get latest ATM zone data
+        df = supabase.get_latest_atm_zone_bias(underlying, limit=num_strikes)
+
+        if df is not None and not df.empty:
+            # Convert DataFrame to the expected format
+            strike_analysis = []
+
+            for _, row in df.iterrows():
+                strike_analysis.append({
+                    'strike': row['strike_price'],
+                    'ce_oi': row['ce_oi'],
+                    'pe_oi': row['pe_oi'],
+                    'ce_oi_change': row['ce_oi_change'],
+                    'pe_oi_change': row['pe_oi_change'],
+                    'ce_volume': row['ce_volume'],
+                    'pe_volume': row['pe_volume'],
+                    'pcr_oi': row['pcr_oi'],
+                    'pcr_oi_change': row['pcr_oi_change'],
+                    'pcr_volume': row['pcr_volume'],
+                    'bias': row['strike_bias']
+                })
+
+            # Calculate summary
+            total_ce_oi = df['ce_oi'].sum()
+            total_pe_oi = df['pe_oi'].sum()
+            zone_pcr = total_pe_oi / total_ce_oi if total_ce_oi > 0 else 0
+
+            bullish_count = len(df[df['strike_bias'] == 'BULLISH'])
+            bearish_count = len(df[df['strike_bias'] == 'BEARISH'])
+            neutral_count = len(df[df['strike_bias'] == 'NEUTRAL'])
+
+            # Determine overall zone bias
+            if bullish_count > bearish_count and zone_pcr > 1.0:
+                zone_bias = 'BULLISH'
+            elif bearish_count > bullish_count and zone_pcr < 1.0:
+                zone_bias = 'BEARISH'
+            else:
+                zone_bias = 'NEUTRAL'
+
+            summary = {
+                'total_ce_oi': total_ce_oi,
+                'total_pe_oi': total_pe_oi,
+                'zone_pcr': round(zone_pcr, 2),
+                'bullish_strikes': bullish_count,
+                'bearish_strikes': bearish_count,
+                'neutral_strikes': neutral_count,
+                'zone_bias': zone_bias,
+                'timestamp': df['timestamp'].iloc[0] if 'timestamp' in df.columns else ''
+            }
+
+            print(f"✅ Fetched ATM zone data from Supabase for {underlying}")
+            return {
+                'strikes': strike_analysis,
+                'summary': summary
+            }
+        else:
+            print(f"⚠️ No ATM zone data found in Supabase for {underlying}")
+            return None
+
+    except Exception as e:
+        print(f"❌ Error fetching ATM zone data from Supabase: {e}")
+        return None

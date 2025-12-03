@@ -225,7 +225,7 @@ def display_technical_bias(data: Dict):
     """Display Technical Bias section"""
     st.markdown("## 🎯 TECHNICAL BIAS (8 Indicators)")
 
-    if not data['intraday_data'] or data['intraday_data'].empty:
+    if data['intraday_data'] is None or data['intraday_data'].empty:
         st.warning("⚠️ Unable to fetch intraday data for technical analysis")
         return
 

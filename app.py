@@ -2478,6 +2478,18 @@ with tab6:
     st.header("📊 Option Chain Analysis")
     st.caption("Comprehensive Option Chain Analysis using Dhan API - Real-time Bias Detection, Support/Resistance Zones, and Trade Signals")
 
+    # Show market status banner
+    market_status = get_market_status()
+    if not market_status['open']:
+        st.warning(f"⏳ **Market Closed** - Trading Hours: 9:15 AM - 3:30 PM IST (Mon-Fri)")
+        st.info(f"ℹ️ {market_status['message']}")
+        if market_status.get('next_open'):
+            st.caption(f"📅 Next Market Open: {market_status['next_open']}")
+    else:
+        st.success(f"🟢 {market_status['message']} | {market_status['time']}")
+
+    st.divider()
+
     # Create tabs for main sections
     tab_indices, tab_stocks, tab_overall = st.tabs(["📈 Indices", "🏢 Stocks", "🌐 Overall Market Analysis"])
 

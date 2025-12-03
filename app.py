@@ -333,10 +333,15 @@ if 'overall_option_data' not in st.session_state:
 # - Lazy loading for tab-specific data
 # - Streamlit caching for expensive computations
 
-# Auto-refresh every 60 seconds (configurable via AUTO_REFRESH_INTERVAL)
-# This ensures the app stays updated with latest market data
-# The refresh is seamless - no blur/flash thanks to custom CSS above
-refresh_count = st_autorefresh(interval=AUTO_REFRESH_INTERVAL * 1000, key="data_refresh")
+# Auto-refresh only during market hours (8:30 AM - 3:45 PM IST)
+# After market hours, auto-refresh is disabled and users can manually refresh
+# This conserves API quota and allows users to work on the app after hours
+if MARKET_HOURS_ENABLED and is_within_trading_hours():
+    # Auto-refresh during market hours
+    refresh_count = st_autorefresh(interval=AUTO_REFRESH_INTERVAL * 1000, key="data_refresh")
+else:
+    # No auto-refresh after market hours
+    refresh_count = 0
 
 # ═══════════════════════════════════════════════════════════════════════
 # HEADER
@@ -344,6 +349,69 @@ refresh_count = st_autorefresh(interval=AUTO_REFRESH_INTERVAL * 1000, key="data_
 
 st.title(APP_TITLE)
 st.caption(APP_SUBTITLE)
+
+# ═══════════════════════════════════════════════════════════════════════
+# MANUAL REFRESH BUTTON
+# ═══════════════════════════════════════════════════════════════════════
+
+# Show manual refresh button and last update time
+col_refresh1, col_refresh2, col_refresh3 = st.columns([1, 2, 2])
+
+with col_refresh1:
+    if st.button("🔄 Refresh Data", help="Manually refresh all data from APIs (works anytime)"):
+        with st.spinner("🔄 Refreshing data..."):
+            # Clear relevant caches to force fresh data fetch
+            cache_manager = get_cache_manager()
+            cache_manager.clear_all()
+
+            # Force refresh option chain data
+            refresh_all_option_chain_data(save_snapshots=True)
+
+            # Force reload market data (bypasses market hours check for manual refresh)
+            try:
+                from market_data import fetch_nifty_data, fetch_sensex_data
+                nifty_data = fetch_nifty_data()
+                sensex_data = fetch_sensex_data()
+
+                # Store in cache
+                if nifty_data and nifty_data.get('success'):
+                    cache_manager.set('nifty_data', nifty_data)
+                if sensex_data and sensex_data.get('success'):
+                    cache_manager.set('sensex_data', sensex_data)
+
+                # Reload bias analysis
+                from bias_analysis import BiasAnalysisPro
+                analyzer = BiasAnalysisPro()
+                if nifty_data and nifty_data.get('success'):
+                    bias_results = analyzer.run_analysis(nifty_data)
+                    cache_manager.set('bias_analysis', bias_results)
+            except Exception as e:
+                st.error(f"⚠️ Some data may not have refreshed: {str(e)}")
+
+            # Store refresh time
+            st.session_state.last_manual_refresh = datetime.now(IST)
+
+        st.success("✅ Data refreshed successfully!")
+        st.rerun()
+
+with col_refresh2:
+    # Show auto-refresh status
+    if MARKET_HOURS_ENABLED and is_within_trading_hours():
+        st.info(f"🔄 Auto-refresh: **ON** ({AUTO_REFRESH_INTERVAL}s)")
+    else:
+        st.warning("🔄 Auto-refresh: **OFF** (Market Closed)")
+
+with col_refresh3:
+    # Show last manual refresh time
+    if 'last_manual_refresh' in st.session_state:
+        last_refresh = st.session_state.last_manual_refresh
+        time_since = (datetime.now(IST) - last_refresh).total_seconds()
+        if time_since < 60:
+            st.caption(f"Last refresh: {int(time_since)}s ago")
+        else:
+            st.caption(f"Last refresh: {int(time_since/60)}m ago")
+
+st.divider()
 
 # Check and run AI analysis if needed
 
@@ -355,16 +423,17 @@ if MARKET_HOURS_ENABLED:
     should_run, reason = should_run_app()
 
     if not should_run:
-        # Display prominent warning banner when market is closed
-        st.error(f"""
-        ⚠️ **MARKET CLOSED - APP RUNNING IN LIMITED MODE**
+        # Display info banner when market is closed
+        st.info(f"""
+        ℹ️ **MARKET CLOSED**
 
         **Reason:** {reason}
 
         **Trading Hours:** 8:30 AM - 3:45 PM IST (Monday - Friday, excluding holidays)
 
-        The app will automatically resume full operation during market hours.
-        Background data refresh is paused to conserve API quota.
+        ✅ **All features available:** Use the "🔄 Refresh Data" button above to update data manually.
+
+        ⏸️ **Auto-refresh paused** to conserve API quota - will resume during market hours.
         """)
 
         # Show next market open time if available

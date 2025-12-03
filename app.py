@@ -3246,7 +3246,13 @@ with tab8:
     with col3:
         if 'enhanced_market_data' in st.session_state:
             data = st.session_state.enhanced_market_data
-            st.caption(f"Last Updated: {data['timestamp'].strftime('%H:%M:%S')}")
+            # Convert timestamp to IST if it's not already timezone-aware
+            timestamp = data['timestamp']
+            if timestamp.tzinfo is None:
+                timestamp = IST.localize(timestamp)
+            else:
+                timestamp = timestamp.astimezone(IST)
+            st.caption(f"Last Updated: {timestamp.strftime('%Y-%m-%d %H:%M:%S IST')}")
 
     # Display enhanced market data if available
     if 'enhanced_market_data' in st.session_state:

@@ -110,6 +110,14 @@ class AdvancedChartAnalysis:
                 if 'timestamp' in df.columns:
                     df.set_index('timestamp', inplace=True)
 
+                # Convert index to IST timezone if not already
+                if df.index.tzinfo is None:
+                    # Dhan data is already in IST, so just localize it
+                    df.index = df.index.tz_localize(IST)
+                elif df.index.tzinfo != IST:
+                    # If it has a different timezone, convert to IST
+                    df.index = df.index.tz_convert(IST)
+
                 # Ensure required columns exist
                 required_cols = ['open', 'high', 'low', 'close', 'volume']
                 if all(col in df.columns for col in required_cols):
@@ -141,6 +149,14 @@ class AdvancedChartAnalysis:
             required_cols = ['open', 'high', 'low', 'close', 'volume']
             if not all(col in df.columns for col in required_cols):
                 return None
+
+            # Convert index to IST timezone
+            if df.index.tzinfo is None:
+                # If no timezone info, assume UTC and convert to IST
+                df.index = df.index.tz_localize('UTC').tz_convert(IST)
+            else:
+                # If timezone info exists, convert to IST
+                df.index = df.index.tz_convert(IST)
 
             return df
 
@@ -353,7 +369,7 @@ class AdvancedChartAnalysis:
 
         fig.update_layout(
             title=f'{symbol} Advanced Chart Analysis',
-            xaxis_title='Time',
+            xaxis_title='Time (IST)',
             yaxis_title='Price',
             template='plotly_dark',
             height=chart_height,

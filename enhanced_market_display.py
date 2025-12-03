@@ -9,6 +9,10 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Any
+import pytz
+
+# Indian Standard Time (IST)
+IST = pytz.timezone('Asia/Kolkata')
 
 
 def render_enhanced_market_data_tab(enhanced_data: Dict[str, Any]):
@@ -20,7 +24,14 @@ def render_enhanced_market_data_tab(enhanced_data: Dict[str, Any]):
     """
     st.markdown("## 🌐 Enhanced Market Analysis")
 
-    st.caption(f"📅 Last Updated: {enhanced_data['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
+    # Convert timestamp to IST if it's not already timezone-aware
+    timestamp = enhanced_data['timestamp']
+    if timestamp.tzinfo is None:
+        timestamp = IST.localize(timestamp)
+    else:
+        timestamp = timestamp.astimezone(IST)
+
+    st.caption(f"📅 Last Updated: {timestamp.strftime('%Y-%m-%d %H:%M:%S IST')}")
 
     # Summary Cards at the top
     _render_summary_cards(enhanced_data)

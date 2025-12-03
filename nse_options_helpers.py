@@ -21,6 +21,32 @@ from market_hours_scheduler import scheduler, is_within_trading_hours
 TELEGRAM_BOT_TOKEN = "8133685842:AAGdHCpi9QRIsS-fWW5Y1AJvS95QL9xU"
 TELEGRAM_CHAT_ID = "57096584"
 
+def parse_expiry_date(expiry_str):
+    """
+    Parse expiry date string in multiple formats (Dhan API format or NSE format)
+
+    Args:
+        expiry_str: Date string in format 'YYYY-MM-DD' (Dhan) or 'DD-MMM-YYYY' (NSE)
+
+    Returns:
+        datetime object localized to Asia/Kolkata timezone
+    """
+    formats_to_try = [
+        "%Y-%m-%d",      # Dhan API format: 2025-12-09
+        "%d-%b-%Y",      # NSE format: 09-Dec-2025
+        "%Y-%m-%dT%H:%M:%S",  # ISO format with time
+    ]
+
+    for fmt in formats_to_try:
+        try:
+            dt = datetime.strptime(expiry_str, fmt)
+            return timezone("Asia/Kolkata").localize(dt)
+        except ValueError:
+            continue
+
+    # If all formats fail, raise an error with helpful message
+    raise ValueError(f"Unable to parse date '{expiry_str}'. Expected formats: YYYY-MM-DD or DD-MMM-YYYY")
+
 def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     data = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
@@ -559,7 +585,7 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
             st.info("⚖️ OI Changes Balanced")
 
         today = datetime.now(timezone("Asia/Kolkata"))
-        expiry_date = timezone("Asia/Kolkata").localize(datetime.strptime(expiry, "%d-%b-%Y"))
+        expiry_date = parse_expiry_date(expiry)
 
         # Calculate time to expiry
         T = max((expiry_date - today).days, 1) / 365
@@ -1240,7 +1266,7 @@ def display_overall_option_chain_analysis(NSE_INSTRUMENTS):
 
                             today = datetime.now(timezone("Asia/Kolkata"))
                             try:
-                                expiry_date = timezone("Asia/Kolkata").localize(datetime.strptime(expiry, "%d-%b-%Y"))
+                                expiry_date = parse_expiry_date(expiry)
                                 T = max((expiry_date - today).days, 1) / 365
                             except:
                                 T = 0.02  # Default to about 7 days
@@ -1670,7 +1696,7 @@ def calculate_and_store_atm_zone_bias_silent(instrument, NSE_INSTRUMENTS):
         records = convert_dhan_to_nse_format(dhan_records, expiry)
 
         today = datetime.now(timezone("Asia/Kolkata"))
-        expiry_date = timezone("Asia/Kolkata").localize(datetime.strptime(expiry, "%d-%b-%Y"))
+        expiry_date = parse_expiry_date(expiry)
 
         # Calculate time to expiry
         T = max((expiry_date - today).days, 1) / 365

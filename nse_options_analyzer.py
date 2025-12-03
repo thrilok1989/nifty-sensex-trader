@@ -12,6 +12,32 @@ import plotly.graph_objects as go
 import io
 from market_hours_scheduler import scheduler, is_within_trading_hours
 
+def parse_expiry_date(expiry_str):
+    """
+    Parse expiry date string in multiple formats (Dhan API format or NSE format)
+
+    Args:
+        expiry_str: Date string in format 'YYYY-MM-DD' (Dhan) or 'DD-MMM-YYYY' (NSE)
+
+    Returns:
+        datetime object localized to Asia/Kolkata timezone
+    """
+    formats_to_try = [
+        "%Y-%m-%d",      # Dhan API format: 2025-12-09
+        "%d-%b-%Y",      # NSE format: 09-Dec-2025
+        "%Y-%m-%dT%H:%M:%S",  # ISO format with time
+    ]
+
+    for fmt in formats_to_try:
+        try:
+            dt = datetime.strptime(expiry_str, fmt)
+            return timezone("Asia/Kolkata").localize(dt)
+        except ValueError:
+            continue
+
+    # If all formats fail, raise an error with helpful message
+    raise ValueError(f"Unable to parse date '{expiry_str}'. Expected formats: YYYY-MM-DD or DD-MMM-YYYY")
+
 # === Streamlit Config ===
 st.set_page_config(page_title="NSE Options Analyzer", layout="wide")
 # Auto-refresh removed - controlled by main app (60-second cycle)
@@ -720,7 +746,7 @@ def analyze_instrument(instrument):
             st.info("⚖️ OI Changes Balanced")
 
         today = datetime.now(timezone("Asia/Kolkata"))
-        expiry_date = timezone("Asia/Kolkata").localize(datetime.strptime(expiry, "%d-%b-%Y"))
+        expiry_date = parse_expiry_date(expiry)
 
         # Calculate time to expiry
         T = max((expiry_date - today).days, 1) / 365

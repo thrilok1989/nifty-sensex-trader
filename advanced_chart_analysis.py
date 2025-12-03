@@ -378,6 +378,14 @@ class AdvancedChartAnalysis:
             hovermode='x unified'
         )
 
+        # Configure all x-axes to display IST timezone
+        fig.update_xaxes(
+            tickformat='%H:%M:%S',
+            hoverformat='%Y-%m-%d %H:%M:%S IST',
+            tickmode='auto',
+            nticks=20
+        )
+
         return fig
 
     def _add_volume_order_blocks(self, fig, df, vob_data, row, col):

@@ -1970,8 +1970,8 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     col1, col2 = st.columns(2)
 
     with col1:
-        last_update_time = datetime.fromtimestamp(st.session_state.sentiment_last_refresh)
-        st.caption(f"📅 Last updated: {last_update_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        last_update_time = datetime.fromtimestamp(st.session_state.sentiment_last_refresh, tz=IST)
+        st.caption(f"📅 Last updated: {last_update_time.strftime('%Y-%m-%d %H:%M:%S IST')}")
 
     with col2:
         if time_until_refresh > 0:

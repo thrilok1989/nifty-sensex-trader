@@ -221,6 +221,33 @@ def load_data():
     return data
 
 
+def convert_bias_results_to_indicators(bias_results: list) -> Dict:
+    """Convert BiasAnalysisPro bias_results list to indicators dict format expected by lite app"""
+    indicator_mapping = {
+        'Volume Delta': 'volume_delta',
+        'HVP (High Volume Pivots)': 'hvp',
+        'VOB (Volume Order Blocks)': 'vob',
+        'Order Blocks (EMA 5/18)': 'order_blocks',
+        'RSI': 'rsi',
+        'DMI': 'dmi',
+        'VIDYA': 'vidya',
+        'MFI (Money Flow)': 'mfi'
+    }
+
+    indicators = {}
+    for result in bias_results:
+        indicator_name = result.get('indicator', '')
+        key = indicator_mapping.get(indicator_name)
+        if key:
+            indicators[key] = {
+                'bias': result.get('bias', 'NEUTRAL'),
+                'value': result.get('value', ''),
+                'score': result.get('score', 0)
+            }
+
+    return indicators
+
+
 def display_technical_bias(data: Dict):
     """Display Technical Bias section"""
     st.markdown("## 🎯 TECHNICAL BIAS (8 Indicators)")
@@ -236,15 +263,30 @@ def display_technical_bias(data: Dict):
             # Initialize bias analyzer
             analyzer = BiasAnalysisPro()
 
+            # Convert column names to match BiasAnalysisPro's expected format (capitalized)
+            intraday_data_formatted = intraday_data.copy()
+            if 'open' in intraday_data_formatted.columns:
+                intraday_data_formatted = intraday_data_formatted.rename(columns={
+                    'open': 'Open',
+                    'high': 'High',
+                    'low': 'Low',
+                    'close': 'Close',
+                    'volume': 'Volume'
+                })
+
             # Analyze bias
             bias_result = analyzer.analyze_all_bias_indicators(
-                intraday_data,
-                symbol=data['underlying']
+                symbol=data['symbol'],
+                data=intraday_data_formatted
             )
 
-            if not bias_result:
-                st.error("❌ Failed to calculate technical bias")
+            if not bias_result or not bias_result.get('success', False):
+                st.error(f"❌ Failed to calculate technical bias: {bias_result.get('error', 'Unknown error')}")
                 return
+
+            # Convert bias_results list to indicators dict
+            bias_result['indicators'] = convert_bias_results_to_indicators(bias_result.get('bias_results', []))
+            bias_result['overall_percentage'] = bias_result.get('overall_score', 0)
 
             # Store in data
             data['technical_bias'] = bias_result

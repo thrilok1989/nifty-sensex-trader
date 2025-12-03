@@ -63,11 +63,12 @@ MARKET_HOURS = {
 }
 
 # Session-based refresh intervals (seconds)
-# Optimized to prevent API rate limiting (HTTP 429)
+# CONSERVATIVE settings to prevent API rate limiting (HTTP 429)
+# Data fetch cycle takes ~40-50 seconds, so intervals must be longer
 REFRESH_INTERVALS = {
-    'pre_market': 45,      # 45 seconds during pre-market
-    'regular': 45,         # 45 seconds during regular trading
-    'post_market': 120,    # 120 seconds during post-market
+    'pre_market': 90,      # 90 seconds during pre-market (increased from 45s)
+    'regular': 90,         # 90 seconds during regular trading (increased from 45s)
+    'post_market': 180,    # 180 seconds during post-market (increased from 120s)
     'closed': 300          # 5 minutes when market is closed (minimal activity)
 }
 

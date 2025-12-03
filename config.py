@@ -49,37 +49,6 @@ def get_telegram_credentials():
         return {'enabled': False}
 
 # ═══════════════════════════════════════════════════════════════════════
-# AI CONFIGURATION - Loaded from Streamlit Secrets
-# ═══════════════════════════════════════════════════════════════════════
-
-def get_groq_credentials():
-    """Load Groq credentials from secrets"""
-    try:
-        return {
-            'api_key': st.secrets["GROQ"]["API_KEY"],
-            'model': st.secrets["GROQ"].get("MODEL", "llama3-70b-8192"),
-            'enabled': True
-        }
-    except Exception as e:
-        print(f"⚠️ Groq credentials missing: {e}")
-        return {'enabled': False}
-
-def get_newsdata_credentials():
-    """Load NewsData credentials from secrets"""
-    try:
-        return {
-            'api_key': st.secrets["NEWSDATA"]["API_KEY"],
-            'enabled': True
-        }
-    except Exception as e:
-        print(f"⚠️ NewsData credentials missing: {e}")
-        return {'enabled': False}
-
-# AI Settings
-AI_RUN_ONLY_DIRECTIONAL = os.environ.get("AI_RUN_ONLY_DIRECTIONAL", "") == "1"
-AI_REPORT_DIR = os.environ.get("AI_REPORT_DIR", "ai_reports")
-
-# ═══════════════════════════════════════════════════════════════════════
 # MARKET HOURS SETTINGS (All times in IST - Indian Standard Time)
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -147,13 +116,5 @@ def get_all_credentials():
     """Get all credentials in a single call"""
     return {
         'dhan': get_dhan_credentials(),
-        'telegram': get_telegram_credentials(),
-        'groq': get_groq_credentials(),
-        'newsdata': get_newsdata_credentials()
+        'telegram': get_telegram_credentials()
     }
-
-def is_ai_enabled():
-    """Check if AI features are enabled"""
-    groq_creds = get_groq_credentials()
-    newsdata_creds = get_newsdata_credentials()
-    return groq_creds.get('enabled', False) and newsdata_creds.get('enabled', False)

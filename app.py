@@ -206,14 +206,6 @@ if 'performance_mode' not in st.session_state:
     st.session_state.performance_mode = True
 
 # ═══════════════════════════════════════════════════════════════════════
-# AI MARKET ANALYSIS CONFIGURATION
-# ═══════════════════════════════════════════════════════════════════════
-
-# Get API keys from Streamlit secrets - check both flat and nested formats
-
-
-
-# ═══════════════════════════════════════════════════════════════════════
 # INITIALIZE SESSION STATE
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -438,39 +430,6 @@ with st.sidebar:
     st.write(f"**NIFTY Lot Size:** {LOT_SIZES['NIFTY']}")
     st.write(f"**SENSEX Lot Size:** {LOT_SIZES['SENSEX']}")
     st.write(f"**SL Offset:** {STOP_LOSS_OFFSET} points")
-    
-    st.divider()
-    
-    # AI Analysis Status
-    st.subheader("🤖 AI Market Analysis")
-    
-    # API Key Status Debug
-    st.subheader("🔑 API Key Status")
-    
-    if NEWSDATA_API_KEY:
-        if len(NEWSDATA_API_KEY) > 10:  # Simple check if key exists
-            st.success("✅ NEWSDATA API Key: Configured")
-        else:
-            st.error("❌ NEWSDATA API Key: Invalid (too short)")
-    else:
-        st.error("❌ NEWSDATA API Key: Missing")
-        
-    if GROQ_API_KEY:
-        if len(GROQ_API_KEY) > 10:  # Simple check if key exists
-            st.success("✅ GROQ API Key: Configured")
-        else:
-            st.error("❌ GROQ API Key: Invalid (too short)")
-    else:
-        st.error("❌ GROQ API Key: Missing")
-    
-    # AI Analysis Controls
-    if NEWSDATA_API_KEY and GROQ_API_KEY:
-        st.success("✅ API Keys Configured")
-        
-        # Show last AI analysis time
-    else:
-        st.warning("⚠️ API Keys Required")
-        st.caption("Set NEWSDATA_API_KEY and GROQ_API_KEY in Streamlit secrets (.streamlit/secrets.toml)")
     
     st.divider()
 

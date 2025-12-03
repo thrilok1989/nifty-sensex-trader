@@ -41,6 +41,7 @@ from htf_sr_signal_generator import HTFSRSignalGenerator
 from atm_zone_bias_component import render_atm_zone_bias_analysis
 from oi_winding_unwinding_component import render_oi_winding_unwinding_analysis
 from option_chain_manager import get_option_chain_manager, refresh_all_option_chain_data, preload_option_chain_data
+from intraday_momentum_component import render_intraday_momentum_analysis
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -1502,7 +1503,7 @@ st.divider()
 # ═══════════════════════════════════════════════════════════════════════
 
 # Native tabs - work seamlessly on mobile and desktop, no multiple clicks needed
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
     "🌟 Overall Market Sentiment",
     "🎯 Trade Setup",
     "📊 Active Signals",
@@ -1512,7 +1513,8 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "📈 Advanced Chart Analysis",
     "🌐 Enhanced Market Analysis",
     "🎯 ATM Zone Bias",
-    "🔥 OI Winding/Unwinding"
+    "🔥 OI Winding/Unwinding",
+    "📊 Intraday Momentum"
 ])
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -3344,6 +3346,13 @@ with tab9:
 
 with tab10:
     render_oi_winding_unwinding_analysis()
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 11: INTRADAY MOMENTUM TRACKER
+# ═══════════════════════════════════════════════════════════════════════
+
+with tab11:
+    render_intraday_momentum_analysis()
 
 # ═══════════════════════════════════════════════════════════════════════
 # FOOTER

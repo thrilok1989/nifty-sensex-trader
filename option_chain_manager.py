@@ -283,7 +283,32 @@ def preload_option_chain_data(symbols: Optional[List[str]] = None):
         manager.fetch_all_symbols()
 
 
-def refresh_all_option_chain_data():
-    """Force refresh all option chain data"""
+def refresh_all_option_chain_data(save_snapshots: bool = True):
+    """
+    Force refresh all option chain data
+
+    Args:
+        save_snapshots: If True, save snapshots for intraday momentum tracking
+
+    Returns:
+        Dictionary with fetched data for all symbols
+    """
     manager = get_option_chain_manager()
-    return manager.fetch_all_symbols(force_refresh=True)
+    all_data = manager.fetch_all_symbols(force_refresh=True)
+
+    # Save snapshots for intraday momentum tracking
+    if save_snapshots:
+        try:
+            from intraday_snapshot_manager import get_snapshot_manager
+            snapshot_manager = get_snapshot_manager()
+
+            # Check if it's time to take a snapshot
+            if snapshot_manager.should_take_snapshot():
+                for symbol, oc_data in all_data.items():
+                    if oc_data.get('success'):
+                        snapshot_manager.save_snapshot(symbol, oc_data)
+                        logger.info(f"Snapshot saved for {symbol}")
+        except Exception as e:
+            logger.error(f"Error saving snapshots: {str(e)}")
+
+    return all_data

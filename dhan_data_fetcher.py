@@ -1,17 +1,26 @@
 """
-Dhan API Data Fetcher with Rate Limiting
-==========================================
+Dhan API Data Fetcher with Enhanced Rate Limiting & Graceful Degradation
+==========================================================================
 
-This module handles all data fetching from Dhan API with proper rate limiting:
-- 10-second intervals between different data types
-- Respects Dhan API rate limits (1 req/sec for quotes, 5 req/sec for data, 1 req/3sec for option chain)
-- Fetches data in a structured sequence within 60 seconds
-- Auto-refresh every 1 minute
+This module handles all data fetching from Dhan API with robust rate limiting:
+- CONSERVATIVE rate limits to prevent HTTP 429 errors
+- Intelligent caching with 5-minute TTL
+- Graceful degradation: returns cached data when rate limited
+- Request deduplication to prevent concurrent duplicate requests
+- Exponential backoff with circuit breaker pattern
+- Respects Retry-After headers from API responses
 
-Rate Limits (from Dhan API docs):
-- Quote APIs: 1 request/second, unlimited/day
-- Data APIs: 5 requests/second, 100,000/day
-- Option Chain: 1 request/3 seconds
+CONSERVATIVE Rate Limits (to prevent 429 errors):
+- Quote APIs: 1 request per 2 seconds (was 1/sec)
+- Data APIs: 2 requests per second (was 5/sec)
+- Option Chain: 1 request per 5 seconds (was 1/3sec)
+- Global minimum: 500ms between ANY requests (was 100ms)
+
+Caching Strategy:
+- All fetched data cached for 5 minutes
+- On rate limit (429): automatically returns cached data with warning
+- On errors: falls back to cached data if available
+- Cache age displayed to user for transparency
 
 Fetch Sequence (60-second cycle):
 0-10s: Historical chart data (Nifty, Sensex)
@@ -101,9 +110,10 @@ class DhanDataFetcher:
         self.last_request_time = {}
         self.request_count = {}
 
-        # Data cache
+        # Data cache with TTL (Time To Live)
         self.cache = {}
         self.cache_timestamps = {}
+        self.cache_ttl = 300  # Cache valid for 5 minutes (300 seconds)
 
     def _rate_limit_wait(self, api_type: str):
         """
@@ -119,33 +129,85 @@ class DhanDataFetcher:
         if not global_rate_limiter.wait_for_slot(api_type):
             raise Exception(f"Circuit breaker active for {api_type}. Please wait and try again.")
 
-    def fetch_ohlc_data(self, instruments: List[str]) -> Dict[str, Any]:
+    def _get_from_cache(self, cache_key: str) -> Optional[Dict[str, Any]]:
         """
-        Fetch OHLC + LTP data for multiple instruments
+        Get data from cache if available and not expired
+
+        Args:
+            cache_key: Key for cached data
+
+        Returns:
+            Cached data if available and valid, None otherwise
+        """
+        if cache_key in self.cache:
+            cache_time = self.cache_timestamps.get(cache_key, 0)
+            age = time.time() - cache_time
+
+            if age < self.cache_ttl:
+                # Cache is still valid
+                return {
+                    **self.cache[cache_key],
+                    'from_cache': True,
+                    'cache_age': age
+                }
+
+        return None
+
+    def _save_to_cache(self, cache_key: str, data: Dict[str, Any]):
+        """
+        Save data to cache
+
+        Args:
+            cache_key: Key for cached data
+            data: Data to cache
+        """
+        self.cache[cache_key] = data
+        self.cache_timestamps[cache_key] = time.time()
+
+    def fetch_ohlc_data(self, instruments: List[str], use_cache: bool = True) -> Dict[str, Any]:
+        """
+        Fetch OHLC + LTP data for multiple instruments with caching and graceful degradation
 
         Rate Limit: 1 request/second (Quote API)
         Can fetch up to 1000 instruments in single request
 
         Args:
             instruments: List of instrument names (e.g., ['NIFTY', 'SENSEX'])
+            use_cache: If True, return cached data when rate limited
 
         Returns:
             Dict with OHLC data for each instrument
         """
-        self._rate_limit_wait('quote')
+        # Create cache key
+        cache_key = f"ohlc_{'_'.join(sorted(instruments))}"
 
-        # Build request payload
-        payload = {}
-        for instrument in instruments:
-            segment = EXCHANGE_SEGMENTS.get(instrument)
-            security_id = SECURITY_IDS.get(instrument)
-
-            if segment and security_id:
-                if segment not in payload:
-                    payload[segment] = []
-                payload[segment].append(int(security_id))
+        # Check request deduplication
+        request_key = f"fetch_ohlc_{cache_key}"
+        if global_rate_limiter.is_request_pending(request_key):
+            # Another request is already in flight, return cached data if available
+            cached = self._get_from_cache(cache_key)
+            if cached:
+                return cached
+            # Wait a bit and try again
+            time.sleep(1)
 
         try:
+            # Mark request as pending
+            global_rate_limiter.mark_request_pending(request_key)
+
+            self._rate_limit_wait('quote')
+
+            # Build request payload
+            payload = {}
+            for instrument in instruments:
+                segment = EXCHANGE_SEGMENTS.get(instrument)
+                security_id = SECURITY_IDS.get(instrument)
+
+                if segment and security_id:
+                    if segment not in payload:
+                        payload[segment] = []
+                    payload[segment].append(int(security_id))
+
             url = f"{self.base_url}/marketfeed/ohlc"
             response = requests.post(url, json=payload, headers=self.headers, timeout=10)
 
@@ -172,21 +234,56 @@ class DhanDataFetcher:
                                 'high': instrument_data.get('ohlc', {}).get('high'),
                                 'low': instrument_data.get('ohlc', {}).get('low'),
                                 'close': instrument_data.get('ohlc', {}).get('close'),
-                                'timestamp': get_current_time_ist()
+                                'timestamp': get_current_time_ist(),
+                                'from_cache': False
                             }
                         else:
                             result[instrument] = {'success': False, 'error': 'No data found'}
 
+                # Save to cache
+                self._save_to_cache(cache_key, result)
                 return result
+
             elif response.status_code == 429:
+                # Extract Retry-After header if available
+                retry_after = response.headers.get('Retry-After')
+                retry_after_seconds = int(retry_after) if retry_after and retry_after.isdigit() else None
+
                 # Handle rate limit error with exponential backoff
-                global_rate_limiter.handle_rate_limit_error('quote')
-                return {'success': False, 'error': f'API returned {response.status_code}', 'message': 'Rate limit exceeded. Will retry with exponential backoff.'}
+                global_rate_limiter.handle_rate_limit_error('quote', retry_after_seconds)
+
+                # Try to return cached data
+                if use_cache:
+                    cached = self._get_from_cache(cache_key)
+                    if cached:
+                        cached['warning'] = f'Rate limited (429). Showing cached data ({cached.get("cache_age", 0):.0f}s old)'
+                        return cached
+
+                return {
+                    'success': False,
+                    'error': f'API returned {response.status_code}',
+                    'message': 'Rate limit exceeded. Will retry with exponential backoff.'
+                }
             else:
-                return {'success': False, 'error': f'API returned {response.status_code}', 'message': response.text}
+                return {
+                    'success': False,
+                    'error': f'API returned {response.status_code}',
+                    'message': response.text
+                }
 
         except Exception as e:
+            # On error, try to return cached data
+            if use_cache:
+                cached = self._get_from_cache(cache_key)
+                if cached:
+                    cached['warning'] = f'Error: {str(e)}. Showing cached data ({cached.get("cache_age", 0):.0f}s old)'
+                    return cached
+
             return {'success': False, 'error': str(e)}
+
+        finally:
+            # Mark request as complete
+            global_rate_limiter.mark_request_complete(request_key)
 
     def fetch_intraday_data(self, instrument: str, interval: str = "1",
                            from_date: Optional[str] = None,
@@ -258,8 +355,12 @@ class DhanDataFetcher:
                     'timestamp': get_current_time_ist()
                 }
             elif response.status_code == 429:
+                # Extract Retry-After header if available
+                retry_after = response.headers.get('Retry-After')
+                retry_after_seconds = int(retry_after) if retry_after and retry_after.isdigit() else None
+
                 # Handle rate limit error with exponential backoff
-                global_rate_limiter.handle_rate_limit_error('data')
+                global_rate_limiter.handle_rate_limit_error('data', retry_after_seconds)
                 return {'success': False, 'error': f'API returned {response.status_code}', 'message': 'Rate limit exceeded. Will retry with exponential backoff.'}
             else:
                 return {'success': False, 'error': f'API returned {response.status_code}', 'message': response.text}
@@ -267,34 +368,51 @@ class DhanDataFetcher:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def fetch_option_chain(self, instrument: str, expiry: str) -> Dict[str, Any]:
+    def fetch_option_chain(self, instrument: str, expiry: str, use_cache: bool = True) -> Dict[str, Any]:
         """
-        Fetch option chain data
+        Fetch option chain data with caching and graceful degradation
 
         Rate Limit: 1 request per 3 seconds (Option Chain API)
 
         Args:
             instrument: Instrument name (e.g., 'NIFTY')
             expiry: Expiry date (YYYY-MM-DD)
+            use_cache: If True, return cached data when rate limited
 
         Returns:
             Dict with option chain data
         """
-        self._rate_limit_wait('option_chain')
+        # Create cache key
+        cache_key = f"option_chain_{instrument}_{expiry}"
 
-        security_id = SECURITY_IDS.get(instrument)
-        exchange_segment = EXCHANGE_SEGMENTS.get(instrument)
-
-        if not security_id or not exchange_segment:
-            return {'success': False, 'error': f'Unknown instrument: {instrument}'}
-
-        payload = {
-            "UnderlyingScrip": int(security_id),
-            "UnderlyingSeg": exchange_segment,
-            "Expiry": expiry
-        }
+        # Check request deduplication
+        request_key = f"fetch_option_chain_{cache_key}"
+        if global_rate_limiter.is_request_pending(request_key):
+            # Another request is already in flight, return cached data if available
+            cached = self._get_from_cache(cache_key)
+            if cached:
+                return cached
+            # Wait a bit and try again
+            time.sleep(2)
 
         try:
+            # Mark request as pending
+            global_rate_limiter.mark_request_pending(request_key)
+
+            self._rate_limit_wait('option_chain')
+
+            security_id = SECURITY_IDS.get(instrument)
+            exchange_segment = EXCHANGE_SEGMENTS.get(instrument)
+
+            if not security_id or not exchange_segment:
+                return {'success': False, 'error': f'Unknown instrument: {instrument}'}
+
+            payload = {
+                "UnderlyingScrip": int(security_id),
+                "UnderlyingSeg": exchange_segment,
+                "Expiry": expiry
+            }
+
             url = f"{self.base_url}/optionchain"
             response = requests.post(url, json=payload, headers=self.headers, timeout=15)
 
@@ -304,22 +422,59 @@ class DhanDataFetcher:
 
                 data = response.json()
 
-                return {
+                result = {
                     'success': True,
                     'data': data.get('data', {}),
                     'instrument': instrument,
                     'expiry': expiry,
-                    'timestamp': get_current_time_ist()
+                    'timestamp': get_current_time_ist(),
+                    'from_cache': False
                 }
+
+                # Save to cache
+                self._save_to_cache(cache_key, result)
+                return result
+
             elif response.status_code == 429:
+                # Extract Retry-After header if available
+                retry_after = response.headers.get('Retry-After')
+                retry_after_seconds = int(retry_after) if retry_after and retry_after.isdigit() else None
+
                 # Handle rate limit error with exponential backoff
-                global_rate_limiter.handle_rate_limit_error('option_chain')
-                return {'success': False, 'error': f'API returned {response.status_code}', 'message': 'Rate limit exceeded. Will retry with exponential backoff.'}
+                global_rate_limiter.handle_rate_limit_error('option_chain', retry_after_seconds)
+
+                # Try to return cached data
+                if use_cache:
+                    cached = self._get_from_cache(cache_key)
+                    if cached:
+                        cached['warning'] = f'Rate limited (429). Showing cached data ({cached.get("cache_age", 0):.0f}s old)'
+                        return cached
+
+                return {
+                    'success': False,
+                    'error': f'API returned {response.status_code}',
+                    'message': 'Rate limit exceeded. Will retry with exponential backoff.'
+                }
             else:
-                return {'success': False, 'error': f'API returned {response.status_code}', 'message': response.text}
+                return {
+                    'success': False,
+                    'error': f'API returned {response.status_code}',
+                    'message': response.text
+                }
 
         except Exception as e:
+            # On error, try to return cached data
+            if use_cache:
+                cached = self._get_from_cache(cache_key)
+                if cached:
+                    cached['warning'] = f'Error: {str(e)}. Showing cached data ({cached.get("cache_age", 0):.0f}s old)'
+                    return cached
+
             return {'success': False, 'error': str(e)}
+
+        finally:
+            # Mark request as complete
+            global_rate_limiter.mark_request_complete(request_key)
 
     def fetch_expiry_list(self, instrument: str) -> Dict[str, Any]:
         """
@@ -361,8 +516,12 @@ class DhanDataFetcher:
                     'timestamp': get_current_time_ist()
                 }
             elif response.status_code == 429:
+                # Extract Retry-After header if available
+                retry_after = response.headers.get('Retry-After')
+                retry_after_seconds = int(retry_after) if retry_after and retry_after.isdigit() else None
+
                 # Handle rate limit error with exponential backoff
-                global_rate_limiter.handle_rate_limit_error('option_chain')
+                global_rate_limiter.handle_rate_limit_error('option_chain', retry_after_seconds)
                 return {'success': False, 'error': f'API returned {response.status_code}', 'message': 'Rate limit exceeded. Will retry with exponential backoff.'}
             else:
                 return {'success': False, 'error': f'API returned {response.status_code}', 'message': response.text}

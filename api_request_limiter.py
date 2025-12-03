@@ -50,11 +50,12 @@ class GlobalRateLimiter:
         self._lock = threading.RLock()
 
         # Rate limits (seconds between requests per endpoint type)
+        # CONSERVATIVE settings to prevent HTTP 429 errors
         self.rate_limits = {
-            'quote': 1.0,        # 1 request/second (OHLC, LTP)
-            'data': 0.2,         # 5 requests/second (Historical data)
-            'option_chain': 3.0, # 1 request/3 seconds (Option chain)
-            'default': 1.0       # Default for unknown endpoints
+            'quote': 2.0,        # 1 request/2 seconds (OHLC, LTP) - more conservative
+            'data': 0.5,         # 2 requests/second (Historical data) - reduced from 5/sec
+            'option_chain': 5.0, # 1 request/5 seconds (Option chain) - more conservative
+            'default': 2.0       # Default for unknown endpoints
         }
 
         # Last request timestamp per endpoint
@@ -66,7 +67,7 @@ class GlobalRateLimiter:
         # Exponential backoff state
         self._backoff_until: Dict[str, float] = {}
         self._backoff_count: Dict[str, int] = {}
-        self._max_backoff_time = 60.0  # Maximum backoff: 60 seconds
+        self._max_backoff_time = 120.0  # Maximum backoff: 120 seconds (increased)
 
         # Circuit breaker state
         self._circuit_broken: Dict[str, bool] = {}
@@ -77,8 +78,35 @@ class GlobalRateLimiter:
 
         # Global request queue (all endpoints)
         self._global_queue = deque(maxlen=1000)
-        self._min_global_interval = 0.1  # Minimum 100ms between ANY requests
+        self._min_global_interval = 0.5  # Minimum 500ms between ANY requests (more conservative)
         self._last_global_request = 0.0
+
+        # Request deduplication - prevent concurrent duplicate requests
+        self._pending_requests = {}  # Track in-flight requests by key
+
+    def is_request_pending(self, request_key: str) -> bool:
+        """
+        Check if a request with the same key is already pending
+
+        Args:
+            request_key: Unique identifier for the request
+
+        Returns:
+            True if request is already pending, False otherwise
+        """
+        with self._lock:
+            return request_key in self._pending_requests
+
+    def mark_request_pending(self, request_key: str):
+        """Mark a request as pending"""
+        with self._lock:
+            self._pending_requests[request_key] = time.time()
+
+    def mark_request_complete(self, request_key: str):
+        """Mark a request as complete"""
+        with self._lock:
+            if request_key in self._pending_requests:
+                del self._pending_requests[request_key]
 
     def wait_for_slot(self, api_type: str) -> bool:
         """
@@ -145,25 +173,33 @@ class GlobalRateLimiter:
                 wait_time = min_interval - elapsed
                 time.sleep(wait_time)
 
-    def handle_rate_limit_error(self, api_type: str):
+    def handle_rate_limit_error(self, api_type: str, retry_after: Optional[int] = None):
         """
         Handle HTTP 429 (Rate Limit Exceeded) error with exponential backoff
 
         Args:
             api_type: Type of API endpoint that was rate limited
+            retry_after: Optional Retry-After header value in seconds
         """
         with self._lock:
             # Increment backoff count
             count = self._backoff_count.get(api_type, 0) + 1
             self._backoff_count[api_type] = count
 
-            # Calculate exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, 60s (max)
-            backoff_time = min(2 ** (count - 1), self._max_backoff_time)
-            self._backoff_until[api_type] = time.time() + backoff_time
+            # Use Retry-After header if provided, otherwise exponential backoff
+            if retry_after:
+                backoff_time = min(retry_after, self._max_backoff_time)
+                logger.warning(f"Rate limit hit for {api_type}. "
+                             f"Server requested retry after {backoff_time} seconds")
+            else:
+                # Calculate exponential backoff: 2s, 4s, 8s, 16s, 32s, 64s, 120s (max)
+                # Starting at 2s instead of 1s for more conservative approach
+                backoff_time = min(2 ** count, self._max_backoff_time)
+                logger.warning(f"Rate limit hit for {api_type}. "
+                             f"Backing off for {backoff_time:.2f} seconds "
+                             f"(attempt {count})")
 
-            logger.warning(f"Rate limit hit for {api_type}. "
-                         f"Backing off for {backoff_time:.2f} seconds "
-                         f"(attempt {count})")
+            self._backoff_until[api_type] = time.time() + backoff_time
 
             # Track failures for circuit breaker
             self._record_failure(api_type)

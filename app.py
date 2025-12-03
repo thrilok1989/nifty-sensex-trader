@@ -2348,21 +2348,33 @@ with tab5:
 
     # Add enhanced market data display
     st.subheader("🌐 Enhanced Market Data Analysis")
-    st.caption("Comprehensive market data from Dhan API + Yahoo Finance | India VIX, Sector Rotation, Global Markets, Intermarket Data, Gamma Squeeze, Intraday Timing")
+    st.caption("Comprehensive market data from Yahoo Finance | India VIX, Sector Rotation, Global Markets, Intermarket Data, Gamma Squeeze, Intraday Timing")
+
+    # Auto-load enhanced market data if not already loaded
+    if 'enhanced_market_data' not in st.session_state:
+        with st.spinner("Loading comprehensive market data from all sources..."):
+            try:
+                from enhanced_market_data import get_enhanced_market_data
+                enhanced_data = get_enhanced_market_data()
+                st.session_state.enhanced_market_data = enhanced_data
+            except Exception as e:
+                st.error(f"❌ Failed to auto-load enhanced data: {e}")
+                import traceback
+                st.error(traceback.format_exc())
 
     # Button to fetch enhanced data
     col1, col2, col3 = st.columns([2, 1, 1])
 
     with col1:
-        if st.button("📊 Fetch Enhanced Market Data", type="primary", use_container_width=True, key="fetch_enhanced_data_btn"):
-            with st.spinner("Fetching comprehensive market data from all sources..."):
+        if st.button("🔄 Refresh Enhanced Market Data", type="primary", use_container_width=True, key="fetch_enhanced_data_btn"):
+            with st.spinner("Refreshing comprehensive market data from all sources..."):
                 try:
                     from enhanced_market_data import get_enhanced_market_data
                     enhanced_data = get_enhanced_market_data()
                     st.session_state.enhanced_market_data = enhanced_data
-                    st.success("✅ Enhanced market data fetched successfully!")
+                    st.success("✅ Enhanced market data refreshed successfully!")
                 except Exception as e:
-                    st.error(f"❌ Failed to fetch enhanced data: {e}")
+                    st.error(f"❌ Failed to refresh enhanced data: {e}")
                     import traceback
                     st.error(traceback.format_exc())
 
@@ -2388,11 +2400,10 @@ with tab5:
             st.error(traceback.format_exc())
     else:
         st.info("""
-        👆 Click "Fetch Enhanced Market Data" to load comprehensive market analysis including:
+        📊 **Loading Enhanced Market Data...** This may take a few moments.
 
         **Data Sources:**
-        - 📊 **Dhan API:** India VIX, All Sector Indices (IT, Auto, Pharma, Metal, FMCG, Realty, Energy)
-        - 🌍 **Yahoo Finance:** Global Markets (S&P 500, Nasdaq, Dow, Nikkei, Hang Seng, etc.)
+        - 🌍 **Yahoo Finance:** India VIX, Sector Indices (IT, Auto, Pharma, Metal, FMCG, Realty, Energy), Global Markets (S&P 500, Nasdaq, Dow, Nikkei, Hang Seng, etc.)
         - 💰 **Intermarket:** USD Index, Crude Oil, Gold, USD/INR, US 10Y Treasury, Bitcoin
 
         **Advanced Analysis:**

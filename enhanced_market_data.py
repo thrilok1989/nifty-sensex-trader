@@ -48,56 +48,13 @@ class EnhancedMarketData:
 
     def fetch_india_vix(self) -> Dict[str, Any]:
         """
-        Fetch India VIX from Dhan API
+        Fetch India VIX from Yahoo Finance
 
         Returns:
             Dict with VIX data and sentiment
         """
-        if not self.dhan_fetcher:
-            return self._fetch_india_vix_yfinance()
-
-        try:
-            data = self.dhan_fetcher.fetch_ohlc_data(['INDIAVIX'])
-
-            if data.get('INDIAVIX', {}).get('success'):
-                vix_data = data['INDIAVIX']
-                vix_value = vix_data.get('last_price', 0)
-
-                # VIX Interpretation
-                if vix_value > 25:
-                    vix_sentiment = "HIGH FEAR"
-                    vix_bias = "BEARISH"
-                    vix_score = -75
-                elif vix_value > 20:
-                    vix_sentiment = "ELEVATED FEAR"
-                    vix_bias = "BEARISH"
-                    vix_score = -50
-                elif vix_value > 15:
-                    vix_sentiment = "MODERATE"
-                    vix_bias = "NEUTRAL"
-                    vix_score = 0
-                elif vix_value > 12:
-                    vix_sentiment = "LOW VOLATILITY"
-                    vix_bias = "BULLISH"
-                    vix_score = 40
-                else:
-                    vix_sentiment = "COMPLACENCY"
-                    vix_bias = "NEUTRAL"
-                    vix_score = 0
-
-                return {
-                    'success': True,
-                    'source': 'Dhan API',
-                    'value': vix_value,
-                    'sentiment': vix_sentiment,
-                    'bias': vix_bias,
-                    'score': vix_score,
-                    'timestamp': get_current_time_ist()
-                }
-            else:
-                return self._fetch_india_vix_yfinance()
-        except Exception as e:
-            return self._fetch_india_vix_yfinance()
+        # Always use Yahoo Finance for VIX data
+        return self._fetch_india_vix_yfinance()
 
     def _fetch_india_vix_yfinance(self) -> Dict[str, Any]:
         """Fallback: Fetch India VIX from Yahoo Finance"""

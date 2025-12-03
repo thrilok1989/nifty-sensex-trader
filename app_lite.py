@@ -22,9 +22,7 @@ from lite_helpers import (
     get_atm_zone_bias,
     format_number,
     get_bias_color,
-    get_bias_emoji,
-    get_pcr_from_supabase,
-    get_atm_zone_from_supabase
+    get_bias_emoji
 )
 
 # Page configuration
@@ -161,11 +159,11 @@ with st.sidebar:
     - ✅ Option Chain Bias
     - ✅ ATM Zone Bias
     - ✅ Overall Market Bias
+    - ✅ Direct API data fetching
 
     **Removed for Speed:**
     - ❌ Advanced Charts
     - ❌ Multiple Tabs
-    - ❌ Database Integration
     - ❌ Trade Logging
     """)
 
@@ -204,20 +202,9 @@ def load_data():
         if underlying in ['NIFTY', 'BANK', 'BANKNIFTY']:
             underlying_key = 'BANKNIFTY' if underlying == 'BANK' else underlying
 
-            # Try to fetch PCR data from Supabase first (faster and more reliable)
-            data['pcr_metrics'] = get_pcr_from_supabase(underlying_key)
-
-            # Try to fetch ATM zone data from Supabase first
-            data['atm_zone'] = get_atm_zone_from_supabase(underlying_key, num_strikes=11)
-
-            # Fallback to Dhan API if Supabase data not available or invalid
-            if not data['pcr_metrics']:
-                # Calculate PCR metrics from Dhan API
-                data['pcr_metrics'] = calculate_pcr_metrics(underlying_key)
-
-            if not data['atm_zone']:
-                # Calculate ATM zone bias from Dhan API
-                data['atm_zone'] = get_atm_zone_bias(underlying_key, num_strikes=5)
+            # Fetch data directly from Dhan API (no Supabase)
+            data['pcr_metrics'] = calculate_pcr_metrics(underlying_key)
+            data['atm_zone'] = get_atm_zone_bias(underlying_key, num_strikes=5)
 
     return data
 
@@ -369,16 +356,13 @@ def display_pcr_bias(data: Dict):
     st.markdown("## 📊 PCR ANALYSIS (Put-Call Ratio)")
 
     if not data['pcr_metrics']:
-        st.warning("⚠️ Unable to fetch option chain data for PCR analysis. Check Dhan API credentials or Supabase data.")
+        st.warning("⚠️ Unable to fetch option chain data for PCR analysis. Check Dhan API credentials.")
         return
 
     pcr = data['pcr_metrics']
 
-    # Display data source and timestamp
-    if pcr.get('timestamp'):
-        st.caption(f"📅 Data Source: Supabase | Last Updated: {pcr.get('timestamp')}")
-    else:
-        st.caption("📅 Data Source: Live API")
+    # Display data source
+    st.caption("📅 Data Source: Live Dhan API")
 
     # Display PCR bias
     bias = pcr.get('bias', 'NEUTRAL')
@@ -452,18 +436,15 @@ def display_atm_zone_bias(data: Dict):
     st.markdown("## 🎯 ATM ZONE BIAS (ATM ±5 Strikes)")
 
     if not data['atm_zone'] or not data['atm_zone'].get('strikes'):
-        st.warning("⚠️ Unable to calculate ATM zone bias. Check Dhan API credentials or Supabase data.")
+        st.warning("⚠️ Unable to calculate ATM zone bias. Check Dhan API credentials.")
         return
 
     atm_data = data['atm_zone']
     summary = atm_data.get('summary', {})
     strikes = atm_data.get('strikes', [])
 
-    # Display data source and timestamp
-    if summary.get('timestamp'):
-        st.caption(f"📅 Data Source: Supabase | Last Updated: {summary.get('timestamp')}")
-    else:
-        st.caption("📅 Data Source: Live API")
+    # Display data source
+    st.caption("📅 Data Source: Live Dhan API")
 
     # Display zone bias
     zone_bias = summary.get('zone_bias', 'NEUTRAL')

@@ -782,6 +782,9 @@ def _run_option_chain_analysis(NSE_INSTRUMENTS, show_progress=True):
     Returns: (success, errors)
     """
     errors = []
+    progress_bar = None
+    progress_text = None
+
     try:
         from nse_options_helpers import calculate_and_store_atm_zone_bias_silent
         from nse_options_analyzer import fetch_option_chain_data as fetch_oc
@@ -816,6 +819,11 @@ def _run_option_chain_analysis(NSE_INSTRUMENTS, show_progress=True):
 
         return True, []
     except Exception as e:
+        # Clean up progress indicators if they were created
+        if progress_bar is not None:
+            progress_bar.empty()
+        if progress_text is not None:
+            progress_text.empty()
         errors.append(f"Option Chain Analysis: {str(e)}")
         return False, errors
 

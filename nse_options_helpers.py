@@ -813,13 +813,29 @@ def display_overall_option_chain_analysis(NSE_INSTRUMENTS):
     st.header("🌐 Overall Market Option Chain Analysis")
     st.caption("Consolidated view of all instruments with PCR ratios and market bias")
 
-    # Fetch button
+    # Auto-fetch data if not available
+    if not st.session_state.get('overall_option_data'):
+        with st.spinner("Auto-loading option chain data for all instruments..."):
+            overall_data = {}
+            progress_bar = st.progress(0)
+            all_instruments = list(NSE_INSTRUMENTS['indices'].keys()) + list(NSE_INSTRUMENTS['stocks'].keys())
+
+            for idx, instrument in enumerate(all_instruments):
+                data = fetch_option_chain_data(instrument, NSE_INSTRUMENTS)
+                overall_data[instrument] = data
+                progress_bar.progress((idx + 1) / len(all_instruments))
+
+            st.session_state['overall_option_data'] = overall_data
+            progress_bar.empty()
+            st.success("✅ Data loaded successfully!")
+
+    # Manual refresh button
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.info("Click 'Fetch All Data' to get the latest option chain data for all instruments")
+        st.info("💡 Data auto-loads and refreshes every 60 seconds. Click 'Refresh Now' to update immediately.")
     with col2:
-        if st.button("🔄 Fetch All Data", type="primary", use_container_width=True):
-            with st.spinner("Fetching option chain data for all instruments..."):
+        if st.button("🔄 Refresh Now", type="primary", use_container_width=True):
+            with st.spinner("Refreshing option chain data..."):
                 overall_data = {}
                 progress_bar = st.progress(0)
                 all_instruments = list(NSE_INSTRUMENTS['indices'].keys()) + list(NSE_INSTRUMENTS['stocks'].keys())
@@ -830,7 +846,7 @@ def display_overall_option_chain_analysis(NSE_INSTRUMENTS):
                     progress_bar.progress((idx + 1) / len(all_instruments))
 
                 st.session_state['overall_option_data'] = overall_data
-                st.success("✅ Data fetched successfully!")
+                st.success("✅ Data refreshed successfully!")
                 st.rerun()
 
     st.divider()

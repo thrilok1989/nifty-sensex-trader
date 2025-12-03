@@ -37,7 +37,7 @@ def get_dhan_credentials():
         return None
 
 def get_telegram_credentials():
-    """Load Telegram credentials from secrets"""
+    """Load Telegram credentials from secrets with fallback to hardcoded values"""
     try:
         return {
             'bot_token': st.secrets["TELEGRAM"]["BOT_TOKEN"],
@@ -45,8 +45,14 @@ def get_telegram_credentials():
             'enabled': True
         }
     except Exception as e:
-        print(f"⚠️ Telegram credentials missing: {e}")
-        return {'enabled': False}
+        # Fallback to hardcoded credentials if secrets.toml is not available
+        print(f"⚠️ Telegram secrets.toml missing, using fallback credentials: {e}")
+        # These are the credentials used in other parts of the codebase
+        return {
+            'bot_token': "8133685842:AAGdHCpi9QRIsS-fWW5Y1AJvS95QL9xU",
+            'chat_id': "57096584",
+            'enabled': True
+        }
 
 # ═══════════════════════════════════════════════════════════════════════
 # MARKET HOURS SETTINGS (All times in IST - Indian Standard Time)

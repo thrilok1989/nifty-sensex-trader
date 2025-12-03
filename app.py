@@ -720,7 +720,7 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
                 if sensex_price is not None:
                     # Convert HTF data to list format
                     htf_data_list_sensex = []
-                    if st.session_state.htf_data_sensex:
+                    if st.session_state.htf_data_sensex and isinstance(st.session_state.htf_data_sensex, dict):
                         for timeframe, levels in st.session_state.htf_data_sensex.items():
                             if levels:
                                 htf_data_list_sensex.append({
@@ -1249,7 +1249,7 @@ with col1:
             st.caption(f"**VOB Bear:** {bear_strength['strength_score']}/100 {trend_emoji} {bear_strength['trend']}")
 
     # HTF S/R Status
-    if st.session_state.htf_data_nifty:
+    if st.session_state.htf_data_nifty and isinstance(st.session_state.htf_data_nifty, dict):
         from indicators.htf_sr_strength_tracker import HTFSRStrengthTracker
         htf_tracker = HTFSRStrengthTracker()
         df_nifty = get_cached_chart_data('^NSEI', '7d', '1m')
@@ -1298,7 +1298,7 @@ with col2:
             st.caption(f"**VOB Bear:** {bear_strength['strength_score']}/100 {trend_emoji} {bear_strength['trend']}")
 
     # HTF S/R Status
-    if st.session_state.htf_data_sensex:
+    if st.session_state.htf_data_sensex and isinstance(st.session_state.htf_data_sensex, dict):
         from indicators.htf_sr_strength_tracker import HTFSRStrengthTracker
         htf_tracker = HTFSRStrengthTracker()
         df_sensex = get_cached_chart_data('^BSESN', '7d', '1m')

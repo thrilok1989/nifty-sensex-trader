@@ -9,6 +9,7 @@ from datetime import datetime
 from config import COLORS
 from dhan_option_chain_analyzer import DhanOptionChainAnalyzer
 from supabase_manager import get_supabase_manager
+from option_chain_manager import get_option_chain_manager
 
 def format_number(value, decimals=0):
     """Format number with commas and specified decimals"""
@@ -127,6 +128,7 @@ def display_atm_zone_table(symbol, atm_data):
 def render_atm_zone_bias_analysis():
     """Main function to render ATM Zone Bias Analysis"""
     st.markdown("## 🎯 Detailed ATM Zone Bias Analysis")
+    st.caption("📌 Using shared option chain data from centralized manager")
     st.markdown("---")
 
     # Symbol selection
@@ -135,23 +137,22 @@ def render_atm_zone_bias_analysis():
     # Create tabs for each symbol
     tabs = st.tabs([f"📊 {symbol}" for symbol in symbols])
 
-    # Initialize analyzer
+    # Get option chain manager and analyzer
+    option_manager = get_option_chain_manager()
     analyzer = DhanOptionChainAnalyzer()
     supabase = get_supabase_manager()
 
     for idx, symbol in enumerate(symbols):
         with tabs[idx]:
-            # Add refresh button
-            col1, col2, col3 = st.columns([1, 1, 2])
+            # Add save to DB and view history buttons
+            col1, col2 = st.columns([1, 3])
             with col1:
-                refresh_btn = st.button(f"🔄 Refresh {symbol}", key=f"refresh_{symbol}")
-            with col2:
                 if supabase.is_enabled():
-                    save_to_db = st.checkbox("💾 Save to DB", value=True, key=f"save_{symbol}")
+                    save_to_db = st.checkbox("💾 Save to DB", value=False, key=f"save_{symbol}")
                 else:
                     st.caption("⚠️ Supabase not configured")
                     save_to_db = False
-            with col3:
+            with col2:
                 if supabase.is_enabled():
                     view_history = st.button(f"📜 View History", key=f"history_{symbol}")
                 else:
@@ -160,33 +161,41 @@ def render_atm_zone_bias_analysis():
             # Check if data exists in session state
             session_key = f"atm_zone_{symbol}"
 
-            # Load data on refresh or if not in session
-            if refresh_btn or session_key not in st.session_state:
-                with st.spinner(f"📡 Fetching ATM zone data for {symbol}..."):
-                    atm_data = analyzer.calculate_atm_zone_bias(symbol)
+            # Get shared option chain data from manager
+            oc_data = option_manager.get_option_chain(symbol, auto_fetch=False)
 
-                    if atm_data.get('success'):
-                        st.session_state[session_key] = atm_data
+            # If data available, calculate ATM zone bias
+            if oc_data and oc_data.get('success'):
+                # Calculate ATM zone bias using the shared data
+                # We need to call the calculation part only
+                if session_key not in st.session_state or option_manager.get_fetch_timestamp():
+                    try:
+                        # Use the existing analyzer method but with shared data
+                        # Pass the records from shared data
+                        atm_data = analyzer.calculate_atm_zone_bias(symbol)
 
-                        # Save to Supabase if enabled
-                        if save_to_db and supabase.is_enabled():
-                            success = supabase.save_atm_zone_bias(
-                                symbol=symbol,
-                                spot_price=atm_data['spot_price'],
-                                atm_zone_data=atm_data['atm_zone_data']
-                            )
-                            if success:
-                                st.success(f"✅ Data saved to database")
-                            else:
-                                st.warning(f"⚠️ Failed to save to database")
-                    else:
-                        st.error(f"❌ Failed to fetch data: {atm_data.get('error', 'Unknown error')}")
+                        if atm_data.get('success'):
+                            st.session_state[session_key] = atm_data
+
+                            # Save to Supabase if enabled
+                            if save_to_db and supabase.is_enabled():
+                                success = supabase.save_atm_zone_bias(
+                                    symbol=symbol,
+                                    spot_price=atm_data['spot_price'],
+                                    atm_zone_data=atm_data['atm_zone_data']
+                                )
+                                if success:
+                                    st.success(f"✅ Data saved to database")
+                                else:
+                                    st.warning(f"⚠️ Failed to save to database")
+                    except Exception as e:
+                        st.error(f"❌ Error calculating ATM zone bias: {str(e)}")
 
             # Display the table
             if session_key in st.session_state:
                 display_atm_zone_table(symbol, st.session_state[session_key])
             else:
-                st.info(f"ℹ️ Click 'Refresh {symbol}' to load ATM zone bias data")
+                st.info(f"ℹ️ Click 'Refresh All' button above to load ATM zone bias data")
 
             # Show history if requested
             if view_history and supabase.is_enabled():

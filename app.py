@@ -39,6 +39,9 @@ from data_cache_manager import (
 from vob_signal_generator import VOBSignalGenerator
 from htf_sr_signal_generator import HTFSRSignalGenerator
 from atm_zone_bias_component import render_atm_zone_bias_analysis
+from oi_winding_unwinding_component import render_oi_winding_unwinding_analysis
+from option_chain_manager import get_option_chain_manager, refresh_all_option_chain_data, preload_option_chain_data
+from intraday_momentum_component import render_intraday_momentum_analysis
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -1439,11 +1442,68 @@ else:
 st.divider()
 
 # ═══════════════════════════════════════════════════════════════════════
+# CENTRALIZED OPTION CHAIN DATA MANAGEMENT
+# ═══════════════════════════════════════════════════════════════════════
+
+# Get option chain manager
+option_manager = get_option_chain_manager()
+
+# Preload option chain data on first load
+if option_manager.is_data_stale():
+    with st.spinner("📡 Loading option chain data for all indices..."):
+        preload_option_chain_data()
+
+# Display cache status and refresh button
+st.markdown("### 📊 Option Chain Data Status")
+col1, col2, col3, col4, col5 = st.columns([2, 1.5, 1.5, 1.5, 1])
+
+cache_status = option_manager.get_cache_status()
+
+with col1:
+    if cache_status['is_fetching']:
+        st.info("⏳ Fetching data...")
+    elif cache_status['last_fetch']:
+        time_str = cache_status['last_fetch'].strftime('%I:%M:%S %p') if cache_status['last_fetch'] else 'Never'
+        st.metric("Last Updated", time_str)
+    else:
+        st.warning("❌ No data loaded")
+
+with col2:
+    st.metric("Symbols Loaded", f"{cache_status['total_success']}/{len(option_manager.SYMBOLS)}")
+
+with col3:
+    status_emoji = "🟢" if not cache_status['is_stale'] else "🟡"
+    status_text = "Fresh" if not cache_status['is_stale'] else "Stale"
+    st.metric("Data Status", f"{status_emoji} {status_text}")
+
+with col4:
+    if cache_status['symbols_success']:
+        st.caption("✓ " + ", ".join(cache_status['symbols_success']))
+    else:
+        st.caption("No data")
+
+with col5:
+    if st.button("🔄 Refresh All", use_container_width=True, type="primary"):
+        with st.spinner("📡 Fetching latest option chain data..."):
+            result = refresh_all_option_chain_data()
+            success_count = sum(1 for d in result.values() if d.get('success'))
+            if success_count > 0:
+                st.success(f"✅ Refreshed {success_count} indices successfully!")
+                st.rerun()
+            else:
+                st.error("❌ Failed to refresh data. Please try again.")
+
+st.markdown("---")
+st.caption("💡 **Tip:** All tabs use the same data. Click 'Refresh All' once to update data across all analyses.")
+
+st.divider()
+
+# ═══════════════════════════════════════════════════════════════════════
 # TABS - USING NATIVE STREAMLIT TABS FOR BETTER UX
 # ═══════════════════════════════════════════════════════════════════════
 
 # Native tabs - work seamlessly on mobile and desktop, no multiple clicks needed
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
     "🌟 Overall Market Sentiment",
     "🎯 Trade Setup",
     "📊 Active Signals",
@@ -1452,7 +1512,9 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "📊 Option Chain Analysis",
     "📈 Advanced Chart Analysis",
     "🌐 Enhanced Market Analysis",
-    "🎯 ATM Zone Bias"
+    "🎯 ATM Zone Bias",
+    "🔥 OI Winding/Unwinding",
+    "📊 Intraday Momentum"
 ])
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -3277,6 +3339,20 @@ with tab8:
 
 with tab9:
     render_atm_zone_bias_analysis()
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 10: OI WINDING & UNWINDING ANALYSIS
+# ═══════════════════════════════════════════════════════════════════════
+
+with tab10:
+    render_oi_winding_unwinding_analysis()
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 11: INTRADAY MOMENTUM TRACKER
+# ═══════════════════════════════════════════════════════════════════════
+
+with tab11:
+    render_intraday_momentum_analysis()
 
 # ═══════════════════════════════════════════════════════════════════════
 # FOOTER

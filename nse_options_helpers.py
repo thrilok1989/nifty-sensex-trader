@@ -547,11 +547,10 @@ def fetch_option_chain_data(instrument, NSE_INSTRUMENTS):
 
 def analyze_instrument(instrument, NSE_INSTRUMENTS):
     try:
-        # Check if market is within trading hours using centralized scheduler
+        # Show info banner if market is closed but allow analysis to continue with existing data
         if not is_within_trading_hours():
             status = scheduler.get_market_status()
-            st.warning(f"⏳ Market Closed - Trading Hours: 8:30 AM - 3:45 PM IST (Mon-Fri)")
-            return
+            st.info(f"ℹ️ Market Closed - Showing last available data. Use the Refresh Data button to update.")
 
         # Use Dhan API instead of NSE
         from dhan_data_fetcher import DhanDataFetcher

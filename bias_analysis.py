@@ -660,15 +660,24 @@ class BiasAnalysisPro:
     # COMPREHENSIVE BIAS ANALYSIS
     # =========================================================================
 
-    def analyze_all_bias_indicators(self, symbol: str = "^NSEI") -> Dict:
+    def analyze_all_bias_indicators(self, symbol: str = "^NSEI", data: Optional[pd.DataFrame] = None) -> Dict:
         """
         Analyze all 8 bias indicators:
         Fast (8): Volume Delta, HVP, VOB, Order Blocks, RSI, DMI, VIDYA, MFI
+
+        Args:
+            symbol: Symbol to analyze (e.g., "^NSEI")
+            data: Optional pre-fetched DataFrame. If provided, will use this instead of fetching new data.
         """
 
-        print(f"Fetching data for {symbol}...")
-        # Use 7d period with 5m interval (Yahoo Finance limitation for intraday data)
-        df = self.fetch_data(symbol, period='7d', interval='5m')
+        # Use provided data if available, otherwise fetch it
+        if data is not None:
+            print(f"Using provided data for {symbol}...")
+            df = data
+        else:
+            print(f"Fetching data for {symbol}...")
+            # Use 7d period with 5m interval (Yahoo Finance limitation for intraday data)
+            df = self.fetch_data(symbol, period='7d', interval='5m')
 
         if df.empty or len(df) < 100:
             error_msg = f'Insufficient data (fetched {len(df)} candles, need at least 100)'

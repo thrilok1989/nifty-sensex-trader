@@ -19,6 +19,10 @@ import os
 from typing import Dict, Any, Optional
 from market_hours_scheduler import is_within_trading_hours, scheduler
 import requests
+import pytz
+
+# Indian Standard Time (IST)
+IST = pytz.timezone('Asia/Kolkata')
 
 # === Telegram Config ===
 TELEGRAM_BOT_TOKEN = "8133685842:AAGdHCpi9QRIsS-fWW5Y1AJvS95QL9xU"
@@ -980,9 +984,9 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     # ENHANCED MARKET ANALYSIS SUMMARY
     # ═══════════════════════════════════════════════════════════════════
 
-    # Get last updated time
-    last_update_time = datetime.fromtimestamp(st.session_state.sentiment_last_refresh)
-    last_updated_str = last_update_time.strftime('%Y-%m-%d %H:%M:%S')
+    # Get last updated time in IST
+    last_update_time = datetime.fromtimestamp(st.session_state.sentiment_last_refresh, tz=IST)
+    last_updated_str = last_update_time.strftime('%Y-%m-%d %H:%M:%S IST')
 
     # Get sentiment data
     sentiment = result['overall_sentiment']

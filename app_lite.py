@@ -14,7 +14,7 @@ from typing import Dict, Optional
 # Import from existing modules
 from config import IST
 from bias_analysis import BiasAnalysisPro
-from market_hours_scheduler import is_market_hours
+from market_hours_scheduler import is_market_open
 from lite_helpers import (
     get_current_price,
     get_intraday_data,
@@ -170,7 +170,7 @@ with st.sidebar:
     """)
 
 # Market status
-market_open = is_market_hours()
+market_open = is_market_open()
 market_status_html = f"""
 <div class="market-status {'market-open' if market_open else 'market-closed'}">
     {'🟢 MARKET OPEN' if market_open else '🔴 MARKET CLOSED'}

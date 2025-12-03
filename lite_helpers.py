@@ -13,7 +13,7 @@ import time
 
 # Import from existing modules
 from config import DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN, IST
-from market_hours_scheduler import is_market_hours
+from market_hours_scheduler import is_market_open
 
 
 def get_current_price(symbol: str) -> Optional[float]:

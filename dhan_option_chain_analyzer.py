@@ -18,6 +18,7 @@ class DhanOptionChainAnalyzer:
             'NIFTY': '13',
             'BANKNIFTY': '25',
             'FINNIFTY': '27',
+            'SENSEX': '51',
         }
 
     def fetch_option_chain(self, symbol):
@@ -199,6 +200,173 @@ class DhanOptionChainAnalyzer:
                 'volume_bias': volume_bias,
                 'overall_bias': overall_bias,
                 'bias_score': bias_score,
+                'timestamp': get_current_time_ist()
+            }
+
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def calculate_atm_zone_bias(self, symbol, atm_range=5):
+        """
+        Calculate ATM zone bias with strike-wise PCR for ATM ±5 strikes
+
+        Args:
+            symbol: Trading symbol (NIFTY, BANKNIFTY, etc.)
+            atm_range: Number of strikes above and below ATM (default 5)
+
+        Returns:
+            Dictionary with ATM zone bias data
+        """
+        oc_data = self.fetch_option_chain(symbol)
+
+        if not oc_data['success']:
+            return oc_data
+
+        try:
+            records = oc_data['records']
+            spot_price = oc_data['spot_price']
+            current_expiry = oc_data['current_expiry']
+
+            # Strike interval based on symbol
+            strike_intervals = {
+                'NIFTY': 50,
+                'BANKNIFTY': 100,
+                'FINNIFTY': 50,
+                'SENSEX': 100
+            }
+            strike_interval = strike_intervals.get(symbol, 50)
+
+            # Find ATM strike (round spot price to nearest strike interval)
+            atm_strike = round(spot_price / strike_interval) * strike_interval
+
+            # Generate ATM ±5 strikes
+            target_strikes = [
+                atm_strike + (i * strike_interval)
+                for i in range(-atm_range, atm_range + 1)
+            ]
+
+            # Parse option chain data and extract strike-wise data
+            strike_data_map = {}
+
+            # Handle list format
+            if isinstance(records, list):
+                for record in records:
+                    strike_price = record.get('strike_price', record.get('strikePrice', 0))
+
+                    if strike_price in target_strikes:
+                        ce_data = record.get('call_options', record.get('CE', {}))
+                        pe_data = record.get('put_options', record.get('PE', {}))
+
+                        strike_data_map[strike_price] = {
+                            'ce_oi': ce_data.get('oi', ce_data.get('openInterest', 0)),
+                            'ce_oi_change': ce_data.get('oi_change', ce_data.get('changeinOpenInterest', 0)),
+                            'ce_volume': ce_data.get('volume', ce_data.get('totalTradedVolume', 0)),
+                            'pe_oi': pe_data.get('oi', pe_data.get('openInterest', 0)),
+                            'pe_oi_change': pe_data.get('oi_change', pe_data.get('changeinOpenInterest', 0)),
+                            'pe_volume': pe_data.get('volume', pe_data.get('totalTradedVolume', 0))
+                        }
+
+            # Handle dict format
+            elif isinstance(records, dict):
+                for strike_key, strike_record in records.items():
+                    if isinstance(strike_record, dict):
+                        strike_price = strike_record.get('strike_price', strike_record.get('strikePrice', 0))
+
+                        if strike_price in target_strikes:
+                            ce_data = strike_record.get('CE', {})
+                            pe_data = strike_record.get('PE', {})
+
+                            strike_data_map[strike_price] = {
+                                'ce_oi': ce_data.get('openInterest', ce_data.get('oi', 0)),
+                                'ce_oi_change': ce_data.get('changeinOpenInterest', ce_data.get('oi_change', 0)),
+                                'ce_volume': ce_data.get('volume', ce_data.get('totalTradedVolume', 0)),
+                                'pe_oi': pe_data.get('openInterest', pe_data.get('oi', 0)),
+                                'pe_oi_change': pe_data.get('changeinOpenInterest', pe_data.get('oi_change', 0)),
+                                'pe_volume': pe_data.get('volume', pe_data.get('totalTradedVolume', 0))
+                            }
+
+            # Calculate PCR for each strike and prepare result
+            atm_zone_data = []
+
+            for strike_price in target_strikes:
+                strike_offset = int((strike_price - atm_strike) / strike_interval)
+
+                if strike_price in strike_data_map:
+                    data = strike_data_map[strike_price]
+
+                    # Calculate strike-wise PCR
+                    pcr_oi = data['pe_oi'] / data['ce_oi'] if data['ce_oi'] > 0 else 0
+                    pcr_oi_change = data['pe_oi_change'] / data['ce_oi_change'] if data['ce_oi_change'] != 0 else 0
+                    pcr_volume = data['pe_volume'] / data['ce_volume'] if data['ce_volume'] > 0 else 0
+
+                    # Determine strike bias
+                    def get_strike_bias(pcr_oi, pcr_oi_change):
+                        # Weighted bias calculation
+                        score = 0
+                        if pcr_oi > 1.2:
+                            score += 3
+                        elif pcr_oi < 0.8:
+                            score -= 3
+
+                        if pcr_oi_change > 1.2:
+                            score += 5
+                        elif pcr_oi_change < 0.8:
+                            score -= 5
+
+                        if score >= 5:
+                            return "BULLISH"
+                        elif score <= -5:
+                            return "BEARISH"
+                        else:
+                            return "NEUTRAL"
+
+                    strike_bias = get_strike_bias(pcr_oi, pcr_oi_change)
+
+                    atm_zone_data.append({
+                        'strike_price': strike_price,
+                        'strike_offset': strike_offset,
+                        'ce_oi': data['ce_oi'],
+                        'pe_oi': data['pe_oi'],
+                        'ce_oi_change': data['ce_oi_change'],
+                        'pe_oi_change': data['pe_oi_change'],
+                        'ce_volume': data['ce_volume'],
+                        'pe_volume': data['pe_volume'],
+                        'pcr_oi': round(pcr_oi, 4),
+                        'pcr_oi_change': round(pcr_oi_change, 4),
+                        'pcr_volume': round(pcr_volume, 4),
+                        'strike_bias': strike_bias
+                    })
+                else:
+                    # No data for this strike
+                    atm_zone_data.append({
+                        'strike_price': strike_price,
+                        'strike_offset': strike_offset,
+                        'ce_oi': 0,
+                        'pe_oi': 0,
+                        'ce_oi_change': 0,
+                        'pe_oi_change': 0,
+                        'ce_volume': 0,
+                        'pe_volume': 0,
+                        'pcr_oi': 0,
+                        'pcr_oi_change': 0,
+                        'pcr_volume': 0,
+                        'strike_bias': 'NEUTRAL'
+                    })
+
+            # Sort by strike offset
+            atm_zone_data.sort(key=lambda x: x['strike_offset'])
+
+            return {
+                'success': True,
+                'symbol': symbol,
+                'spot_price': spot_price,
+                'atm_strike': atm_strike,
+                'expiry': current_expiry,
+                'strike_interval': strike_interval,
+                'atm_zone_data': atm_zone_data,
                 'timestamp': get_current_time_ist()
             }
 

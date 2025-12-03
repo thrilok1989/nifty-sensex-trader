@@ -54,6 +54,22 @@ def get_telegram_credentials():
             'enabled': True
         }
 
+def get_supabase_credentials():
+    """Load Supabase credentials from secrets"""
+    try:
+        return {
+            'url': st.secrets["SUPABASE"]["URL"],
+            'key': st.secrets["SUPABASE"]["KEY"],
+            'enabled': True
+        }
+    except Exception as e:
+        print(f"⚠️ Supabase credentials missing: {e}")
+        return {
+            'url': None,
+            'key': None,
+            'enabled': False
+        }
+
 # ═══════════════════════════════════════════════════════════════════════
 # MARKET HOURS SETTINGS (All times in IST - Indian Standard Time)
 # ═══════════════════════════════════════════════════════════════════════
@@ -123,5 +139,6 @@ def get_all_credentials():
     """Get all credentials in a single call"""
     return {
         'dhan': get_dhan_credentials(),
-        'telegram': get_telegram_credentials()
+        'telegram': get_telegram_credentials(),
+        'supabase': get_supabase_credentials()
     }

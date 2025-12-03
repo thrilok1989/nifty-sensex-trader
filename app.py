@@ -204,6 +204,16 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ═══════════════════════════════════════════════════════════════════════
+# PERFORMANCE OPTIMIZATIONS SUMMARY
+# ═══════════════════════════════════════════════════════════════════════
+# 1. Market status caching (30s TTL) - Avoids repeated get_market_status() calls
+# 2. NSE instruments initialization - Only runs once per session (not on every rerun)
+# 3. Option chain preloading - Non-blocking background load (no UI spinner)
+# 4. Background data loading - Threaded preload for NIFTY/SENSEX data
+# 5. Lazy loading for heavy analyzers - BiasAnalyzer, OptionChainAnalyzer, ChartAnalysis
+# ═══════════════════════════════════════════════════════════════════════
+
 # Performance optimization: Reduce widget refresh overhead
 # This improves app responsiveness and reduces lag
 if 'performance_mode' not in st.session_state:
@@ -303,26 +313,18 @@ NSE_INSTRUMENTS = {
 }
 
 # Initialize session states for all NSE instruments
-for category in NSE_INSTRUMENTS:
-    for instrument in NSE_INSTRUMENTS[category]:
-        if f'{instrument}_price_data' not in st.session_state:
+# Performance optimization: Only run this loop once per session
+if 'nse_instruments_initialized' not in st.session_state:
+    for category in NSE_INSTRUMENTS:
+        for instrument in NSE_INSTRUMENTS[category]:
             st.session_state[f'{instrument}_price_data'] = pd.DataFrame(columns=["Time", "Spot"])
-
-        if f'{instrument}_trade_log' not in st.session_state:
             st.session_state[f'{instrument}_trade_log'] = []
-
-        if f'{instrument}_call_log_book' not in st.session_state:
             st.session_state[f'{instrument}_call_log_book'] = []
-
-        if f'{instrument}_support_zone' not in st.session_state:
             st.session_state[f'{instrument}_support_zone'] = (None, None)
-
-        if f'{instrument}_resistance_zone' not in st.session_state:
             st.session_state[f'{instrument}_resistance_zone'] = (None, None)
 
-# Initialize overall option chain data
-if 'overall_option_data' not in st.session_state:
     st.session_state['overall_option_data'] = {}
+    st.session_state['nse_instruments_initialized'] = True
 
 # ═══════════════════════════════════════════════════════════════════════
 # AUTO REFRESH & PERFORMANCE OPTIMIZATIONS
@@ -351,6 +353,13 @@ st.caption(APP_SUBTITLE)
 # MARKET HOURS WARNING BANNER
 # ═══════════════════════════════════════════════════════════════════════
 
+# Performance optimization: Cache market status to avoid repeated calls
+if 'cached_market_status' not in st.session_state or time.time() - st.session_state.get('market_status_cache_time', 0) > 30:
+    st.session_state.cached_market_status = get_market_status()
+    st.session_state.market_status_cache_time = time.time()
+
+market_status = st.session_state.cached_market_status
+
 if MARKET_HOURS_ENABLED:
     should_run, reason = should_run_app()
 
@@ -368,12 +377,10 @@ if MARKET_HOURS_ENABLED:
         """)
 
         # Show next market open time if available
-        market_status = get_market_status()
         if 'next_open' in market_status:
             st.info(f"📅 **Next Market Open:** {market_status['next_open']}")
     else:
         # Show market session info when market is open
-        market_status = get_market_status()
         session = market_status.get('session', 'unknown')
 
         if session == 'pre_market':
@@ -388,9 +395,8 @@ if MARKET_HOURS_ENABLED:
 
 with st.sidebar:
     st.header("⚙️ System Status")
-    
-    # Market status
-    market_status = get_market_status()
+
+    # Market status (using cached value for performance)
     if market_status['open']:
         st.success(f"{market_status['message']} | {market_status['time']}")
     else:
@@ -1448,10 +1454,31 @@ st.divider()
 # Get option chain manager
 option_manager = get_option_chain_manager()
 
-# Preload option chain data on first load
+# Preload option chain data on first load (non-blocking for better performance)
+# Performance optimization: Load in background to avoid blocking UI
 if option_manager.is_data_stale():
-    with st.spinner("📡 Loading option chain data for all indices..."):
-        preload_option_chain_data()
+    # Reset preload flag when data becomes stale
+    if 'option_chain_preload_started' in st.session_state:
+        if st.session_state.get('last_option_chain_stale_check', 0) != option_manager.get_fetch_timestamp():
+            st.session_state.option_chain_preload_started = False
+
+    if 'option_chain_preload_started' not in st.session_state or not st.session_state.option_chain_preload_started:
+        # Start background load without blocking
+        import threading
+        def background_preload():
+            try:
+                preload_option_chain_data()
+                st.session_state.last_option_chain_stale_check = option_manager.get_fetch_timestamp()
+            except Exception as e:
+                logger.error(f"Background option chain preload failed: {e}")
+
+        thread = threading.Thread(target=background_preload, daemon=True)
+        thread.start()
+        st.session_state.option_chain_preload_started = True
+
+        # Show non-blocking info
+        if not option_manager.get_cache_status()['symbols_cached']:
+            st.info("📡 Loading option chain data in background...")
 
 # Display cache status and refresh button
 st.markdown("### 📊 Option Chain Data Status")

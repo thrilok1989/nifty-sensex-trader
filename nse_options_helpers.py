@@ -1200,6 +1200,40 @@ def display_overall_option_chain_analysis(NSE_INSTRUMENTS):
         4. Use the insights for trading decisions
         """)
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # ENHANCED MARKET DATA INTEGRATION
+    # ═══════════════════════════════════════════════════════════════════════
+
+    st.markdown("---")
+    st.subheader("🌐 Enhanced Market Data")
+    st.caption("Comprehensive market analysis from Yahoo Finance")
+
+    # Display enhanced market data if available in session state
+    if 'enhanced_market_data' in st.session_state:
+        try:
+            from enhanced_market_display import render_enhanced_market_data_tab
+            render_enhanced_market_data_tab(st.session_state.enhanced_market_data)
+        except Exception as e:
+            st.error(f"❌ Error displaying enhanced data: {e}")
+            import traceback
+            st.error(traceback.format_exc())
+    else:
+        # Provide button to load enhanced market data
+        st.info("Enhanced market data not loaded. Go to the '🌐 Enhanced Market Analysis' tab to load it, or click the button below.")
+
+        if st.button("🔄 Load Enhanced Market Data", type="primary", use_container_width=True, key="load_enhanced_data_overall"):
+            with st.spinner("Loading comprehensive market data from all sources..."):
+                try:
+                    from enhanced_market_data import get_enhanced_market_data
+                    enhanced_data = get_enhanced_market_data()
+                    st.session_state.enhanced_market_data = enhanced_data
+                    st.success("✅ Enhanced market data loaded successfully!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Failed to load enhanced data: {e}")
+                    import traceback
+                    st.error(traceback.format_exc())
+
 
 def calculate_max_pain(df_full_chain):
     """

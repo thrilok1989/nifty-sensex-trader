@@ -38,6 +38,7 @@ from data_cache_manager import (
 )
 from vob_signal_generator import VOBSignalGenerator
 from htf_sr_signal_generator import HTFSRSignalGenerator
+from atm_zone_bias_component import render_atm_zone_bias_analysis
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -1442,7 +1443,7 @@ st.divider()
 # ═══════════════════════════════════════════════════════════════════════
 
 # Native tabs - work seamlessly on mobile and desktop, no multiple clicks needed
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "🌟 Overall Market Sentiment",
     "🎯 Trade Setup",
     "📊 Active Signals",
@@ -1450,7 +1451,8 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🎯 Bias Analysis Pro",
     "📊 Option Chain Analysis",
     "📈 Advanced Chart Analysis",
-    "🌐 Enhanced Market Analysis"
+    "🌐 Enhanced Market Analysis",
+    "🎯 ATM Zone Bias"
 ])
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -3268,6 +3270,13 @@ with tab8:
 
         **All data is presented in comprehensive tables with bias scores and trading insights!**
         """)
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 9: ATM ZONE BIAS ANALYSIS
+# ═══════════════════════════════════════════════════════════════════════
+
+with tab9:
+    render_atm_zone_bias_analysis()
 
 # ═══════════════════════════════════════════════════════════════════════
 # FOOTER

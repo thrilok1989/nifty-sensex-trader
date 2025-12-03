@@ -39,6 +39,7 @@ from data_cache_manager import (
 from vob_signal_generator import VOBSignalGenerator
 from htf_sr_signal_generator import HTFSRSignalGenerator
 from atm_zone_bias_component import render_atm_zone_bias_analysis
+from oi_winding_unwinding_component import render_oi_winding_unwinding_analysis
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -1443,7 +1444,7 @@ st.divider()
 # ═══════════════════════════════════════════════════════════════════════
 
 # Native tabs - work seamlessly on mobile and desktop, no multiple clicks needed
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "🌟 Overall Market Sentiment",
     "🎯 Trade Setup",
     "📊 Active Signals",
@@ -1452,7 +1453,8 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "📊 Option Chain Analysis",
     "📈 Advanced Chart Analysis",
     "🌐 Enhanced Market Analysis",
-    "🎯 ATM Zone Bias"
+    "🎯 ATM Zone Bias",
+    "🔥 OI Winding/Unwinding"
 ])
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -3277,6 +3279,13 @@ with tab8:
 
 with tab9:
     render_atm_zone_bias_analysis()
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 10: OI WINDING & UNWINDING ANALYSIS
+# ═══════════════════════════════════════════════════════════════════════
+
+with tab10:
+    render_oi_winding_unwinding_analysis()
 
 # ═══════════════════════════════════════════════════════════════════════
 # FOOTER

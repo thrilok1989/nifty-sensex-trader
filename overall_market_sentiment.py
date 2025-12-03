@@ -938,6 +938,20 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
                 for error in errors:
                     st.warning(f"⚠️ {error}")
 
+    # Check if option chain data is missing during trading hours and fetch it
+    # This handles the case where app was loaded when market was closed but is now open
+    if (is_within_trading_hours() and
+        NSE_INSTRUMENTS is not None and
+        ('overall_option_data' not in st.session_state or not st.session_state.overall_option_data)):
+        with st.spinner("🔄 Fetching option chain data for PCR and Advanced Metrics analysis..."):
+            success_oc, errors_oc = _run_option_chain_analysis(NSE_INSTRUMENTS, show_progress=False)
+            if success_oc:
+                st.session_state.sentiment_last_refresh = time.time()
+                st.rerun()
+            else:
+                for error in errors_oc:
+                    st.warning(f"⚠️ {error}")
+
     # Auto-refresh based on market session (skip when market is closed for performance)
     current_time = time.time()
     time_since_refresh = current_time - st.session_state.sentiment_last_refresh

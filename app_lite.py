@@ -225,7 +225,9 @@ def display_technical_bias(data: Dict):
     """Display Technical Bias section"""
     st.markdown("## 🎯 TECHNICAL BIAS (8 Indicators)")
 
-    if data['intraday_data'] is None or data['intraday_data'].empty:
+    # Get intraday data and check if it's None or empty
+    intraday_data = data.get('intraday_data')
+    if intraday_data is None or (isinstance(intraday_data, pd.DataFrame) and intraday_data.empty):
         st.warning("⚠️ Unable to fetch intraday data for technical analysis")
         return
 
@@ -236,7 +238,7 @@ def display_technical_bias(data: Dict):
 
             # Analyze bias
             bias_result = analyzer.analyze_all_bias_indicators(
-                data['intraday_data'],
+                intraday_data,
                 symbol=data['underlying']
             )
 

@@ -18,8 +18,6 @@ from market_hours_scheduler import is_market_open
 from lite_helpers import (
     get_current_price,
     get_intraday_data,
-    fetch_dhan_option_chain,
-    get_nearest_expiry,
     calculate_pcr_metrics,
     get_atm_zone_bias,
     format_number,
@@ -212,23 +210,14 @@ def load_data():
             # Try to fetch ATM zone data from Supabase first
             data['atm_zone'] = get_atm_zone_from_supabase(underlying_key, num_strikes=11)
 
-            # Fallback to API if Supabase data not available
-            if not data['pcr_metrics'] or not data['atm_zone']:
-                expiry = get_nearest_expiry()
-                data['option_chain'] = fetch_dhan_option_chain(underlying_key, expiry)
+            # Fallback to Dhan API if Supabase data not available or invalid
+            if not data['pcr_metrics']:
+                # Calculate PCR metrics from Dhan API
+                data['pcr_metrics'] = calculate_pcr_metrics(underlying_key)
 
-                if data['option_chain']:
-                    # Calculate PCR metrics from API data if not from Supabase
-                    if not data['pcr_metrics']:
-                        data['pcr_metrics'] = calculate_pcr_metrics(data['option_chain'])
-
-                    # Calculate ATM zone bias from API data if not from Supabase
-                    if not data['atm_zone'] and data['current_price']:
-                        data['atm_zone'] = get_atm_zone_bias(
-                            data['option_chain'],
-                            data['current_price'],
-                            num_strikes=5
-                        )
+            if not data['atm_zone']:
+                # Calculate ATM zone bias from Dhan API
+                data['atm_zone'] = get_atm_zone_bias(underlying_key, num_strikes=5)
 
     return data
 
@@ -380,7 +369,7 @@ def display_pcr_bias(data: Dict):
     st.markdown("## 📊 PCR ANALYSIS (Put-Call Ratio)")
 
     if not data['pcr_metrics']:
-        st.warning("⚠️ Unable to fetch option chain data for PCR analysis")
+        st.warning("⚠️ Unable to fetch option chain data for PCR analysis. Check Dhan API credentials or Supabase data.")
         return
 
     pcr = data['pcr_metrics']
@@ -463,7 +452,7 @@ def display_atm_zone_bias(data: Dict):
     st.markdown("## 🎯 ATM ZONE BIAS (ATM ±5 Strikes)")
 
     if not data['atm_zone'] or not data['atm_zone'].get('strikes'):
-        st.warning("⚠️ Unable to calculate ATM zone bias")
+        st.warning("⚠️ Unable to calculate ATM zone bias. Check Dhan API credentials or Supabase data.")
         return
 
     atm_data = data['atm_zone']

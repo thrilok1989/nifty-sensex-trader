@@ -312,26 +312,154 @@ def display_call_log_book(instrument):
             mime="text/csv"
         )
 
+def convert_dhan_to_nse_format(dhan_data, expiry):
+    """
+    Convert Dhan API option chain format to NSE-like format for compatibility
+
+    Args:
+        dhan_data: Option chain data from Dhan API
+        expiry: Expiry date string
+
+    Returns:
+        List of records in NSE format
+    """
+    records = []
+
+    # Dhan API returns data as a dict/list with strike information
+    # We need to convert it to NSE format: list of dicts with 'CE' and 'PE' keys
+
+    if isinstance(dhan_data, list):
+        # If it's already a list, process each item
+        for item in dhan_data:
+            record = {}
+
+            # Handle CE data
+            if 'call_options' in item or 'CE' in item:
+                ce_data = item.get('call_options', item.get('CE', {}))
+                record['CE'] = {
+                    'strikePrice': item.get('strike_price', item.get('strikePrice', 0)),
+                    'expiryDate': expiry,
+                    'openInterest': ce_data.get('oi', ce_data.get('openInterest', 0)),
+                    'changeinOpenInterest': ce_data.get('oi_change', ce_data.get('changeinOpenInterest', 0)),
+                    'totalTradedVolume': ce_data.get('volume', ce_data.get('totalTradedVolume', 0)),
+                    'impliedVolatility': ce_data.get('iv', ce_data.get('impliedVolatility', 0)),
+                    'lastPrice': ce_data.get('ltp', ce_data.get('lastPrice', 0)),
+                    'bidQty': ce_data.get('bid_qty', ce_data.get('bidQty', 0)),
+                    'askQty': ce_data.get('ask_qty', ce_data.get('askQty', 0))
+                }
+
+            # Handle PE data
+            if 'put_options' in item or 'PE' in item:
+                pe_data = item.get('put_options', item.get('PE', {}))
+                record['PE'] = {
+                    'strikePrice': item.get('strike_price', item.get('strikePrice', 0)),
+                    'expiryDate': expiry,
+                    'openInterest': pe_data.get('oi', pe_data.get('openInterest', 0)),
+                    'changeinOpenInterest': pe_data.get('oi_change', pe_data.get('changeinOpenInterest', 0)),
+                    'totalTradedVolume': pe_data.get('volume', pe_data.get('totalTradedVolume', 0)),
+                    'impliedVolatility': pe_data.get('iv', pe_data.get('impliedVolatility', 0)),
+                    'lastPrice': pe_data.get('ltp', pe_data.get('lastPrice', 0)),
+                    'bidQty': pe_data.get('bid_qty', pe_data.get('bidQty', 0)),
+                    'askQty': pe_data.get('ask_qty', pe_data.get('askQty', 0))
+                }
+
+            if record:
+                records.append(record)
+
+    elif isinstance(dhan_data, dict):
+        # If it's a dict, convert each strike to NSE format
+        for strike_key, strike_data in dhan_data.items():
+            record = {}
+            strike_price = 0
+
+            # Try to extract strike price
+            if isinstance(strike_data, dict):
+                # Check for CE data
+                if 'CE' in strike_data:
+                    ce = strike_data['CE']
+                    strike_price = strike_price or ce.get('strikePrice', ce.get('strike_price', 0))
+                    record['CE'] = {
+                        'strikePrice': strike_price,
+                        'expiryDate': expiry,
+                        'openInterest': ce.get('openInterest', ce.get('oi', 0)),
+                        'changeinOpenInterest': ce.get('changeinOpenInterest', ce.get('oi_change', 0)),
+                        'totalTradedVolume': ce.get('totalTradedVolume', ce.get('volume', 0)),
+                        'impliedVolatility': ce.get('impliedVolatility', ce.get('iv', 0)),
+                        'lastPrice': ce.get('lastPrice', ce.get('ltp', 0)),
+                        'bidQty': ce.get('bidQty', ce.get('bid_qty', 0)),
+                        'askQty': ce.get('askQty', ce.get('ask_qty', 0))
+                    }
+
+                # Check for PE data
+                if 'PE' in strike_data:
+                    pe = strike_data['PE']
+                    strike_price = strike_price or pe.get('strikePrice', pe.get('strike_price', 0))
+                    record['PE'] = {
+                        'strikePrice': strike_price,
+                        'expiryDate': expiry,
+                        'openInterest': pe.get('openInterest', pe.get('oi', 0)),
+                        'changeinOpenInterest': pe.get('changeinOpenInterest', pe.get('oi_change', 0)),
+                        'totalTradedVolume': pe.get('totalTradedVolume', pe.get('volume', 0)),
+                        'impliedVolatility': pe.get('impliedVolatility', pe.get('iv', 0)),
+                        'lastPrice': pe.get('lastPrice', pe.get('ltp', 0)),
+                        'bidQty': pe.get('bidQty', pe.get('bid_qty', 0)),
+                        'askQty': pe.get('askQty', pe.get('ask_qty', 0))
+                    }
+
+            if record:
+                records.append(record)
+
+    return records
+
 @st.cache_data(ttl=60, show_spinner=False)
 def fetch_option_chain_data(instrument, NSE_INSTRUMENTS):
-    """Fetch and return option chain data for an instrument - Cached for 60 seconds"""
+    """Fetch and return option chain data for an instrument from Dhan API - Cached for 60 seconds"""
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        session = requests.Session()
-        session.headers.update(headers)
-        session.get("https://www.nseindia.com", timeout=5)
+        from dhan_data_fetcher import DhanDataFetcher
+        fetcher = DhanDataFetcher()
 
-        # Handle spaces in instrument names
-        url_instrument = instrument.replace(' ', '%20')
-        url = f"https://www.nseindia.com/api/option-chain-indices?symbol={url_instrument}" if instrument in NSE_INSTRUMENTS['indices'] else \
-              f"https://www.nseindia.com/api/option-chain-equities?symbol={url_instrument}"
+        # Get expiry list first
+        expiry_result = fetcher.fetch_expiry_list(instrument)
 
-        response = session.get(url, timeout=10)
-        data = response.json()
+        if not expiry_result.get('success'):
+            return {
+                'success': False,
+                'instrument': instrument,
+                'error': f'Failed to fetch expiry list: {expiry_result.get("error")}'
+            }
 
-        records = data['records']['data']
-        expiry = data['records']['expiryDates'][0]
-        underlying = data['records']['underlyingValue']
+        expiry_dates = expiry_result.get('expiry_dates', [])
+        if not expiry_dates:
+            return {
+                'success': False,
+                'instrument': instrument,
+                'error': 'No expiry dates available'
+            }
+
+        expiry = expiry_dates[0]
+
+        # Fetch option chain for current expiry
+        oc_result = fetcher.fetch_option_chain(instrument, expiry)
+
+        if not oc_result.get('success'):
+            return {
+                'success': False,
+                'instrument': instrument,
+                'error': f'Failed to fetch option chain: {oc_result.get("error")}'
+            }
+
+        # Get spot price from OHLC
+        ohlc_result = fetcher.fetch_ohlc_data([instrument])
+        underlying = 0
+
+        if instrument in ohlc_result and ohlc_result[instrument].get('success'):
+            underlying = ohlc_result[instrument].get('last_price', 0)
+
+        # Parse option chain data from Dhan API and convert to NSE format
+        dhan_records = oc_result.get('data', {})
+
+        # Convert Dhan format to NSE format for compatibility
+        records = convert_dhan_to_nse_format(dhan_records, expiry)
 
         # Calculate totals
         total_ce_oi = sum(item['CE']['openInterest'] for item in records if 'CE' in item)
@@ -365,22 +493,46 @@ def analyze_instrument(instrument, NSE_INSTRUMENTS):
             st.warning(f"⏳ Market Closed - Trading Hours: 8:30 AM - 3:45 PM IST (Mon-Fri)")
             return
 
-        headers = {"User-Agent": "Mozilla/5.0"}
-        session = requests.Session()
-        session.headers.update(headers)
-        session.get("https://www.nseindia.com", timeout=5)
+        # Use Dhan API instead of NSE
+        from dhan_data_fetcher import DhanDataFetcher
+        fetcher = DhanDataFetcher()
 
-        # Handle spaces in instrument names
-        url_instrument = instrument.replace(' ', '%20')
-        url = f"https://www.nseindia.com/api/option-chain-indices?symbol={url_instrument}" if instrument in NSE_INSTRUMENTS['indices'] else \
-              f"https://www.nseindia.com/api/option-chain-equities?symbol={url_instrument}"
+        # Get expiry list first
+        expiry_result = fetcher.fetch_expiry_list(instrument)
 
-        response = session.get(url, timeout=10)
-        data = response.json()
+        if not expiry_result.get('success'):
+            st.error(f"❌ Failed to fetch expiry list: {expiry_result.get('error')}")
+            return
 
-        records = data['records']['data']
-        expiry = data['records']['expiryDates'][0]
-        underlying = data['records']['underlyingValue']
+        expiry_dates = expiry_result.get('expiry_dates', [])
+        if not expiry_dates:
+            st.error("❌ No expiry dates available")
+            return
+
+        expiry = expiry_dates[0]
+
+        # Fetch option chain for current expiry
+        oc_result = fetcher.fetch_option_chain(instrument, expiry)
+
+        if not oc_result.get('success'):
+            st.error(f"❌ Failed to fetch option chain: {oc_result.get('error')}")
+            return
+
+        # Get spot price from OHLC
+        ohlc_result = fetcher.fetch_ohlc_data([instrument])
+        underlying = 0
+
+        if instrument in ohlc_result and ohlc_result[instrument].get('success'):
+            underlying = ohlc_result[instrument].get('last_price', 0)
+        else:
+            st.error(f"❌ Failed to fetch spot price for {instrument}")
+            return
+
+        # Parse option chain data from Dhan API and convert to NSE format
+        dhan_records = oc_result.get('data', {})
+
+        # Convert Dhan format to NSE format for compatibility
+        records = convert_dhan_to_nse_format(dhan_records, expiry)
 
         # === Open Interest Change Comparison ===
         total_ce_change = sum(item['CE']['changeinOpenInterest'] for item in records if 'CE' in item) / 100000
@@ -1477,25 +1629,45 @@ def calculate_and_store_atm_zone_bias_silent(instrument, NSE_INSTRUMENTS):
     """
     Silently calculate and store ATM zone bias data without any Streamlit display
     Used for background analysis in Overall Market Sentiment tab
+    Uses Dhan API instead of NSE
     Returns: True if successful, False otherwise
     """
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        session = requests.Session()
-        session.headers.update(headers)
-        session.get("https://www.nseindia.com", timeout=5)
+        from dhan_data_fetcher import DhanDataFetcher
+        fetcher = DhanDataFetcher()
 
-        # Handle spaces in instrument names
-        url_instrument = instrument.replace(' ', '%20')
-        url = f"https://www.nseindia.com/api/option-chain-indices?symbol={url_instrument}" if instrument in NSE_INSTRUMENTS['indices'] else \
-              f"https://www.nseindia.com/api/option-chain-equities?symbol={url_instrument}"
+        # Get expiry list first
+        expiry_result = fetcher.fetch_expiry_list(instrument)
 
-        response = session.get(url, timeout=10)
-        data = response.json()
+        if not expiry_result.get('success'):
+            return False
 
-        records = data['records']['data']
-        expiry = data['records']['expiryDates'][0]
-        underlying = data['records']['underlyingValue']
+        expiry_dates = expiry_result.get('expiry_dates', [])
+        if not expiry_dates:
+            return False
+
+        expiry = expiry_dates[0]
+
+        # Fetch option chain for current expiry
+        oc_result = fetcher.fetch_option_chain(instrument, expiry)
+
+        if not oc_result.get('success'):
+            return False
+
+        # Get spot price from OHLC
+        ohlc_result = fetcher.fetch_ohlc_data([instrument])
+        underlying = 0
+
+        if instrument in ohlc_result and ohlc_result[instrument].get('success'):
+            underlying = ohlc_result[instrument].get('last_price', 0)
+        else:
+            return False
+
+        # Parse option chain data from Dhan API and convert to NSE format
+        dhan_records = oc_result.get('data', {})
+
+        # Convert Dhan format to NSE format for compatibility
+        records = convert_dhan_to_nse_format(dhan_records, expiry)
 
         today = datetime.now(timezone("Asia/Kolkata"))
         expiry_date = timezone("Asia/Kolkata").localize(datetime.strptime(expiry, "%d-%b-%Y"))

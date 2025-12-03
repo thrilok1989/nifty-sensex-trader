@@ -24,7 +24,7 @@ from trade_executor import TradeExecutor
 from telegram_alerts import TelegramBot, send_test_message
 from dhan_api import check_dhan_connection
 from bias_analysis import BiasAnalysisPro
-from option_chain_analysis import OptionChainAnalyzer
+from dhan_option_chain_analyzer import DhanOptionChainAnalyzer
 from nse_options_helpers import *
 from advanced_chart_analysis import AdvancedChartAnalysis
 from overall_market_sentiment import render_overall_market_sentiment, calculate_overall_sentiment
@@ -258,9 +258,9 @@ def get_bias_analyzer():
     return st.session_state.bias_analyzer
 
 def get_option_chain_analyzer():
-    """Lazy load option chain analyzer"""
+    """Lazy load option chain analyzer - now using Dhan API"""
     if 'option_chain_analyzer' not in st.session_state:
-        st.session_state.option_chain_analyzer = OptionChainAnalyzer()
+        st.session_state.option_chain_analyzer = DhanOptionChainAnalyzer()
     return st.session_state.option_chain_analyzer
 
 def get_advanced_chart_analyzer():
@@ -2341,12 +2341,12 @@ with tab5:
         """)
 
 # ═══════════════════════════════════════════════════════════════════════
-# TAB 6: OPTION CHAIN ANALYSIS (NSE Options Analyzer)
+# TAB 6: OPTION CHAIN ANALYSIS (Dhan API - Real-time Options Data)
 # ═══════════════════════════════════════════════════════════════════════
 
 with tab6:
-    st.header("📊 NSE Options Analyzer")
-    st.caption("Comprehensive Option Chain Analysis with Bias Detection, Support/Resistance Zones, and Trade Signals")
+    st.header("📊 Option Chain Analysis")
+    st.caption("Comprehensive Option Chain Analysis using Dhan API - Real-time Bias Detection, Support/Resistance Zones, and Trade Signals")
 
     # Create tabs for main sections
     tab_indices, tab_stocks, tab_overall = st.tabs(["📈 Indices", "🏢 Stocks", "🌐 Overall Market Analysis"])

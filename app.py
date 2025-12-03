@@ -289,10 +289,7 @@ if 'data_preloaded' not in st.session_state:
 NSE_INSTRUMENTS = {
     'indices': {
         'NIFTY': {'lot_size': 75, 'zone_size': 20, 'atm_range': 200},
-        'BANKNIFTY': {'lot_size': 25, 'zone_size': 100, 'atm_range': 500},
-        'SENSEX': {'lot_size': 10, 'zone_size': 50, 'atm_range': 300},
-        'NIFTY IT': {'lot_size': 50, 'zone_size': 50, 'atm_range': 300},
-        'NIFTY AUTO': {'lot_size': 50, 'zone_size': 50, 'atm_range': 300}
+        'BANKNIFTY': {'lot_size': 25, 'zone_size': 100, 'atm_range': 500}
     },
     'stocks': {
         'TCS': {'lot_size': 150, 'zone_size': 30, 'atm_range': 150},
@@ -2354,22 +2351,13 @@ with tab6:
     with tab_indices:
         st.header("NSE Indices Analysis")
         # Create subtabs for each index
-        nifty_tab, banknifty_tab, sensex_tab, it_tab, auto_tab = st.tabs(["NIFTY", "BANKNIFTY", "SENSEX", "NIFTY IT", "NIFTY AUTO"])
+        nifty_tab, banknifty_tab = st.tabs(["NIFTY", "BANKNIFTY"])
 
         with nifty_tab:
             analyze_instrument('NIFTY', NSE_INSTRUMENTS)
 
         with banknifty_tab:
             analyze_instrument('BANKNIFTY', NSE_INSTRUMENTS)
-
-        with sensex_tab:
-            analyze_instrument('SENSEX', NSE_INSTRUMENTS)
-
-        with it_tab:
-            analyze_instrument('NIFTY IT', NSE_INSTRUMENTS)
-
-        with auto_tab:
-            analyze_instrument('NIFTY AUTO', NSE_INSTRUMENTS)
 
     with tab_stocks:
         st.header("Stock Options Analysis")

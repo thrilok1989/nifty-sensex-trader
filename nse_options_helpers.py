@@ -351,19 +351,94 @@ def convert_dhan_to_nse_format(dhan_data, expiry):
     """
     records = []
 
-    # Dhan API returns data as a dict/list with strike information
-    # We need to convert it to NSE format: list of dicts with 'CE' and 'PE' keys
+    # Dhan API V2 returns data with 'oc' object containing strikes
+    # Structure: { "oc": { "25000.000000": { "ce": {...}, "pe": {...} } } }
 
-    if isinstance(dhan_data, list):
-        # If it's already a list, process each item
-        for item in dhan_data:
+    # Extract the oc (option chain) object if present
+    if isinstance(dhan_data, dict) and 'oc' in dhan_data:
+        option_chain = dhan_data['oc']
+    else:
+        option_chain = dhan_data
+
+    # Now process the option chain data
+    if isinstance(option_chain, dict):
+        # Iterate through strikes
+        for strike_key, strike_data in option_chain.items():
+            # Strike key is the strike price as string (e.g., "25000.000000")
+            try:
+                strike_price = float(strike_key)
+            except (ValueError, TypeError):
+                # If strike_key is not a number, try to get it from data
+                strike_price = 0
+
+            if not isinstance(strike_data, dict):
+                continue
+
+            record = {}
+
+            # Check for CE data (lowercase 'ce' from Dhan API)
+            if 'ce' in strike_data or 'CE' in strike_data:
+                ce = strike_data.get('ce', strike_data.get('CE', {}))
+                if ce:
+                    # Extract greeks if available
+                    greeks = ce.get('greeks', {})
+
+                    record['CE'] = {
+                        'strikePrice': strike_price,
+                        'expiryDate': expiry,
+                        'openInterest': ce.get('oi', ce.get('openInterest', 0)),
+                        'changeinOpenInterest': ce.get('oi_change', ce.get('changeinOpenInterest', 0)),
+                        'totalTradedVolume': ce.get('volume', ce.get('totalTradedVolume', 0)),
+                        'impliedVolatility': ce.get('implied_volatility', ce.get('impliedVolatility', 0)),
+                        'lastPrice': ce.get('last_price', ce.get('lastPrice', 0)),
+                        'bidQty': ce.get('top_bid_quantity', ce.get('bidQty', 0)),
+                        'askQty': ce.get('top_ask_quantity', ce.get('askQty', 0)),
+                        # Include greeks if available
+                        'delta': greeks.get('delta', 0),
+                        'gamma': greeks.get('gamma', 0),
+                        'theta': greeks.get('theta', 0),
+                        'vega': greeks.get('vega', 0)
+                    }
+
+            # Check for PE data (lowercase 'pe' from Dhan API)
+            if 'pe' in strike_data or 'PE' in strike_data:
+                pe = strike_data.get('pe', strike_data.get('PE', {}))
+                if pe:
+                    # Extract greeks if available
+                    greeks = pe.get('greeks', {})
+
+                    record['PE'] = {
+                        'strikePrice': strike_price,
+                        'expiryDate': expiry,
+                        'openInterest': pe.get('oi', pe.get('openInterest', 0)),
+                        'changeinOpenInterest': pe.get('oi_change', pe.get('changeinOpenInterest', 0)),
+                        'totalTradedVolume': pe.get('volume', pe.get('totalTradedVolume', 0)),
+                        'impliedVolatility': pe.get('implied_volatility', pe.get('impliedVolatility', 0)),
+                        'lastPrice': pe.get('last_price', pe.get('lastPrice', 0)),
+                        'bidQty': pe.get('top_bid_quantity', pe.get('bidQty', 0)),
+                        'askQty': pe.get('top_ask_quantity', pe.get('askQty', 0)),
+                        # Include greeks if available
+                        'delta': greeks.get('delta', 0),
+                        'gamma': greeks.get('gamma', 0),
+                        'theta': greeks.get('theta', 0),
+                        'vega': greeks.get('vega', 0)
+                    }
+
+            if record:
+                records.append(record)
+
+    elif isinstance(option_chain, list):
+        # If it's a list format (legacy support)
+        for item in option_chain:
             record = {}
 
             # Handle CE data
-            if 'call_options' in item or 'CE' in item:
-                ce_data = item.get('call_options', item.get('CE', {}))
+            if 'call_options' in item or 'CE' in item or 'ce' in item:
+                ce_data = item.get('call_options', item.get('CE', item.get('ce', {})))
+                strike_price = item.get('strike_price', item.get('strikePrice', 0))
+
                 record['CE'] = {
-                    'strikePrice': item.get('strike_price', item.get('strikePrice', 0)),
+                    'strikePrice': strike_price,
                     'expiryDate': expiry,
                     'openInterest': ce_data.get('oi', ce_data.get('openInterest', 0)),
                     'changeinOpenInterest': ce_data.get('oi_change', ce_data.get('changeinOpenInterest', 0)),
@@ -375,10 +450,12 @@ def convert_dhan_to_nse_format(dhan_data, expiry):
                 }
 
             # Handle PE data
-            if 'put_options' in item or 'PE' in item:
-                pe_data = item.get('put_options', item.get('PE', {}))
+            if 'put_options' in item or 'PE' in item or 'pe' in item:
+                pe_data = item.get('put_options', item.get('PE', item.get('pe', {})))
+                strike_price = item.get('strike_price', item.get('strikePrice', 0))
+
                 record['PE'] = {
-                    'strikePrice': item.get('strike_price', item.get('strikePrice', 0)),
+                    'strikePrice': strike_price,
                     'expiryDate': expiry,
                     'openInterest': pe_data.get('oi', pe_data.get('openInterest', 0)),
                     'changeinOpenInterest': pe_data.get('oi_change', pe_data.get('changeinOpenInterest', 0)),
@@ -388,49 +465,6 @@ def convert_dhan_to_nse_format(dhan_data, expiry):
                     'bidQty': pe_data.get('bid_qty', pe_data.get('bidQty', 0)),
                     'askQty': pe_data.get('ask_qty', pe_data.get('askQty', 0))
                 }
-
-            if record:
-                records.append(record)
-
-    elif isinstance(dhan_data, dict):
-        # If it's a dict, convert each strike to NSE format
-        for strike_key, strike_data in dhan_data.items():
-            record = {}
-            strike_price = 0
-
-            # Try to extract strike price
-            if isinstance(strike_data, dict):
-                # Check for CE data
-                if 'CE' in strike_data:
-                    ce = strike_data['CE']
-                    strike_price = strike_price or ce.get('strikePrice', ce.get('strike_price', 0))
-                    record['CE'] = {
-                        'strikePrice': strike_price,
-                        'expiryDate': expiry,
-                        'openInterest': ce.get('openInterest', ce.get('oi', 0)),
-                        'changeinOpenInterest': ce.get('changeinOpenInterest', ce.get('oi_change', 0)),
-                        'totalTradedVolume': ce.get('totalTradedVolume', ce.get('volume', 0)),
-                        'impliedVolatility': ce.get('impliedVolatility', ce.get('iv', 0)),
-                        'lastPrice': ce.get('lastPrice', ce.get('ltp', 0)),
-                        'bidQty': ce.get('bidQty', ce.get('bid_qty', 0)),
-                        'askQty': ce.get('askQty', ce.get('ask_qty', 0))
-                    }
-
-                # Check for PE data
-                if 'PE' in strike_data:
-                    pe = strike_data['PE']
-                    strike_price = strike_price or pe.get('strikePrice', pe.get('strike_price', 0))
-                    record['PE'] = {
-                        'strikePrice': strike_price,
-                        'expiryDate': expiry,
-                        'openInterest': pe.get('openInterest', pe.get('oi', 0)),
-                        'changeinOpenInterest': pe.get('changeinOpenInterest', pe.get('oi_change', 0)),
-                        'totalTradedVolume': pe.get('totalTradedVolume', pe.get('volume', 0)),
-                        'impliedVolatility': pe.get('impliedVolatility', pe.get('iv', 0)),
-                        'lastPrice': pe.get('lastPrice', pe.get('ltp', 0)),
-                        'bidQty': pe.get('bidQty', pe.get('bid_qty', 0)),
-                        'askQty': pe.get('askQty', pe.get('ask_qty', 0))
-                    }
 
             if record:
                 records.append(record)

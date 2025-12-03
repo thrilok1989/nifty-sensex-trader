@@ -12,8 +12,12 @@ import requests
 import time
 
 # Import from existing modules
-from config import DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN, IST
+from config import IST, get_dhan_credentials
 from market_hours_scheduler import is_market_open
+
+# Get Dhan credentials
+_dhan_creds = get_dhan_credentials()
+DHAN_ACCESS_TOKEN = _dhan_creds.get('access_token', '') if _dhan_creds else ''
 
 
 def get_current_price(symbol: str) -> Optional[float]:

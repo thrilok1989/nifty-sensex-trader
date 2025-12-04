@@ -935,12 +935,17 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     # Auto-run analyses on first load - FIXED: Now properly uses asyncio.run()
     if not st.session_state.sentiment_auto_run_done and NSE_INSTRUMENTS is not None:
         with st.spinner("🔄 Running initial analyses..."):
-            success, errors = asyncio.run(run_all_analyses(NSE_INSTRUMENTS))
-            st.session_state.sentiment_auto_run_done = True
-            st.session_state.sentiment_last_refresh = time.time()
-            if not success:
-                for error in errors:
-                    st.warning(f"⚠️ {error}")
+            try:
+                success, errors = asyncio.run(run_all_analyses(NSE_INSTRUMENTS))
+                st.session_state.sentiment_auto_run_done = True
+                st.session_state.sentiment_last_refresh = time.time()
+                if not success:
+                    for error in errors:
+                        st.warning(f"⚠️ {error}")
+            except Exception as e:
+                st.error(f"❌ Error running initial analyses: {str(e)}")
+                st.session_state.sentiment_auto_run_done = True
+                st.session_state.sentiment_last_refresh = time.time()
 
     # Auto-refresh based on market session (skip when market is closed for performance)
     current_time = time.time()
@@ -953,31 +958,55 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     # Only auto-refresh during trading hours to conserve resources
     if time_since_refresh >= refresh_interval and NSE_INSTRUMENTS is not None and is_within_trading_hours():
         # Use show_progress=False for faster background refresh
-        success, errors = asyncio.run(run_all_analyses(NSE_INSTRUMENTS, show_progress=False))
-        st.session_state.sentiment_last_refresh = time.time()
-        if success:
-            st.rerun()
+        try:
+            success, errors = asyncio.run(run_all_analyses(NSE_INSTRUMENTS, show_progress=False))
+            st.session_state.sentiment_last_refresh = time.time()
+            if success:
+                st.rerun()
+        except Exception as e:
+            st.warning(f"⚠️ Auto-refresh failed: {str(e)}")
+            st.session_state.sentiment_last_refresh = time.time()
 
     # Calculate overall sentiment
     result = calculate_overall_sentiment()
 
     if not result['data_available']:
-        st.warning("⚠️ No data available. Running analyses...")
+        st.warning("⚠️ No data available yet.")
 
         # Automatically run analyses
         if NSE_INSTRUMENTS is not None:
             with st.spinner("🔄 Running all analyses..."):
-                success, errors = asyncio.run(run_all_analyses(NSE_INSTRUMENTS))
+                try:
+                    success, errors = asyncio.run(run_all_analyses(NSE_INSTRUMENTS))
 
-                if success:
-                    st.session_state.sentiment_last_refresh = time.time()
-                    st.success("✅ Analyses completed! Refreshing...")
-                    st.rerun()
-                else:
-                    st.error("❌ Some analyses failed:")
-                    for error in errors:
-                        st.error(f"  - {error}")
+                    if success:
+                        st.session_state.sentiment_last_refresh = time.time()
+                        st.success("✅ Analyses completed! Refreshing...")
+                        st.rerun()
+                    else:
+                        st.error("❌ Some analyses failed:")
+                        for error in errors:
+                            st.error(f"  - {error}")
+                except Exception as e:
+                    st.error(f"❌ Error running analyses: {str(e)}")
 
+        # Show helpful instructions instead of blank screen
+        st.info("""
+        ### 📊 Overall Market Sentiment
+
+        This tab aggregates data from multiple sources to provide a comprehensive market view:
+        - **Stock Performance**: Market breadth analysis
+        - **Technical Indicators**: 13 bias indicators from Bias Analysis Pro
+        - **Option Chain Analysis**: ATM zone bias metrics
+        - **PCR Analysis**: Put-Call ratio for indices
+
+        **To get started:**
+        1. Use the "🔄 Refresh Data" button at the top of the page
+        2. Wait for the automatic analysis to complete
+        3. Data will appear here once loaded
+
+        **Note:** The app will automatically refresh during market hours (9:15 AM - 3:30 PM IST)
+        """)
         return
 
     # ═══════════════════════════════════════════════════════════════════
@@ -1990,17 +2019,20 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
     with col2:
         if NSE_INSTRUMENTS is not None:
             if st.button("🎯 Re-run All Analyses", type="primary", use_container_width=True, key="rerun_bias_button"):
-                success, errors = asyncio.run(run_all_analyses(NSE_INSTRUMENTS))
-                st.session_state.sentiment_last_refresh = time.time()
+                try:
+                    success, errors = asyncio.run(run_all_analyses(NSE_INSTRUMENTS))
+                    st.session_state.sentiment_last_refresh = time.time()
 
-                if success:
-                    st.balloons()
-                    st.success("🎉 All analyses completed successfully! Refreshing results...")
-                    st.rerun()
-                else:
-                    st.error("❌ Some analyses failed:")
-                    for error in errors:
-                        st.error(f"  - {error}")
+                    if success:
+                        st.balloons()
+                        st.success("🎉 All analyses completed successfully! Refreshing results...")
+                        st.rerun()
+                    else:
+                        st.error("❌ Some analyses failed:")
+                        for error in errors:
+                            st.error(f"  - {error}")
+                except Exception as e:
+                    st.error(f"❌ Error running analyses: {str(e)}")
 
     # Auto-refresh handled by the refresh logic at the top of this function
 

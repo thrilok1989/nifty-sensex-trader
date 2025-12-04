@@ -190,17 +190,46 @@ st.markdown("""
     /* MOBILE & DESKTOP RESPONSIVE IMPROVEMENTS */
     /* ═══════════════════════════════════════════════════════════════════ */
 
+    /* ═══════════════════════════════════════════════════════════════════ */
+    /* ENSURE TABS ARE VISIBLE AND PROPERLY DISPLAYED */
+    /* ═══════════════════════════════════════════════════════════════════ */
+
+    /* Make sure tabs container is visible */
+    .stTabs {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+
     /* Ensure tabs are scrollable on mobile */
     [data-baseweb="tab-list"] {
+        display: flex !important;
+        visibility: visible !important;
         overflow-x: auto !important;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: thin;
     }
 
-    /* Make tabs touch-friendly on mobile */
+    /* Make tabs touch-friendly on mobile and ensure they're visible */
     [data-baseweb="tab"] {
+        display: inline-flex !important;
+        visibility: visible !important;
         min-height: 48px !important;
         padding: 12px 16px !important;
+    }
+
+    /* Ensure tab panels are visible */
+    [data-baseweb="tab-panel"] {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+
+    /* Ensure tab borders/highlights are visible */
+    [data-baseweb="tab-border"],
+    [data-baseweb="tab-highlight"] {
+        display: block !important;
+        visibility: visible !important;
     }
 
     /* Responsive font sizes for mobile */

@@ -55,9 +55,10 @@ class DataCacheManager:
 
         # Background refresh intervals (in seconds)
         # Note: These are dynamically adjusted based on market session
+        # PERFORMANCE OPTIMIZATION: Increased intervals to reduce API load
         self.refresh_intervals = {
-            'market_data': 10,      # NIFTY/SENSEX (adjusted by market session)
-            'analysis_data': 60,    # All analysis (adjusted by market session)
+            'market_data': 45,      # NIFTY/SENSEX - increased from 10s to 45s
+            'analysis_data': 120,   # All analysis - increased from 60s to 120s
         }
 
         # Market hours awareness

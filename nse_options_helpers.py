@@ -1181,10 +1181,12 @@ def display_overall_option_chain_analysis(NSE_INSTRUMENTS):
             st.caption("Overall Market Sentiment")
 
         with col2:
-            st.metric("Bullish Signals", bullish_count, delta=f"{(bullish_count/total_signals*100):.1f}%")
+            bullish_pct = (bullish_count/total_signals*100) if total_signals > 0 else 0.0
+            st.metric("Bullish Signals", bullish_count, delta=f"{bullish_pct:.1f}%")
 
         with col3:
-            st.metric("Bearish Signals", bearish_count, delta=f"{(bearish_count/total_signals*100):.1f}%", delta_color="inverse")
+            bearish_pct = (bearish_count/total_signals*100) if total_signals > 0 else 0.0
+            st.metric("Bearish Signals", bearish_count, delta=f"{bearish_pct:.1f}%", delta_color="inverse")
 
         with col4:
             st.metric("Neutral Signals", neutral_count)

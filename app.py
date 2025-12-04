@@ -245,12 +245,11 @@ if 'performance_mode' not in st.session_state:
     st.session_state.performance_mode = True
 
 # ═══════════════════════════════════════════════════════════════════════
-# INITIALIZE SESSION STATE - OPTIMIZED
+# INITIALIZE SESSION STATE
 # ═══════════════════════════════════════════════════════════════════════
-# PERFORMANCE OPTIMIZATION: Consolidated initialization reduces overhead
 
 def init_session_state():
-    """Initialize all session state variables at once - much faster than individual checks"""
+    """Initialize all session state variables at once"""
     defaults = {
         'signal_manager': lambda: SignalManager(),
         'vob_signal_generator': lambda: VOBSignalGenerator(proximity_threshold=8.0),
@@ -478,22 +477,13 @@ with st.sidebar:
     
     st.divider()
     
-    # DhanHQ connection - CACHED (Performance Optimization)
+    # DhanHQ connection
     st.subheader("🔌 DhanHQ API")
     if DEMO_MODE:
         st.info("🧪 DEMO MODE Active")
     else:
-        # Cache connection status to avoid HTTP request on every sidebar render
-        if 'dhan_connection_status' not in st.session_state:
-            st.session_state.dhan_connection_status = check_dhan_connection()
-            st.session_state.dhan_connection_check_time = time.time()
-
-        # Recheck every 5 minutes instead of every render
-        if time.time() - st.session_state.dhan_connection_check_time > 300:
-            st.session_state.dhan_connection_status = check_dhan_connection()
-            st.session_state.dhan_connection_check_time = time.time()
-
-        if st.session_state.dhan_connection_status:
+        # Check connection status (no caching - unified 30s refresh)
+        if check_dhan_connection():
             st.success("✅ Connected")
         else:
             st.error("❌ Connection Failed")
@@ -588,23 +578,16 @@ if not nifty_data or not nifty_data.get('success'):
     # Note: We don't stop() here - let the app continue and show what it can
 
 # ═══════════════════════════════════════════════════════════════════════
-# CACHED CHART DATA FETCHER (Performance Optimization)
+# CHART DATA FETCHER
 # ═══════════════════════════════════════════════════════════════════════
-# Cache chart data for 60 seconds to avoid repeated API calls
-if 'chart_data_cache' not in st.session_state:
-    st.session_state.chart_data_cache = {}
-if 'chart_data_cache_time' not in st.session_state:
-    st.session_state.chart_data_cache_time = {}
 
-@st.cache_data(ttl=180, show_spinner=False)  # PERFORMANCE: Increased from 120s to 180s
 def get_cached_chart_data(symbol, period, interval):
-    """Cached chart data fetcher - reduces API calls"""
+    """Fetch chart data"""
     chart_analyzer = AdvancedChartAnalysis()
     return chart_analyzer.fetch_intraday_data(symbol, period=period, interval=interval)
 
-@st.cache_data(ttl=180, show_spinner=False)  # PERFORMANCE: Increased from 120s to 180s
 def calculate_vob_indicators(df_key, sensitivity=5):
-    """Cached VOB calculation - reduces redundant computations"""
+    """Calculate VOB indicators"""
     from indicators.volume_order_blocks import VolumeOrderBlocks
 
     # Get dataframe from cache
@@ -617,16 +600,15 @@ def calculate_vob_indicators(df_key, sensitivity=5):
     vob_indicator = VolumeOrderBlocks(sensitivity=sensitivity)
     return vob_indicator.calculate(df)
 
-@st.cache_data(ttl=180, show_spinner=False)  # PERFORMANCE: Increased from 120s to 180s
 def calculate_sentiment():
-    """Cached sentiment calculation"""
+    """Calculate sentiment"""
     try:
         return calculate_overall_sentiment()
     except:
         return None
 
 # ═══════════════════════════════════════════════════════════════════════
-# VOB-BASED SIGNAL MONITORING (Optimized)
+# VOB-BASED SIGNAL MONITORING
 # ═══════════════════════════════════════════════════════════════════════
 # Initialize sentiment cache in session state
 if 'cached_sentiment' not in st.session_state:
@@ -634,28 +616,26 @@ if 'cached_sentiment' not in st.session_state:
 if 'sentiment_cache_time' not in st.session_state:
     st.session_state.sentiment_cache_time = 0
 
-# Calculate sentiment once every 180 seconds and cache it (PERFORMANCE: increased from 120s)
+# Calculate sentiment every 30 seconds (unified refresh cycle)
 current_time = time.time()
-if current_time - st.session_state.sentiment_cache_time > 180:
+if current_time - st.session_state.sentiment_cache_time > 30:
     sentiment_result = calculate_sentiment()
     if sentiment_result:
         st.session_state.cached_sentiment = sentiment_result
         st.session_state.sentiment_cache_time = current_time
 
 # ═══════════════════════════════════════════════════════════════════════
-# PERFORMANCE OPTIMIZATION: Only run expensive signal checks during market hours
-# and increase check interval to reduce load (90 seconds - further optimized)
+# Signal checks run during market hours at 30-second intervals
 # ═══════════════════════════════════════════════════════════════════════
 market_status = get_market_status()
 should_run_signal_check = market_status.get('open', False)
 
-# Check for VOB signals every 90 seconds (increased from 60s for better performance)
-# Only run during market hours to reduce unnecessary processing
-if should_run_signal_check and (current_time - st.session_state.last_vob_check_time > 90):
+# Check for VOB signals every 30 seconds (unified refresh cycle)
+if should_run_signal_check and (current_time - st.session_state.last_vob_check_time > 30):
     st.session_state.last_vob_check_time = current_time
 
     try:
-        # Use cached sentiment (calculated once per minute to avoid redundancy)
+        # Use current sentiment (refreshed every 30 seconds)
         if st.session_state.cached_sentiment:
             overall_sentiment = st.session_state.cached_sentiment.get('overall_sentiment', 'NEUTRAL')
         else:
@@ -839,15 +819,14 @@ if should_run_signal_check and (current_time - st.session_state.last_vob_check_t
         pass
 
 # ═══════════════════════════════════════════════════════════════════════
-# HTF SUPPORT/RESISTANCE SIGNAL MONITORING (Optimized)
+# HTF SUPPORT/RESISTANCE SIGNAL MONITORING
 # ═══════════════════════════════════════════════════════════════════════
-# Check for HTF S/R signals every 90 seconds (increased from 60s for better performance)
-# Only run during market hours to reduce unnecessary processing
-if should_run_signal_check and (current_time - st.session_state.last_htf_sr_check_time > 90):
+# Check for HTF S/R signals every 30 seconds (unified refresh cycle)
+if should_run_signal_check and (current_time - st.session_state.last_htf_sr_check_time > 30):
     st.session_state.last_htf_sr_check_time = current_time
 
     try:
-        # Use cached sentiment (calculated once per minute to avoid redundancy)
+        # Use current sentiment (refreshed every 30 seconds)
         if st.session_state.cached_sentiment:
             overall_sentiment = st.session_state.cached_sentiment.get('overall_sentiment', 'NEUTRAL')
         else:

@@ -84,14 +84,13 @@ MARKET_HOURS = {
     'post_market_close': '15:45'   # 3:45 PM IST (App will run until this time)
 }
 
-# Session-based refresh intervals (seconds)
-# CONSERVATIVE settings to prevent API rate limiting (HTTP 429)
-# Data fetch cycle takes ~40-50 seconds, so intervals must be longer
+# Unified 30-second refresh interval
+# All data fetches synchronized to single 30-second cycle
 REFRESH_INTERVALS = {
-    'pre_market': 90,      # 90 seconds during pre-market (increased from 45s)
-    'regular': 90,         # 90 seconds during regular trading (increased from 45s)
-    'post_market': 180,    # 180 seconds during post-market (increased from 120s)
-    'closed': 300          # 5 minutes when market is closed (minimal activity)
+    'pre_market': 30,      # 30 seconds during pre-market
+    'regular': 30,         # 30 seconds during regular trading
+    'post_market': 30,     # 30 seconds during post-market
+    'closed': 30           # 30 seconds even when market is closed
 }
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -118,8 +117,8 @@ VOB_TOUCH_TOLERANCE = 5  # Points
 # UI SETTINGS
 # ═══════════════════════════════════════════════════════════════════════
 
-# Auto-refresh interval: 5 minutes (300 seconds)
-AUTO_REFRESH_INTERVAL = 300  # seconds (5 minutes - optimized for fast clicks)
+# Auto-refresh interval: 30 seconds (unified refresh cycle)
+AUTO_REFRESH_INTERVAL = 30  # seconds
 DEMO_MODE = False
 
 APP_TITLE = "🎯 NIFTY/SENSEX Manual Trader"

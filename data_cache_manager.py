@@ -6,17 +6,16 @@ This module provides:
 - Thread-safe caching for all data sources
 - Background data loading and auto-refresh
 - Pre-loading of all tab data on startup
-- Optimized refresh cycles to prevent API rate limiting
+- Unified 30-second refresh cycle
 - Smart cache invalidation and updates
 
-Cache Strategy (Optimized for Rate Limiting):
-- NIFTY/SENSEX data: 60-second TTL, background refresh every 45 seconds (config-driven)
-- Bias Analysis: 60-second TTL, background refresh every 300 seconds (5 minutes)
-- Option Chain: 60-second TTL, background refresh
-- Advanced Charts: 60-second TTL, background refresh
+Cache Strategy (Unified Refresh Cycle):
+- NIFTY/SENSEX data: 30-second TTL, background refresh every 30 seconds
+- Bias Analysis: 30-second TTL, background refresh every 30 seconds
+- Option Chain: 30-second TTL, background refresh every 30 seconds
+- Advanced Charts: 30-second TTL, background refresh every 30 seconds
 
-Note: Refresh intervals increased to prevent HTTP 429 (rate limit) errors
-Previous 10-second interval caused overlapping cycles and exceeded API limits
+All data is fetched together in a synchronized 30-second cycle
 """
 
 import threading
@@ -44,21 +43,19 @@ class DataCacheManager:
         self._stop_threads = threading.Event()
         self._main_lock = threading.Lock()
 
-        # Cache TTLs (in seconds)
+        # Cache TTLs - Unified 30-second refresh cycle
         self.ttl_config = {
-            'nifty_data': 60,
-            'sensex_data': 60,
-            'bias_analysis': 60,
-            'option_chain': 60,
-            'advanced_chart': 60,
+            'nifty_data': 30,
+            'sensex_data': 30,
+            'bias_analysis': 30,
+            'option_chain': 30,
+            'advanced_chart': 30,
         }
 
-        # Background refresh intervals (in seconds)
-        # Note: These are dynamically adjusted based on market session
-        # PERFORMANCE OPTIMIZATION: Increased intervals to reduce API load
+        # Background refresh intervals - Unified 30-second cycle
         self.refresh_intervals = {
-            'market_data': 45,      # NIFTY/SENSEX - increased from 10s to 45s
-            'analysis_data': 120,   # All analysis - increased from 60s to 120s
+            'market_data': 30,      # NIFTY/SENSEX
+            'analysis_data': 30,    # All analysis
         }
 
         # Market hours awareness
@@ -339,21 +336,20 @@ def preload_all_data():
             print(f"Error loading bias analysis data: {e}")
 
     # Start background threads for continuous refresh
+    # Unified 30-second refresh cycle for all data
 
-    # Market data: refresh using config interval to prevent rate limiting
-    # Uses regular session interval from config (45 seconds) to avoid overlapping cycles
+    # Market data: refresh every 30 seconds
     cache_manager.start_background_refresh(
         'market_data_refresh',
         load_market_data,
         interval=config.REFRESH_INTERVALS['regular']
     )
 
-    # Bias analysis: refresh every 300 seconds (5 minutes) to reduce API load
-    # Previous 60-second interval was contributing to rate limiting
+    # Bias analysis: refresh every 30 seconds (unified cycle)
     cache_manager.start_background_refresh(
         'bias_analysis_refresh',
         load_bias_analysis_data,
-        interval=300
+        interval=config.REFRESH_INTERVALS['regular']
     )
 
     # Initial load (immediate)

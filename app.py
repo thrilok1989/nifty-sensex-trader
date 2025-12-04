@@ -849,8 +849,17 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
                 # Calculate HTF S/R levels (reusing indicator instance)
                 htf_levels = htf_sr.calculate_multi_timeframe(df_nifty, levels_config)
 
+                # Transform list to dict format expected by the display code
+                htf_data_dict = {}
+                for level in htf_levels:
+                    if level and 'timeframe' in level:
+                        htf_data_dict[level['timeframe']] = {
+                            'support': level.get('pivot_low'),
+                            'resistance': level.get('pivot_high')
+                        }
+
                 # Store HTF data in session state for display
-                st.session_state.htf_data_nifty = htf_levels
+                st.session_state.htf_data_nifty = htf_data_dict
 
                 # Check for NIFTY signal - with safe spot price handling
                 nifty_spot_htf = None
@@ -892,8 +901,17 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
                 # Calculate HTF S/R levels for SENSEX (reusing indicator instance)
                 htf_levels_sensex = htf_sr.calculate_multi_timeframe(df_sensex, levels_config)
 
+                # Transform list to dict format expected by the display code
+                htf_data_dict_sensex = {}
+                for level in htf_levels_sensex:
+                    if level and 'timeframe' in level:
+                        htf_data_dict_sensex[level['timeframe']] = {
+                            'support': level.get('pivot_low'),
+                            'resistance': level.get('pivot_high')
+                        }
+
                 # Store HTF data in session state for display
-                st.session_state.htf_data_sensex = htf_levels_sensex
+                st.session_state.htf_data_sensex = htf_data_dict_sensex
 
                 # Get SENSEX spot price
                 sensex_data = get_cached_sensex_data()

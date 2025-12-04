@@ -13,7 +13,18 @@ import time
 # Import from existing modules
 from config import IST
 from market_hours_scheduler import is_market_open
-from dhan_option_chain_analyzer import DhanOptionChainAnalyzer
+# Use the same helper functions as the main option chain analysis
+from nse_options_helpers import fetch_option_chain_data
+
+# NSE Instruments configuration (required by helper functions)
+NSE_INSTRUMENTS = {
+    'indices': {
+        'NIFTY': {'lot_size': 75, 'zone_size': 20, 'atm_range': 200},
+        'BANKNIFTY': {'lot_size': 25, 'zone_size': 100, 'atm_range': 500},
+        'SENSEX': {'lot_size': 10, 'zone_size': 50, 'atm_range': 300},
+    },
+    'stocks': {}
+}
 
 
 def get_current_price(symbol: str) -> Optional[float]:
@@ -77,7 +88,7 @@ def get_intraday_data(symbol: str, days: int = 7) -> Optional[pd.DataFrame]:
 
 def fetch_dhan_option_chain(underlying: str) -> Optional[Dict]:
     """
-    Fetch option chain data from Dhan API using DhanOptionChainAnalyzer
+    Fetch option chain data from Dhan API using nse_options_helpers
 
     Args:
         underlying: Underlying symbol ('NIFTY', 'BANKNIFTY', or 'SENSEX')
@@ -86,8 +97,8 @@ def fetch_dhan_option_chain(underlying: str) -> Optional[Dict]:
         Dictionary with option chain data or None if failed
     """
     try:
-        analyzer = DhanOptionChainAnalyzer()
-        result = analyzer.fetch_option_chain(underlying)
+        # Use the same fetch function as the main option chain analysis
+        result = fetch_option_chain_data(underlying, NSE_INSTRUMENTS)
 
         if result.get('success'):
             return result
@@ -127,7 +138,7 @@ def get_nearest_expiry() -> str:
 
 def calculate_pcr_metrics(underlying: str) -> Dict:
     """
-    Calculate PCR metrics using DhanOptionChainAnalyzer
+    Calculate PCR metrics using nse_options_helpers
 
     Args:
         underlying: Underlying symbol ('NIFTY', 'BANKNIFTY', or 'SENSEX')
@@ -136,32 +147,77 @@ def calculate_pcr_metrics(underlying: str) -> Dict:
         Dictionary with PCR metrics
     """
     try:
-        analyzer = DhanOptionChainAnalyzer()
-        pcr_result = analyzer.calculate_pcr(underlying)
+        # Fetch option chain data using helper function
+        oc_data = fetch_option_chain_data(underlying, NSE_INSTRUMENTS)
 
-        if pcr_result.get('success'):
-            return {
-                'pcr_oi': round(pcr_result.get('pcr_oi', 0), 4),
-                'pcr_oi_change': round(pcr_result.get('pcr_change_oi', 0), 4),
-                'pcr_volume': round(pcr_result.get('pcr_volume', 0), 4),
-                'total_ce_oi': pcr_result.get('total_ce_oi', 0),
-                'total_pe_oi': pcr_result.get('total_pe_oi', 0),
-                'total_ce_volume': pcr_result.get('total_ce_volume', 0),
-                'total_pe_volume': pcr_result.get('total_pe_volume', 0),
-                'bias': pcr_result.get('overall_bias', 'NEUTRAL')
-            }
-        else:
-            print(f"Failed to calculate PCR for {underlying}: {pcr_result.get('error')}")
+        if not oc_data.get('success'):
+            print(f"Failed to fetch option chain for PCR calculation: {oc_data.get('error')}")
             return None
+
+        # Extract totals from the result
+        total_ce_oi = oc_data.get('total_ce_oi', 0)
+        total_pe_oi = oc_data.get('total_pe_oi', 0)
+        total_ce_change = oc_data.get('total_ce_change', 0)
+        total_pe_change = oc_data.get('total_pe_change', 0)
+
+        # Calculate volumes from records
+        records = oc_data.get('records', [])
+        total_ce_volume = sum(item['CE']['totalTradedVolume'] for item in records if 'CE' in item)
+        total_pe_volume = sum(item['PE']['totalTradedVolume'] for item in records if 'PE' in item)
+
+        # Calculate PCR ratios
+        pcr_oi = total_pe_oi / total_ce_oi if total_ce_oi > 0 else 0
+        pcr_change_oi = abs(total_pe_change) / abs(total_ce_change) if total_ce_change != 0 else 0
+        pcr_volume = total_pe_volume / total_ce_volume if total_ce_volume > 0 else 0
+
+        # Determine bias based on PCR (weighted approach)
+        # PCR OI weight: 3, PCR Change OI weight: 5, PCR Volume weight: 2
+        bias_score = 0
+
+        if pcr_oi > 1.2:
+            bias_score += 3
+        elif pcr_oi < 0.8:
+            bias_score -= 3
+
+        if pcr_change_oi > 1.2:
+            bias_score += 5
+        elif pcr_change_oi < 0.8:
+            bias_score -= 5
+
+        if pcr_volume > 1.2:
+            bias_score += 2
+        elif pcr_volume < 0.8:
+            bias_score -= 2
+
+        # Determine overall bias
+        if bias_score >= 5:
+            overall_bias = "BULLISH"
+        elif bias_score <= -5:
+            overall_bias = "BEARISH"
+        else:
+            overall_bias = "NEUTRAL"
+
+        return {
+            'pcr_oi': round(pcr_oi, 4),
+            'pcr_oi_change': round(pcr_change_oi, 4),
+            'pcr_volume': round(pcr_volume, 4),
+            'total_ce_oi': total_ce_oi,
+            'total_pe_oi': total_pe_oi,
+            'total_ce_volume': total_ce_volume,
+            'total_pe_volume': total_pe_volume,
+            'bias': overall_bias
+        }
 
     except Exception as e:
         print(f"Error calculating PCR metrics: {e}")
+        import traceback
+        print(traceback.format_exc())
         return None
 
 
 def get_atm_zone_bias(underlying: str, num_strikes: int = 5) -> Dict:
     """
-    Calculate ATM zone bias using DhanOptionChainAnalyzer
+    Calculate ATM zone bias using nse_options_helpers
 
     Args:
         underlying: Underlying symbol ('NIFTY', 'BANKNIFTY', or 'SENSEX')
@@ -171,76 +227,156 @@ def get_atm_zone_bias(underlying: str, num_strikes: int = 5) -> Dict:
         Dictionary with ATM zone analysis
     """
     try:
-        analyzer = DhanOptionChainAnalyzer()
-        atm_result = analyzer.calculate_atm_zone_bias(underlying, atm_range=num_strikes)
+        # Fetch option chain data using helper function
+        oc_data = fetch_option_chain_data(underlying, NSE_INSTRUMENTS)
 
-        if atm_result.get('success'):
-            atm_zone_data = atm_result.get('atm_zone_data', [])
+        if not oc_data.get('success'):
+            print(f"Failed to fetch option chain for ATM zone bias: {oc_data.get('error')}")
+            return None
 
-            # Convert to expected format
-            strike_analysis = []
-            total_ce_oi = 0
-            total_pe_oi = 0
-            bullish_count = 0
-            bearish_count = 0
-            neutral_count = 0
+        records = oc_data.get('records', [])
+        spot_price = oc_data.get('spot', 0)
 
-            for strike_data in atm_zone_data:
-                strike_analysis.append({
-                    'strike': strike_data['strike_price'],
-                    'ce_oi': strike_data['ce_oi'],
-                    'pe_oi': strike_data['pe_oi'],
-                    'ce_oi_change': strike_data['ce_oi_change'],
-                    'pe_oi_change': strike_data['pe_oi_change'],
-                    'ce_volume': strike_data['ce_volume'],
-                    'pe_volume': strike_data['pe_volume'],
-                    'pcr_oi': strike_data['pcr_oi'],
-                    'pcr_oi_change': strike_data['pcr_oi_change'],
-                    'pcr_volume': strike_data['pcr_volume'],
-                    'bias': strike_data['strike_bias']
-                })
+        # Strike interval based on symbol
+        strike_intervals = {
+            'NIFTY': 50,
+            'BANKNIFTY': 100,
+            'SENSEX': 100
+        }
+        strike_interval = strike_intervals.get(underlying, 50)
 
-                total_ce_oi += strike_data['ce_oi']
-                total_pe_oi += strike_data['pe_oi']
+        # Find ATM strike (round spot price to nearest strike interval)
+        atm_strike = round(spot_price / strike_interval) * strike_interval
 
-                if strike_data['strike_bias'] == 'BULLISH':
+        # Generate ATM ±num_strikes strikes
+        target_strikes = [
+            atm_strike + (i * strike_interval)
+            for i in range(-num_strikes, num_strikes + 1)
+        ]
+
+        # Parse option chain data and extract strike-wise data
+        strike_data_map = {}
+
+        for record in records:
+            # Both CE and PE should have the same strike price
+            if 'CE' in record and 'PE' in record:
+                strike_price = record['CE'].get('strikePrice')
+
+                if strike_price in target_strikes:
+                    ce_data = record['CE']
+                    pe_data = record['PE']
+
+                    strike_data_map[strike_price] = {
+                        'ce_oi': ce_data.get('openInterest', 0),
+                        'ce_oi_change': ce_data.get('changeinOpenInterest', 0),
+                        'ce_volume': ce_data.get('totalTradedVolume', 0),
+                        'pe_oi': pe_data.get('openInterest', 0),
+                        'pe_oi_change': pe_data.get('changeinOpenInterest', 0),
+                        'pe_volume': pe_data.get('totalTradedVolume', 0)
+                    }
+
+        # Calculate PCR for each strike and prepare result
+        strike_analysis = []
+        total_ce_oi = 0
+        total_pe_oi = 0
+        bullish_count = 0
+        bearish_count = 0
+        neutral_count = 0
+
+        for strike_price in target_strikes:
+            if strike_price in strike_data_map:
+                data = strike_data_map[strike_price]
+
+                # Calculate strike-wise PCR
+                pcr_oi = data['pe_oi'] / data['ce_oi'] if data['ce_oi'] > 0 else 0
+                pcr_oi_change = data['pe_oi_change'] / data['ce_oi_change'] if data['ce_oi_change'] != 0 else 0
+                pcr_volume = data['pe_volume'] / data['ce_volume'] if data['ce_volume'] > 0 else 0
+
+                # Determine strike bias (weighted approach)
+                score = 0
+                if pcr_oi > 1.2:
+                    score += 3
+                elif pcr_oi < 0.8:
+                    score -= 3
+
+                if pcr_oi_change > 1.2:
+                    score += 5
+                elif pcr_oi_change < 0.8:
+                    score -= 5
+
+                if score >= 5:
+                    strike_bias = "BULLISH"
                     bullish_count += 1
-                elif strike_data['strike_bias'] == 'BEARISH':
+                elif score <= -5:
+                    strike_bias = "BEARISH"
                     bearish_count += 1
                 else:
+                    strike_bias = "NEUTRAL"
                     neutral_count += 1
 
-            # Calculate zone PCR
-            zone_pcr = total_pe_oi / total_ce_oi if total_ce_oi > 0 else 0
+                strike_analysis.append({
+                    'strike': strike_price,
+                    'ce_oi': data['ce_oi'],
+                    'pe_oi': data['pe_oi'],
+                    'ce_oi_change': data['ce_oi_change'],
+                    'pe_oi_change': data['pe_oi_change'],
+                    'ce_volume': data['ce_volume'],
+                    'pe_volume': data['pe_volume'],
+                    'pcr_oi': round(pcr_oi, 4),
+                    'pcr_oi_change': round(pcr_oi_change, 4),
+                    'pcr_volume': round(pcr_volume, 4),
+                    'bias': strike_bias
+                })
 
-            # Determine overall zone bias
-            if bullish_count > bearish_count and zone_pcr > 1.0:
-                zone_bias = 'BULLISH'
-            elif bearish_count > bullish_count and zone_pcr < 1.0:
-                zone_bias = 'BEARISH'
+                total_ce_oi += data['ce_oi']
+                total_pe_oi += data['pe_oi']
             else:
-                zone_bias = 'NEUTRAL'
+                # No data for this strike
+                strike_analysis.append({
+                    'strike': strike_price,
+                    'ce_oi': 0,
+                    'pe_oi': 0,
+                    'ce_oi_change': 0,
+                    'pe_oi_change': 0,
+                    'ce_volume': 0,
+                    'pe_volume': 0,
+                    'pcr_oi': 0,
+                    'pcr_oi_change': 0,
+                    'pcr_volume': 0,
+                    'bias': 'NEUTRAL'
+                })
+                neutral_count += 1
 
-            summary = {
-                'total_ce_oi': total_ce_oi,
-                'total_pe_oi': total_pe_oi,
-                'zone_pcr': round(zone_pcr, 4),
-                'bullish_strikes': bullish_count,
-                'bearish_strikes': bearish_count,
-                'neutral_strikes': neutral_count,
-                'zone_bias': zone_bias
-            }
+        # Calculate zone PCR
+        zone_pcr = total_pe_oi / total_ce_oi if total_ce_oi > 0 else 0
 
-            return {
-                'strikes': strike_analysis,
-                'summary': summary
-            }
+        # Determine overall zone bias
+        if bullish_count > bearish_count and zone_pcr > 1.0:
+            zone_bias = 'BULLISH'
+        elif bearish_count > bullish_count and zone_pcr < 1.0:
+            zone_bias = 'BEARISH'
         else:
-            print(f"Failed to calculate ATM zone bias for {underlying}: {atm_result.get('error')}")
-            return None
+            zone_bias = 'NEUTRAL'
+
+        summary = {
+            'total_ce_oi': total_ce_oi,
+            'total_pe_oi': total_pe_oi,
+            'zone_pcr': round(zone_pcr, 4),
+            'bullish_strikes': bullish_count,
+            'bearish_strikes': bearish_count,
+            'neutral_strikes': neutral_count,
+            'zone_bias': zone_bias
+        }
+
+        return {
+            'strikes': strike_analysis,
+            'summary': summary
+        }
 
     except Exception as e:
         print(f"Error calculating ATM zone bias: {e}")
+        import traceback
+        print(traceback.format_exc())
         return None
 
 

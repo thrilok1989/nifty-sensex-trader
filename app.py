@@ -353,186 +353,186 @@ else:
     refresh_count = 0
 
 # ═══════════════════════════════════════════════════════════════════════
-# HEADER
+# HEADER (REMOVED - KEEPING ONLY TABS)
 # ═══════════════════════════════════════════════════════════════════════
 
-st.title(APP_TITLE)
-st.caption(APP_SUBTITLE)
+# st.title(APP_TITLE)
+# st.caption(APP_SUBTITLE)
 
 # ═══════════════════════════════════════════════════════════════════════
-# MANUAL REFRESH BUTTON
+# MANUAL REFRESH BUTTON (REMOVED - KEEPING ONLY TABS)
 # ═══════════════════════════════════════════════════════════════════════
 
-# Show manual refresh button and last update time
-col_refresh1, col_refresh2, col_refresh3 = st.columns([1, 2, 2])
-
-with col_refresh1:
-    if st.button("🔄 Refresh Data", help="Manually refresh all data from APIs (works anytime)"):
-        with st.spinner("🔄 Refreshing data..."):
-            # Clear relevant caches to force fresh data fetch
-            cache_manager = get_cache_manager()
-            cache_manager.clear_all()
-
-            # Force refresh option chain data
-            refresh_all_option_chain_data(save_snapshots=True)
-
-            # Force reload market data (bypasses market hours check for manual refresh)
-            try:
-                from market_data import fetch_nifty_data, fetch_sensex_data
-                nifty_data = fetch_nifty_data()
-                sensex_data = fetch_sensex_data()
-
-                # Store in cache
-                if nifty_data and nifty_data.get('success'):
-                    cache_manager.set('nifty_data', nifty_data)
-                if sensex_data and sensex_data.get('success'):
-                    cache_manager.set('sensex_data', sensex_data)
-
-                # Reload bias analysis
-                from bias_analysis import BiasAnalysisPro
-                analyzer = BiasAnalysisPro()
-                if nifty_data and nifty_data.get('success'):
-                    bias_results = analyzer.run_analysis(nifty_data)
-                    cache_manager.set('bias_analysis', bias_results)
-            except Exception as e:
-                st.error(f"⚠️ Some data may not have refreshed: {str(e)}")
-
-            # Store refresh time
-            st.session_state.last_manual_refresh = datetime.now(IST)
-
-        st.success("✅ Data refreshed successfully!")
-        st.rerun()
-
-with col_refresh2:
-    # Show auto-refresh status
-    if MARKET_HOURS_ENABLED and is_within_trading_hours():
-        st.info(f"🔄 Auto-refresh: **ON** ({AUTO_REFRESH_INTERVAL}s)")
-    else:
-        st.warning("🔄 Auto-refresh: **OFF** (Market Closed)")
-
-with col_refresh3:
-    # Show last manual refresh time
-    if 'last_manual_refresh' in st.session_state:
-        last_refresh = st.session_state.last_manual_refresh
-        time_since = (datetime.now(IST) - last_refresh).total_seconds()
-        if time_since < 60:
-            st.caption(f"Last refresh: {int(time_since)}s ago")
-        else:
-            st.caption(f"Last refresh: {int(time_since/60)}m ago")
-
-st.divider()
+# # Show manual refresh button and last update time
+# col_refresh1, col_refresh2, col_refresh3 = st.columns([1, 2, 2])
+#
+# with col_refresh1:
+#     if st.button("🔄 Refresh Data", help="Manually refresh all data from APIs (works anytime)"):
+#         with st.spinner("🔄 Refreshing data..."):
+#             # Clear relevant caches to force fresh data fetch
+#             cache_manager = get_cache_manager()
+#             cache_manager.clear_all()
+#
+#             # Force refresh option chain data
+#             refresh_all_option_chain_data(save_snapshots=True)
+#
+#             # Force reload market data (bypasses market hours check for manual refresh)
+#             try:
+#                 from market_data import fetch_nifty_data, fetch_sensex_data
+#                 nifty_data = fetch_nifty_data()
+#                 sensex_data = fetch_sensex_data()
+#
+#                 # Store in cache
+#                 if nifty_data and nifty_data.get('success'):
+#                     cache_manager.set('nifty_data', nifty_data)
+#                 if sensex_data and sensex_data.get('success'):
+#                     cache_manager.set('sensex_data', sensex_data)
+#
+#                 # Reload bias analysis
+#                 from bias_analysis import BiasAnalysisPro
+#                 analyzer = BiasAnalysisPro()
+#                 if nifty_data and nifty_data.get('success'):
+#                     bias_results = analyzer.run_analysis(nifty_data)
+#                     cache_manager.set('bias_analysis', bias_results)
+#             except Exception as e:
+#                 st.error(f"⚠️ Some data may not have refreshed: {str(e)}")
+#
+#             # Store refresh time
+#             st.session_state.last_manual_refresh = datetime.now(IST)
+#
+#         st.success("✅ Data refreshed successfully!")
+#         st.rerun()
+#
+# with col_refresh2:
+#     # Show auto-refresh status
+#     if MARKET_HOURS_ENABLED and is_within_trading_hours():
+#         st.info(f"🔄 Auto-refresh: **ON** ({AUTO_REFRESH_INTERVAL}s)")
+#     else:
+#         st.warning("🔄 Auto-refresh: **OFF** (Market Closed)")
+#
+# with col_refresh3:
+#     # Show last manual refresh time
+#     if 'last_manual_refresh' in st.session_state:
+#         last_refresh = st.session_state.last_manual_refresh
+#         time_since = (datetime.now(IST) - last_refresh).total_seconds()
+#         if time_since < 60:
+#             st.caption(f"Last refresh: {int(time_since)}s ago")
+#         else:
+#             st.caption(f"Last refresh: {int(time_since/60)}m ago")
+#
+# st.divider()
 
 # Check and run AI analysis if needed
 
 # ═══════════════════════════════════════════════════════════════════════
-# MARKET HOURS WARNING BANNER
+# MARKET HOURS WARNING BANNER (REMOVED - KEEPING ONLY TABS)
 # ═══════════════════════════════════════════════════════════════════════
 
-if MARKET_HOURS_ENABLED:
-    should_run, reason = should_run_app()
-
-    if not should_run:
-        # Display info banner when market is closed
-        st.info(f"""
-        ℹ️ **MARKET CLOSED**
-
-        **Reason:** {reason}
-
-        **Trading Hours:** 8:30 AM - 3:45 PM IST (Monday - Friday, excluding holidays)
-
-        ✅ **All features available:** Use the "🔄 Refresh Data" button above to update data manually.
-
-        ⏸️ **Auto-refresh paused** to conserve API quota - will resume during market hours.
-        """)
-
-        # Show next market open time if available
-        market_status = get_market_status()
-        if 'next_open' in market_status:
-            st.info(f"📅 **Next Market Open:** {market_status['next_open']}")
-    else:
-        # Show market session info when market is open
-        market_status = get_market_status()
-        session = market_status.get('session', 'unknown')
-
-        if session == 'pre_market':
-            st.info(f"⏰ **{reason}** - Limited liquidity expected")
-        elif session == 'post_market':
-            st.warning(f"⏰ **{reason}** - Trading session ending soon")
-        # Don't show banner during regular market hours to save space
-
-# ═══════════════════════════════════════════════════════════════════════
-# SIDEBAR - SYSTEM STATUS
-# ═══════════════════════════════════════════════════════════════════════
-
-with st.sidebar:
-    st.header("⚙️ System Status")
-    
-    # Market status
-    market_status = get_market_status()
-    if market_status['open']:
-        st.success(f"{market_status['message']} | {market_status['time']}")
-    else:
-        st.error(market_status['message'])
-    
-    st.divider()
-    
-    # DhanHQ connection
-    st.subheader("🔌 DhanHQ API")
-    if DEMO_MODE:
-        st.info("🧪 DEMO MODE Active")
-    else:
-        # Check connection status (no caching - unified 30s refresh)
-        if check_dhan_connection():
-            st.success("✅ Connected")
-        else:
-            st.error("❌ Connection Failed")
-    
-    st.divider()
-    
-    # Telegram status
-    st.subheader("📱 Telegram Alerts")
-    telegram_creds = get_telegram_credentials()
-    if telegram_creds['enabled']:
-        st.success("✅ Connected")
-        if st.button("Send Test Message"):
-            if send_test_message():
-                st.success("Test message sent!")
-            else:
-                st.error("Failed to send")
-    else:
-        st.warning("⚠️ Not Configured")
-    
-    st.divider()
-    
-    # Settings
-    st.subheader("⚙️ Settings")
-    st.write(f"**Auto Refresh:** {AUTO_REFRESH_INTERVAL}s")
-    st.write(f"**NIFTY Lot Size:** {LOT_SIZES['NIFTY']}")
-    st.write(f"**SENSEX Lot Size:** {LOT_SIZES['SENSEX']}")
-    st.write(f"**SL Offset:** {STOP_LOSS_OFFSET} points")
-    
-    st.divider()
-
-    # Background Data Loading Status
-    st.subheader("🔄 Data Loading")
-    cache_manager = get_cache_manager()
-
-    # Check cache status for each data type
-    data_status = {
-        'Market Data': cache_manager.is_valid('nifty_data'),
-        'Bias Analysis': cache_manager.is_valid('bias_analysis'),
-    }
-
-    for name, is_valid in data_status.items():
-        if is_valid:
-            st.success(f"✅ {name}")
-        else:
-            st.info(f"⏳ {name} Loading...")
-
-    st.caption("🔄 Auto-refresh: 45-180s intervals (optimized for performance & API limits)")
+# if MARKET_HOURS_ENABLED:
+#     should_run, reason = should_run_app()
+#
+#     if not should_run:
+#         # Display info banner when market is closed
+#         st.info(f"""
+#         ℹ️ **MARKET CLOSED**
+#
+#         **Reason:** {reason}
+#
+#         **Trading Hours:** 8:30 AM - 3:45 PM IST (Monday - Friday, excluding holidays)
+#
+#         ✅ **All features available:** Use the "🔄 Refresh Data" button above to update data manually.
+#
+#         ⏸️ **Auto-refresh paused** to conserve API quota - will resume during market hours.
+#         """)
+#
+#         # Show next market open time if available
+#         market_status = get_market_status()
+#         if 'next_open' in market_status:
+#             st.info(f"📅 **Next Market Open:** {market_status['next_open']}")
+#     else:
+#         # Show market session info when market is open
+#         market_status = get_market_status()
+#         session = market_status.get('session', 'unknown')
+#
+#         if session == 'pre_market':
+#             st.info(f"⏰ **{reason}** - Limited liquidity expected")
+#         elif session == 'post_market':
+#             st.warning(f"⏰ **{reason}** - Trading session ending soon")
+#         # Don't show banner during regular market hours to save space
 
 # ═══════════════════════════════════════════════════════════════════════
-# MAIN CONTENT
+# SIDEBAR - SYSTEM STATUS (REMOVED - KEEPING ONLY TABS)
+# ═══════════════════════════════════════════════════════════════════════
+
+# with st.sidebar:
+#     st.header("⚙️ System Status")
+#
+#     # Market status
+#     market_status = get_market_status()
+#     if market_status['open']:
+#         st.success(f"{market_status['message']} | {market_status['time']}")
+#     else:
+#         st.error(market_status['message'])
+#
+#     st.divider()
+#
+#     # DhanHQ connection
+#     st.subheader("🔌 DhanHQ API")
+#     if DEMO_MODE:
+#         st.info("🧪 DEMO MODE Active")
+#     else:
+#         # Check connection status (no caching - unified 30s refresh)
+#         if check_dhan_connection():
+#             st.success("✅ Connected")
+#         else:
+#             st.error("❌ Connection Failed")
+#
+#     st.divider()
+#
+#     # Telegram status
+#     st.subheader("📱 Telegram Alerts")
+#     telegram_creds = get_telegram_credentials()
+#     if telegram_creds['enabled']:
+#         st.success("✅ Connected")
+#         if st.button("Send Test Message"):
+#             if send_test_message():
+#                 st.success("Test message sent!")
+#             else:
+#                 st.error("Failed to send")
+#     else:
+#         st.warning("⚠️ Not Configured")
+#
+#     st.divider()
+#
+#     # Settings
+#     st.subheader("⚙️ Settings")
+#     st.write(f"**Auto Refresh:** {AUTO_REFRESH_INTERVAL}s")
+#     st.write(f"**NIFTY Lot Size:** {LOT_SIZES['NIFTY']}")
+#     st.write(f"**SENSEX Lot Size:** {LOT_SIZES['SENSEX']}")
+#     st.write(f"**SL Offset:** {STOP_LOSS_OFFSET} points")
+#
+#     st.divider()
+#
+#     # Background Data Loading Status
+#     st.subheader("🔄 Data Loading")
+#     cache_manager = get_cache_manager()
+#
+#     # Check cache status for each data type
+#     data_status = {
+#         'Market Data': cache_manager.is_valid('nifty_data'),
+#         'Bias Analysis': cache_manager.is_valid('bias_analysis'),
+#     }
+#
+#     for name, is_valid in data_status.items():
+#         if is_valid:
+#             st.success(f"✅ {name}")
+#         else:
+#             st.info(f"⏳ {name} Loading...")
+#
+#     st.caption("🔄 Auto-refresh: 45-180s intervals (optimized for performance & API limits)")
+
+# ═══════════════════════════════════════════════════════════════════════
+# MAIN CONTENT (REMOVED - KEEPING ONLY TABS)
 # ═══════════════════════════════════════════════════════════════════════
 
 # Get NIFTY data from cache (loaded in background)
@@ -542,22 +542,22 @@ nifty_data = get_cached_nifty_data()
 if not nifty_data or not nifty_data.get('success'):
     # Show loading message (non-blocking)
     # Background thread will load data and it will appear on next refresh
-    st.info("⏳ Loading NIFTY data in background... Please wait a moment and the data will appear automatically.")
+    # st.info("⏳ Loading NIFTY data in background... Please wait a moment and the data will appear automatically.")
 
     # Check if there's an error message to display
-    if nifty_data and nifty_data.get('error'):
-        st.error(f"⚠️ **Error:** {nifty_data['error']}")
-
-        # Show help message if it's a credentials error
-        if 'credentials' in nifty_data['error'].lower() or 'secrets.toml' in nifty_data['error'].lower():
-            st.warning("""
-            **Setup Required:**
-            1. Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`
-            2. Fill in your DhanHQ API credentials
-            3. Restart the application
-            """)
-    else:
-        st.info("💡 **Performance Note:** Tab and button clicks should be instant now. Data loads in background without blocking UI.")
+    # if nifty_data and nifty_data.get('error'):
+    #     st.error(f"⚠️ **Error:** {nifty_data['error']}")
+    #
+    #     # Show help message if it's a credentials error
+    #     if 'credentials' in nifty_data['error'].lower() or 'secrets.toml' in nifty_data['error'].lower():
+    #         st.warning("""
+    #         **Setup Required:**
+    #         1. Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`
+    #         2. Fill in your DhanHQ API credentials
+    #         3. Restart the application
+    #         """)
+    # else:
+    #     st.info("💡 **Performance Note:** Tab and button clicks should be instant now. Data loads in background without blocking UI.")
 
     # Use a placeholder/default data structure to prevent errors
     nifty_data = {
@@ -943,628 +943,631 @@ if should_run_signal_check and (current_time - st.session_state.last_htf_sr_chec
         # Silently fail - don't disrupt the app
         pass
 
-# Display market data
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    # Handle None or 0 values for spot price
-    if nifty_data.get('spot_price') is not None and nifty_data['spot_price'] != 0:
-        st.metric(
-            "NIFTY Spot",
-            f"₹{nifty_data['spot_price']:,.2f}",
-            delta=None
-        )
-    else:
-        st.metric(
-            "NIFTY Spot",
-            "N/A",
-            delta=None
-        )
-        if nifty_data.get('error'):
-            st.error(f"⚠️ {nifty_data['error']}")
-
-with col2:
-    # Handle None or 0 values for ATM strike
-    if nifty_data.get('atm_strike') is not None and nifty_data['atm_strike'] != 0:
-        st.metric(
-            "ATM Strike",
-            f"{nifty_data['atm_strike']}"
-        )
-    else:
-        st.metric(
-            "ATM Strike",
-            "N/A"
-        )
-
-with col3:
-    st.metric(
-        "Current Expiry",
-        nifty_data.get('current_expiry', 'N/A')
-    )
-
-with col4:
-    # Show data freshness status
-    cache_manager = get_cache_manager()
-    nifty_cache_time = cache_manager._cache_timestamps.get('nifty_data', 0)
-    if nifty_cache_time > 0:
-        age_seconds = int(time.time() - nifty_cache_time)
-        if age_seconds < 15:
-            st.success(f"🟢 Live ({age_seconds}s ago)")
-        elif age_seconds < 60:
-            st.info(f"🔵 Fresh ({age_seconds}s ago)")
-        else:
-            st.warning(f"🟡 Updating...")
-    else:
-        st.info("📅 Loading...")
-
-st.divider()
-
-# ═══════════════════════════════════════════════════════════════════════
-# VOB TRADING SIGNALS DISPLAY
-# ═══════════════════════════════════════════════════════════════════════
-st.markdown("### 🎯 NIFTY/SENSEX Manual Trader")
-st.markdown("**VOB-Based Trading | Manual Signal Entry**")
-
-if st.session_state.active_vob_signals:
-    for signal in st.session_state.active_vob_signals:
-        signal_emoji = "🟢" if signal['direction'] == 'CALL' else "🔴"
-        direction_label = "BULLISH" if signal['direction'] == 'CALL' else "BEARISH"
-        sentiment_color = "#26ba9f" if signal['market_sentiment'] == 'BULLISH' else "#ba2646"
-
-        # Get strength data if available
-        strength = signal.get('strength')
-        strength_html = ""
-        if strength:
-            strength_score = strength.get('strength_score', 0)
-            strength_label = strength.get('strength_label', 'UNKNOWN')
-            trend = strength.get('trend', 'UNKNOWN')
-            times_tested = strength.get('times_tested', 0)
-            respect_rate = strength.get('respect_rate', 0)
-
-            # Determine strength color
-            if strength_score >= 70:
-                strength_color = "#4caf50"  # Green
-            elif strength_score >= 50:
-                strength_color = "#ffc107"  # Yellow
-            else:
-                strength_color = "#ff5252"  # Red
-
-            # Trend indicator
-            trend_emoji = "🔺" if trend == "STRENGTHENING" else "🔻" if trend == "WEAKENING" else "➖"
-
-            strength_html = f"""
-                <hr style='margin: 10px 0;'>
-                <div style='background-color: rgba(0,0,0,0.05); padding: 10px; border-radius: 5px;'>
-                    <p style='margin: 0; font-size: 14px; font-weight: bold;'>📊 Order Block Strength Analysis</p>
-                    <div style='display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px;'>
-                        <div>
-                            <p style='margin: 0; font-size: 11px; color: #888;'>Strength Score</p>
-                            <p style='margin: 0; font-size: 16px; font-weight: bold; color: {strength_color};'>{strength_score}/100</p>
-                        </div>
-                        <div>
-                            <p style='margin: 0; font-size: 11px; color: #888;'>Status</p>
-                            <p style='margin: 0; font-size: 14px;'>{strength_label.replace('_', ' ')}</p>
-                        </div>
-                        <div>
-                            <p style='margin: 0; font-size: 11px; color: #888;'>Trend</p>
-                            <p style='margin: 0; font-size: 14px;'>{trend_emoji} {trend}</p>
-                        </div>
-                        <div>
-                            <p style='margin: 0; font-size: 11px; color: #888;'>Tests / Respect Rate</p>
-                            <p style='margin: 0; font-size: 14px;'>{times_tested} / {respect_rate}%</p>
-                        </div>
-                    </div>
-                </div>
-            """
-
-        with st.container():
-            st.markdown(f"""
-            <div style='border: 2px solid {sentiment_color}; border-radius: 10px; padding: 15px; margin: 10px 0; background-color: rgba(38, 186, 159, 0.1);'>
-                <h3 style='margin: 0;'>{signal_emoji} {signal['index']} {direction_label} ENTRY SIGNAL</h3>
-                <p style='margin: 5px 0;'><b>Market Sentiment:</b> {signal['market_sentiment']}</p>
-                <hr style='margin: 10px 0;'>
-                <div style='display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;'>
-                    <div>
-                        <p style='margin: 0; font-size: 12px; color: #888;'>Entry Price</p>
-                        <p style='margin: 0; font-size: 18px; font-weight: bold;'>₹{signal['entry_price']}</p>
-                    </div>
-                    <div>
-                        <p style='margin: 0; font-size: 12px; color: #888;'>Stop Loss</p>
-                        <p style='margin: 0; font-size: 18px; font-weight: bold; color: #ff5252;'>₹{signal['stop_loss']}</p>
-                    </div>
-                    <div>
-                        <p style='margin: 0; font-size: 12px; color: #888;'>Target</p>
-                        <p style='margin: 0; font-size: 18px; font-weight: bold; color: #4caf50;'>₹{signal['target']}</p>
-                    </div>
-                    <div>
-                        <p style='margin: 0; font-size: 12px; color: #888;'>Risk:Reward</p>
-                        <p style='margin: 0; font-size: 18px; font-weight: bold;'>{signal['risk_reward']}</p>
-                    </div>
-                </div>
-                <hr style='margin: 10px 0;'>
-                <div style='display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;'>
-                    <div>
-                        <p style='margin: 0; font-size: 12px; color: #888;'>VOB Level</p>
-                        <p style='margin: 0; font-size: 14px;'>₹{signal['vob_level']}</p>
-                    </div>
-                    <div>
-                        <p style='margin: 0; font-size: 12px; color: #888;'>Distance from VOB</p>
-                        <p style='margin: 0; font-size: 14px;'>{signal['distance_from_vob']} points</p>
-                    </div>
-                    <div>
-                        <p style='margin: 0; font-size: 12px; color: #888;'>Signal Time</p>
-                        <p style='margin: 0; font-size: 14px;'>{signal['timestamp'].strftime('%H:%M:%S')}</p>
-                    </div>
-                </div>
-                {strength_html}
-            </div>
-            """, unsafe_allow_html=True)
-else:
-    st.info("⏳ Monitoring market for VOB-based entry signals... No active signals at the moment.")
-    st.caption("Signals are generated when spot price is within 8 points of a Volume Order Block and aligned with overall market sentiment.")
-
-# Display VOB Summary for NIFTY and SENSEX
-st.markdown("#### 📈 Volume Order Block Status")
-
-col1, col2 = st.columns(2)
-
-# NIFTY VOB Summary
-with col1:
-    st.markdown("**NIFTY VOB**")
-    if st.session_state.vob_data_nifty:
-        from indicators.vob_strength_tracker import VOBStrengthTracker
-        vob_tracker = VOBStrengthTracker()
-
-        df_nifty = get_cached_chart_data('^NSEI', '1d', '1m')
-
-        # Get latest bullish and bearish blocks
-        bullish_blocks = st.session_state.vob_data_nifty.get('bullish_blocks', [])
-        bearish_blocks = st.session_state.vob_data_nifty.get('bearish_blocks', [])
-
-        # Calculate strength for latest blocks
-        bull_strength = None
-        bear_strength = None
-
-        if bullish_blocks and df_nifty is not None:
-            latest_bull = bullish_blocks[-1]
-            bull_strength = vob_tracker.calculate_strength(latest_bull, df_nifty)
-
-        if bearish_blocks and df_nifty is not None:
-            latest_bear = bearish_blocks[-1]
-            bear_strength = vob_tracker.calculate_strength(latest_bear, df_nifty)
-
-        # Display bullish block info
-        if bull_strength:
-            trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
-            strength_color = "#4caf50" if bull_strength['strength_score'] >= 70 else "#ffc107" if bull_strength['strength_score'] >= 50 else "#ff5252"
-            st.markdown(f"**🟢 Bullish VOB:** ₹{latest_bull['lower']:.2f} - ₹{latest_bull['upper']:.2f}")
-            st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bull_strength['strength_score']}/100</span> {trend_emoji} {bull_strength['trend']}", unsafe_allow_html=True)
-        else:
-            st.info("No bullish VOB data available")
-
-        # Display bearish block info
-        if bear_strength:
-            trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
-            strength_color = "#4caf50" if bear_strength['strength_score'] >= 70 else "#ffc107" if bear_strength['strength_score'] >= 50 else "#ff5252"
-            st.markdown(f"**🔴 Bearish VOB:** ₹{latest_bear['lower']:.2f} - ₹{latest_bear['upper']:.2f}")
-            st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bear_strength['strength_score']}/100</span> {trend_emoji} {bear_strength['trend']}", unsafe_allow_html=True)
-        else:
-            st.info("No bearish VOB data available")
-    else:
-        st.info("VOB data loading...")
-
-# SENSEX VOB Summary
-with col2:
-    st.markdown("**SENSEX VOB**")
-    if st.session_state.vob_data_sensex:
-        from indicators.vob_strength_tracker import VOBStrengthTracker
-        vob_tracker = VOBStrengthTracker()
-
-        df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
-
-        # Get latest bullish and bearish blocks
-        bullish_blocks = st.session_state.vob_data_sensex.get('bullish_blocks', [])
-        bearish_blocks = st.session_state.vob_data_sensex.get('bearish_blocks', [])
-
-        # Calculate strength for latest blocks
-        bull_strength = None
-        bear_strength = None
-
-        if bullish_blocks and df_sensex is not None:
-            latest_bull = bullish_blocks[-1]
-            bull_strength = vob_tracker.calculate_strength(latest_bull, df_sensex)
-
-        if bearish_blocks and df_sensex is not None:
-            latest_bear = bearish_blocks[-1]
-            bear_strength = vob_tracker.calculate_strength(latest_bear, df_sensex)
-
-        # Display bullish block info
-        if bull_strength:
-            trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
-            strength_color = "#4caf50" if bull_strength['strength_score'] >= 70 else "#ffc107" if bull_strength['strength_score'] >= 50 else "#ff5252"
-            st.markdown(f"**🟢 Bullish VOB:** ₹{latest_bull['lower']:.2f} - ₹{latest_bull['upper']:.2f}")
-            st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bull_strength['strength_score']}/100</span> {trend_emoji} {bull_strength['trend']}", unsafe_allow_html=True)
-        else:
-            st.info("No bullish VOB data available")
-
-        # Display bearish block info
-        if bear_strength:
-            trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
-            strength_color = "#4caf50" if bear_strength['strength_score'] >= 70 else "#ffc107" if bear_strength['strength_score'] >= 50 else "#ff5252"
-            st.markdown(f"**🔴 Bearish VOB:** ₹{latest_bear['lower']:.2f} - ₹{latest_bear['upper']:.2f}")
-            st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bear_strength['strength_score']}/100</span> {trend_emoji} {bear_strength['trend']}", unsafe_allow_html=True)
-        else:
-            st.info("No bearish VOB data available")
-    else:
-        st.info("VOB data loading...")
-
-# Add button to send VOB status to Telegram
-st.markdown("")
-col1, col2, col3 = st.columns([1, 1, 1])
-with col2:
-    if st.button("📱 Send VOB Status to Telegram", use_container_width=True):
-        try:
-            from indicators.vob_strength_tracker import VOBStrengthTracker
-            vob_tracker = VOBStrengthTracker()
-
-            # Prepare NIFTY VOB data
-            nifty_vob_summary = {}
-            if st.session_state.vob_data_nifty:
-                df_nifty = get_cached_chart_data('^NSEI', '1d', '1m')
-                if df_nifty is not None:
-                    bullish_blocks = st.session_state.vob_data_nifty.get('bullish_blocks', [])
-                    bearish_blocks = st.session_state.vob_data_nifty.get('bearish_blocks', [])
-
-                    if bullish_blocks:
-                        latest_bull = bullish_blocks[-1]
-                        bull_strength = vob_tracker.calculate_strength(latest_bull, df_nifty)
-                        nifty_vob_summary['bullish'] = {
-                            'lower': latest_bull['lower'],
-                            'upper': latest_bull['upper'],
-                            'strength_score': bull_strength['strength_score'],
-                            'trend': bull_strength['trend']
-                        }
-
-                    if bearish_blocks:
-                        latest_bear = bearish_blocks[-1]
-                        bear_strength = vob_tracker.calculate_strength(latest_bear, df_nifty)
-                        nifty_vob_summary['bearish'] = {
-                            'lower': latest_bear['lower'],
-                            'upper': latest_bear['upper'],
-                            'strength_score': bear_strength['strength_score'],
-                            'trend': bear_strength['trend']
-                        }
-
-            # Prepare SENSEX VOB data
-            sensex_vob_summary = {}
-            if st.session_state.vob_data_sensex:
-                df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
-                if df_sensex is not None:
-                    bullish_blocks = st.session_state.vob_data_sensex.get('bullish_blocks', [])
-                    bearish_blocks = st.session_state.vob_data_sensex.get('bearish_blocks', [])
-
-                    if bullish_blocks:
-                        latest_bull = bullish_blocks[-1]
-                        bull_strength = vob_tracker.calculate_strength(latest_bull, df_sensex)
-                        sensex_vob_summary['bullish'] = {
-                            'lower': latest_bull['lower'],
-                            'upper': latest_bull['upper'],
-                            'strength_score': bull_strength['strength_score'],
-                            'trend': bull_strength['trend']
-                        }
-
-                    if bearish_blocks:
-                        latest_bear = bearish_blocks[-1]
-                        bear_strength = vob_tracker.calculate_strength(latest_bear, df_sensex)
-                        sensex_vob_summary['bearish'] = {
-                            'lower': latest_bear['lower'],
-                            'upper': latest_bear['upper'],
-                            'strength_score': bear_strength['strength_score'],
-                            'trend': bear_strength['trend']
-                        }
-
-            # Send to Telegram
-            if nifty_vob_summary or sensex_vob_summary:
-                telegram_bot = TelegramBot()
-                success = telegram_bot.send_vob_status_summary(nifty_vob_summary, sensex_vob_summary)
-                if success:
-                    st.success("✅ VOB status sent to Telegram!")
-                else:
-                    st.error("❌ Failed to send to Telegram. Check your Telegram credentials.")
-            else:
-                st.warning("⚠️ No VOB data available to send")
-
-        except Exception as e:
-            st.error(f"❌ Error sending VOB status: {str(e)}")
-
-st.divider()
+# Display market data (REMOVED - KEEPING ONLY TABS)
+# col1, col2, col3, col4 = st.columns(4)
+#
+# with col1:
+#     # Handle None or 0 values for spot price
+#     if nifty_data.get('spot_price') is not None and nifty_data['spot_price'] != 0:
+#         st.metric(
+#             "NIFTY Spot",
+#             f"₹{nifty_data['spot_price']:,.2f}",
+#             delta=None
+#         )
+#     else:
+#         st.metric(
+#             "NIFTY Spot",
+#             "N/A",
+#             delta=None
+#         )
+#         if nifty_data.get('error'):
+#             st.error(f"⚠️ {nifty_data['error']}")
+#
+# with col2:
+#     # Handle None or 0 values for ATM strike
+#     if nifty_data.get('atm_strike') is not None and nifty_data['atm_strike'] != 0:
+#         st.metric(
+#             "ATM Strike",
+#             f"{nifty_data['atm_strike']}"
+#         )
+#     else:
+#         st.metric(
+#             "ATM Strike",
+#             "N/A"
+#         )
+#
+# with col3:
+#     st.metric(
+#         "Current Expiry",
+#         nifty_data.get('current_expiry', 'N/A')
+#     )
+#
+# with col4:
+#     # Show data freshness status
+#     cache_manager = get_cache_manager()
+#     nifty_cache_time = cache_manager._cache_timestamps.get('nifty_data', 0)
+#     if nifty_cache_time > 0:
+#         age_seconds = int(time.time() - nifty_cache_time)
+#         if age_seconds < 15:
+#             st.success(f"🟢 Live ({age_seconds}s ago)")
+#         elif age_seconds < 60:
+#             st.info(f"🔵 Fresh ({age_seconds}s ago)")
+#         else:
+#             st.warning(f"🟡 Updating...")
+#     else:
+#         st.info("📅 Loading...")
+#
+# st.divider()
 
 # ═══════════════════════════════════════════════════════════════════════
-# AI MARKET ANALYSIS RESULTS DISPLAY
+# ALL CONTENT BELOW REMOVED - KEEPING ONLY TABS
 # ═══════════════════════════════════════════════════════════════════════
-
-# ═══════════════════════════════════════════════════════════════════════
-# HTF S/R TRADING SIGNALS DISPLAY
-# ═══════════════════════════════════════════════════════════════════════
-st.markdown("### 📊 HTF Support/Resistance Signals")
-st.markdown("**HTF S/R Based Trading | 5min, 10min, 15min Timeframes**")
-
-# Display VOB and HTF S/R Status Summary
-st.markdown("#### 📊 VOB & HTF S/R Strength Status")
-
-col1, col2 = st.columns(2)
-
-# NIFTY Summary
-with col1:
-    st.markdown("**NIFTY**")
-
-    # VOB Status
-    if st.session_state.vob_data_nifty:
-        from indicators.vob_strength_tracker import VOBStrengthTracker
-        vob_tracker = VOBStrengthTracker()
-        df_nifty = get_cached_chart_data('^NSEI', '1d', '1m')
-
-        bullish_blocks = st.session_state.vob_data_nifty.get('bullish_blocks', [])
-        bearish_blocks = st.session_state.vob_data_nifty.get('bearish_blocks', [])
-
-        if bullish_blocks and df_nifty is not None:
-            latest_bull = bullish_blocks[-1]
-            bull_strength = vob_tracker.calculate_strength(latest_bull, df_nifty)
-            trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
-            st.caption(f"**VOB Bull:** {bull_strength['strength_score']}/100 {trend_emoji} {bull_strength['trend']}")
-
-        if bearish_blocks and df_nifty is not None:
-            latest_bear = bearish_blocks[-1]
-            bear_strength = vob_tracker.calculate_strength(latest_bear, df_nifty)
-            trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
-            st.caption(f"**VOB Bear:** {bear_strength['strength_score']}/100 {trend_emoji} {bear_strength['trend']}")
-
-    # HTF S/R Status
-    if st.session_state.htf_data_nifty:
-        from indicators.htf_sr_strength_tracker import HTFSRStrengthTracker
-        htf_tracker = HTFSRStrengthTracker()
-        df_nifty = get_cached_chart_data('^NSEI', '7d', '1m')
-
-        # Get latest support and resistance levels
-        for timeframe, levels in st.session_state.htf_data_nifty.items():
-            if levels and df_nifty is not None:
-                support = levels.get('support')
-                resistance = levels.get('resistance')
-
-                if support:
-                    support_strength = htf_tracker.calculate_strength(support, 'SUPPORT', df_nifty, lookback_periods=100)
-                    trend_emoji = "🔺" if support_strength['trend'] == "STRENGTHENING" else "🔻" if support_strength['trend'] == "WEAKENING" else "➖"
-                    st.caption(f"**HTF Support ({timeframe}):** {support_strength['strength_score']}/100 {trend_emoji} {support_strength['trend']}")
-
-                if resistance:
-                    resistance_strength = htf_tracker.calculate_strength(resistance, 'RESISTANCE', df_nifty, lookback_periods=100)
-                    trend_emoji = "🔺" if resistance_strength['trend'] == "STRENGTHENING" else "🔻" if resistance_strength['trend'] == "WEAKENING" else "➖"
-                    st.caption(f"**HTF Resistance ({timeframe}):** {resistance_strength['strength_score']}/100 {trend_emoji} {resistance_strength['trend']}")
-
-                break  # Only show one timeframe for brevity
-
-# SENSEX Summary
-with col2:
-    st.markdown("**SENSEX**")
-
-    # VOB Status
-    if st.session_state.vob_data_sensex:
-        from indicators.vob_strength_tracker import VOBStrengthTracker
-        vob_tracker = VOBStrengthTracker()
-        df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
-
-        bullish_blocks = st.session_state.vob_data_sensex.get('bullish_blocks', [])
-        bearish_blocks = st.session_state.vob_data_sensex.get('bearish_blocks', [])
-
-        if bullish_blocks and df_sensex is not None:
-            latest_bull = bullish_blocks[-1]
-            bull_strength = vob_tracker.calculate_strength(latest_bull, df_sensex)
-            trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
-            st.caption(f"**VOB Bull:** {bull_strength['strength_score']}/100 {trend_emoji} {bull_strength['trend']}")
-
-        if bearish_blocks and df_sensex is not None:
-            latest_bear = bearish_blocks[-1]
-            bear_strength = vob_tracker.calculate_strength(latest_bear, df_sensex)
-            trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
-            st.caption(f"**VOB Bear:** {bear_strength['strength_score']}/100 {trend_emoji} {bear_strength['trend']}")
-
-    # HTF S/R Status
-    if st.session_state.htf_data_sensex:
-        from indicators.htf_sr_strength_tracker import HTFSRStrengthTracker
-        htf_tracker = HTFSRStrengthTracker()
-        df_sensex = get_cached_chart_data('^BSESN', '7d', '1m')
-
-        # Get latest support and resistance levels
-        for timeframe, levels in st.session_state.htf_data_sensex.items():
-            if levels and df_sensex is not None:
-                support = levels.get('support')
-                resistance = levels.get('resistance')
-
-                if support:
-                    support_strength = htf_tracker.calculate_strength(support, 'SUPPORT', df_sensex, lookback_periods=100)
-                    trend_emoji = "🔺" if support_strength['trend'] == "STRENGTHENING" else "🔻" if support_strength['trend'] == "WEAKENING" else "➖"
-                    st.caption(f"**HTF Support ({timeframe}):** {support_strength['strength_score']}/100 {trend_emoji} {support_strength['trend']}")
-
-                if resistance:
-                    resistance_strength = htf_tracker.calculate_strength(resistance, 'RESISTANCE', df_sensex, lookback_periods=100)
-                    trend_emoji = "🔺" if resistance_strength['trend'] == "STRENGTHENING" else "🔻" if resistance_strength['trend'] == "WEAKENING" else "➖"
-                    st.caption(f"**HTF Resistance ({timeframe}):** {resistance_strength['strength_score']}/100 {trend_emoji} {resistance_strength['trend']}")
-
-                break  # Only show one timeframe for brevity
-
-st.divider()
-
-if st.session_state.active_htf_sr_signals:
-    for signal in st.session_state.active_htf_sr_signals:
-        signal_emoji = "🟢" if signal['direction'] == 'CALL' else "🔴"
-        direction_label = "BULLISH" if signal['direction'] == 'CALL' else "BEARISH"
-        sentiment_color = "#26ba9f" if signal['market_sentiment'] == 'BULLISH' else "#ba2646"
-
-        # Format timeframe for display
-        timeframe_display = {
-            '5T': '5 Min',
-            '10T': '10 Min',
-            '15T': '15 Min'
-        }.get(signal.get('timeframe', ''), signal.get('timeframe', 'N/A'))
-
-        # Determine level type and value
-        if signal['direction'] == 'CALL':
-            level_type = "Support Level"
-            level_value = signal['support_level']
-        else:
-            level_type = "Resistance Level"
-            level_value = signal.get('resistance_level', 'N/A')
-
-        # Get strength data if available
-        strength = signal.get('strength')
-        strength_html = ""
-        if strength:
-            strength_score = strength.get('strength_score', 0)
-            strength_label = strength.get('strength_label', 'UNKNOWN')
-            trend = strength.get('trend', 'UNKNOWN')
-            times_tested = strength.get('times_tested', 0)
-            hold_rate = strength.get('hold_rate', 0)
-
-            # Determine strength color
-            if strength_score >= 70:
-                strength_color = "#4caf50"  # Green
-            elif strength_score >= 50:
-                strength_color = "#ffc107"  # Yellow
-            else:
-                strength_color = "#ff5252"  # Red
-
-            # Trend indicator
-            trend_emoji = "🔺" if trend == "STRENGTHENING" else "🔻" if trend == "WEAKENING" else "➖"
-
-            strength_html = f"""
-                <hr style='margin: 10px 0;'>
-                <div style='background-color: rgba(0,0,0,0.05); padding: 10px; border-radius: 5px;'>
-                    <p style='margin: 0; font-size: 14px; font-weight: bold;'>📊 Support/Resistance Strength Analysis</p>
-                    <div style='display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px;'>
-                        <div>
-                            <p style='margin: 0; font-size: 11px; color: #888;'>Strength Score</p>
-                            <p style='margin: 0; font-size: 16px; font-weight: bold; color: {strength_color};'>{strength_score}/100</p>
-                        </div>
-                        <div>
-                            <p style='margin: 0; font-size: 11px; color: #888;'>Status</p>
-                            <p style='margin: 0; font-size: 14px;'>{strength_label.replace('_', ' ')}</p>
-                        </div>
-                        <div>
-                            <p style='margin: 0; font-size: 11px; color: #888;'>Trend</p>
-                            <p style='margin: 0; font-size: 14px;'>{trend_emoji} {trend}</p>
-                        </div>
-                        <div>
-                            <p style='margin: 0; font-size: 11px; color: #888;'>Tests / Hold Rate</p>
-                            <p style='margin: 0; font-size: 14px;'>{times_tested} / {hold_rate}%</p>
-                        </div>
-                    </div>
-                </div>
-            """
-
-        with st.container():
-            st.markdown(f"""
-            <div style='border: 2px solid {sentiment_color}; border-radius: 10px; padding: 15px; margin: 10px 0; background-color: rgba(38, 186, 159, 0.1);'>
-                <h3 style='margin: 0;'>{signal_emoji} {signal['index']} {direction_label} HTF S/R ENTRY SIGNAL</h3>
-                <p style='margin: 5px 0;'><b>Market Sentiment:</b> {signal['market_sentiment']} | <b>Timeframe:</b> {timeframe_display}</p>
-                <hr style='margin: 10px 0;'>
-                <div style='display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;'>
-                    <div>
-                        <p style='margin: 0; font-size: 12px; color: #888;'>Entry Price</p>
-                        <p style='margin: 0; font-size: 18px; font-weight: bold;'>₹{signal['entry_price']}</p>
-                    </div>
-                    <div>
-                        <p style='margin: 0; font-size: 12px; color: #888;'>Stop Loss</p>
-                        <p style='margin: 0; font-size: 18px; font-weight: bold; color: #ff5252;'>₹{signal['stop_loss']}</p>
-                    </div>
-                    <div>
-                        <p style='margin: 0; font-size: 12px; color: #888;'>Target</p>
-                        <p style='margin: 0; font-size: 18px; font-weight: bold; color: #4caf50;'>₹{signal['target']}</p>
-                    </div>
-                    <div>
-                        <p style='margin: 0; font-size: 12px; color: #888;'>Risk:Reward</p>
-                        <p style='margin: 0; font-size: 18px; font-weight: bold;'>{signal['risk_reward']}</p>
-                    </div>
-                </div>
-                <hr style='margin: 10px 0;'>
-                <div style='display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;'>
-                    <div>
-                        <p style='margin: 0; font-size: 12px; color: #888;'>{level_type}</p>
-                        <p style='margin: 0; font-size: 14px;'>₹{level_value}</p>
-                    </div>
-                    <div>
-                        <p style='margin: 0; font-size: 12px; color: #888;'>Distance from Level</p>
-                        <p style='margin: 0; font-size: 14px;'>{signal['distance_from_level']} points</p>
-                    </div>
-                    <div>
-                        <p style='margin: 0; font-size: 12px; color: #888;'>Signal Time</p>
-                        <p style='margin: 0; font-size: 14px;'>{signal['timestamp'].strftime('%H:%M:%S')}</p>
-                    </div>
-                </div>
-                {strength_html}
-            </div>
-            """, unsafe_allow_html=True)
-else:
-    st.info("⏳ Monitoring market for HTF S/R entry signals... No active signals at the moment.")
-    st.caption("Signals are generated when spot price is within 8 points of HTF Support (for bullish) or Resistance (for bearish) and aligned with overall market sentiment.")
-
-st.divider()
-
-# ═══════════════════════════════════════════════════════════════════════
-# CENTRALIZED OPTION CHAIN DATA MANAGEMENT
-# ═══════════════════════════════════════════════════════════════════════
-
-# Get option chain manager
-option_manager = get_option_chain_manager()
-
-# Preload option chain data on first load
-if option_manager.is_data_stale():
-    with st.spinner("📡 Loading option chain data for all indices..."):
-        preload_option_chain_data()
-
-# Display cache status and refresh button
-st.markdown("### 📊 Option Chain Data Status")
-col1, col2, col3, col4, col5 = st.columns([2, 1.5, 1.5, 1.5, 1])
-
-cache_status = option_manager.get_cache_status()
-
-with col1:
-    if cache_status['is_fetching']:
-        st.info("⏳ Fetching data...")
-    elif cache_status['last_fetch']:
-        time_str = cache_status['last_fetch'].strftime('%I:%M:%S %p') if cache_status['last_fetch'] else 'Never'
-        st.metric("Last Updated", time_str)
-    else:
-        st.warning("❌ No data loaded")
-
-with col2:
-    st.metric("Symbols Loaded", f"{cache_status['total_success']}/{len(option_manager.SYMBOLS)}")
-
-with col3:
-    status_emoji = "🟢" if not cache_status['is_stale'] else "🟡"
-    status_text = "Fresh" if not cache_status['is_stale'] else "Stale"
-    st.metric("Data Status", f"{status_emoji} {status_text}")
-
-with col4:
-    if cache_status['symbols_success']:
-        st.caption("✓ " + ", ".join(cache_status['symbols_success']))
-    else:
-        st.caption("No data")
-
-with col5:
-    if st.button("🔄 Refresh All", use_container_width=True, type="primary"):
-        with st.spinner("📡 Fetching latest option chain data..."):
-            result = refresh_all_option_chain_data()
-            success_count = sum(1 for d in result.values() if d.get('success'))
-            if success_count > 0:
-                st.success(f"✅ Refreshed {success_count} indices successfully!")
-                st.rerun()
-            else:
-                st.error("❌ Failed to refresh data. Please try again.")
-
-st.markdown("---")
-st.caption("💡 **Tip:** All tabs use the same data. Click 'Refresh All' once to update data across all analyses.")
-
-st.divider()
+# # ═══════════════════════════════════════════════════════════════════════
+## VOB TRADING SIGNALS DISPLAY
+## ═══════════════════════════════════════════════════════════════════════
+# st.markdown("### 🎯 NIFTY/SENSEX Manual Trader")
+# st.markdown("**VOB-Based Trading | Manual Signal Entry**")
+# 
+# if st.session_state.active_vob_signals:
+#     for signal in st.session_state.active_vob_signals:
+#         signal_emoji = "🟢" if signal['direction'] == 'CALL' else "🔴"
+#         direction_label = "BULLISH" if signal['direction'] == 'CALL' else "BEARISH"
+#         sentiment_color = "#26ba9f" if signal['market_sentiment'] == 'BULLISH' else "#ba2646"
+# 
+#         # Get strength data if available
+#         strength = signal.get('strength')
+#         strength_html = ""
+#         if strength:
+#             strength_score = strength.get('strength_score', 0)
+#             strength_label = strength.get('strength_label', 'UNKNOWN')
+#             trend = strength.get('trend', 'UNKNOWN')
+#             times_tested = strength.get('times_tested', 0)
+#             respect_rate = strength.get('respect_rate', 0)
+# 
+#             # Determine strength color
+#             if strength_score >= 70:
+#                 strength_color = "#4caf50"  # Green
+#             elif strength_score >= 50:
+#                 strength_color = "#ffc107"  # Yellow
+#             else:
+#                 strength_color = "#ff5252"  # Red
+# 
+#             # Trend indicator
+#             trend_emoji = "🔺" if trend == "STRENGTHENING" else "🔻" if trend == "WEAKENING" else "➖"
+# 
+#             strength_html = f"""
+#                 <hr style='margin: 10px 0;'>
+#                 <div style='background-color: rgba(0,0,0,0.05); padding: 10px; border-radius: 5px;'>
+#                     <p style='margin: 0; font-size: 14px; font-weight: bold;'>📊 Order Block Strength Analysis</p>
+#                     <div style='display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px;'>
+#                         <div>
+#                             <p style='margin: 0; font-size: 11px; color: #888;'>Strength Score</p>
+#                             <p style='margin: 0; font-size: 16px; font-weight: bold; color: {strength_color};'>{strength_score}/100</p>
+#                         </div>
+#                         <div>
+#                             <p style='margin: 0; font-size: 11px; color: #888;'>Status</p>
+#                             <p style='margin: 0; font-size: 14px;'>{strength_label.replace('_', ' ')}</p>
+#                         </div>
+#                         <div>
+#                             <p style='margin: 0; font-size: 11px; color: #888;'>Trend</p>
+#                             <p style='margin: 0; font-size: 14px;'>{trend_emoji} {trend}</p>
+#                         </div>
+#                         <div>
+#                             <p style='margin: 0; font-size: 11px; color: #888;'>Tests / Respect Rate</p>
+#                             <p style='margin: 0; font-size: 14px;'>{times_tested} / {respect_rate}%</p>
+#                         </div>
+#                     </div>
+#                 </div>
+#             """
+# 
+#         with st.container():
+#             st.markdown(f"""
+#             <div style='border: 2px solid {sentiment_color}; border-radius: 10px; padding: 15px; margin: 10px 0; background-color: rgba(38, 186, 159, 0.1);'>
+#                 <h3 style='margin: 0;'>{signal_emoji} {signal['index']} {direction_label} ENTRY SIGNAL</h3>
+#                 <p style='margin: 5px 0;'><b>Market Sentiment:</b> {signal['market_sentiment']}</p>
+#                 <hr style='margin: 10px 0;'>
+#                 <div style='display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;'>
+#                     <div>
+#                         <p style='margin: 0; font-size: 12px; color: #888;'>Entry Price</p>
+#                         <p style='margin: 0; font-size: 18px; font-weight: bold;'>₹{signal['entry_price']}</p>
+#                     </div>
+#                     <div>
+#                         <p style='margin: 0; font-size: 12px; color: #888;'>Stop Loss</p>
+#                         <p style='margin: 0; font-size: 18px; font-weight: bold; color: #ff5252;'>₹{signal['stop_loss']}</p>
+#                     </div>
+#                     <div>
+#                         <p style='margin: 0; font-size: 12px; color: #888;'>Target</p>
+#                         <p style='margin: 0; font-size: 18px; font-weight: bold; color: #4caf50;'>₹{signal['target']}</p>
+#                     </div>
+#                     <div>
+#                         <p style='margin: 0; font-size: 12px; color: #888;'>Risk:Reward</p>
+#                         <p style='margin: 0; font-size: 18px; font-weight: bold;'>{signal['risk_reward']}</p>
+#                     </div>
+#                 </div>
+#                 <hr style='margin: 10px 0;'>
+#                 <div style='display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;'>
+#                     <div>
+#                         <p style='margin: 0; font-size: 12px; color: #888;'>VOB Level</p>
+#                         <p style='margin: 0; font-size: 14px;'>₹{signal['vob_level']}</p>
+#                     </div>
+#                     <div>
+#                         <p style='margin: 0; font-size: 12px; color: #888;'>Distance from VOB</p>
+#                         <p style='margin: 0; font-size: 14px;'>{signal['distance_from_vob']} points</p>
+#                     </div>
+#                     <div>
+#                         <p style='margin: 0; font-size: 12px; color: #888;'>Signal Time</p>
+#                         <p style='margin: 0; font-size: 14px;'>{signal['timestamp'].strftime('%H:%M:%S')}</p>
+#                     </div>
+#                 </div>
+#                 {strength_html}
+#             </div>
+#             """, unsafe_allow_html=True)
+# else:
+#     st.info("⏳ Monitoring market for VOB-based entry signals... No active signals at the moment.")
+#     st.caption("Signals are generated when spot price is within 8 points of a Volume Order Block and aligned with overall market sentiment.")
+# 
+## Display VOB Summary for NIFTY and SENSEX
+# st.markdown("#### 📈 Volume Order Block Status")
+# 
+# col1, col2 = st.columns(2)
+# 
+## NIFTY VOB Summary
+# with col1:
+#     st.markdown("**NIFTY VOB**")
+#     if st.session_state.vob_data_nifty:
+#         from indicators.vob_strength_tracker import VOBStrengthTracker
+#         vob_tracker = VOBStrengthTracker()
+# 
+#         df_nifty = get_cached_chart_data('^NSEI', '1d', '1m')
+# 
+#         # Get latest bullish and bearish blocks
+#         bullish_blocks = st.session_state.vob_data_nifty.get('bullish_blocks', [])
+#         bearish_blocks = st.session_state.vob_data_nifty.get('bearish_blocks', [])
+# 
+#         # Calculate strength for latest blocks
+#         bull_strength = None
+#         bear_strength = None
+# 
+#         if bullish_blocks and df_nifty is not None:
+#             latest_bull = bullish_blocks[-1]
+#             bull_strength = vob_tracker.calculate_strength(latest_bull, df_nifty)
+# 
+#         if bearish_blocks and df_nifty is not None:
+#             latest_bear = bearish_blocks[-1]
+#             bear_strength = vob_tracker.calculate_strength(latest_bear, df_nifty)
+# 
+#         # Display bullish block info
+#         if bull_strength:
+#             trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
+#             strength_color = "#4caf50" if bull_strength['strength_score'] >= 70 else "#ffc107" if bull_strength['strength_score'] >= 50 else "#ff5252"
+#             st.markdown(f"**🟢 Bullish VOB:** ₹{latest_bull['lower']:.2f} - ₹{latest_bull['upper']:.2f}")
+#             st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bull_strength['strength_score']}/100</span> {trend_emoji} {bull_strength['trend']}", unsafe_allow_html=True)
+#         else:
+#             st.info("No bullish VOB data available")
+# 
+#         # Display bearish block info
+#         if bear_strength:
+#             trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
+#             strength_color = "#4caf50" if bear_strength['strength_score'] >= 70 else "#ffc107" if bear_strength['strength_score'] >= 50 else "#ff5252"
+#             st.markdown(f"**🔴 Bearish VOB:** ₹{latest_bear['lower']:.2f} - ₹{latest_bear['upper']:.2f}")
+#             st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bear_strength['strength_score']}/100</span> {trend_emoji} {bear_strength['trend']}", unsafe_allow_html=True)
+#         else:
+#             st.info("No bearish VOB data available")
+#     else:
+#         st.info("VOB data loading...")
+# 
+## SENSEX VOB Summary
+# with col2:
+#     st.markdown("**SENSEX VOB**")
+#     if st.session_state.vob_data_sensex:
+#         from indicators.vob_strength_tracker import VOBStrengthTracker
+#         vob_tracker = VOBStrengthTracker()
+# 
+#         df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
+# 
+#         # Get latest bullish and bearish blocks
+#         bullish_blocks = st.session_state.vob_data_sensex.get('bullish_blocks', [])
+#         bearish_blocks = st.session_state.vob_data_sensex.get('bearish_blocks', [])
+# 
+#         # Calculate strength for latest blocks
+#         bull_strength = None
+#         bear_strength = None
+# 
+#         if bullish_blocks and df_sensex is not None:
+#             latest_bull = bullish_blocks[-1]
+#             bull_strength = vob_tracker.calculate_strength(latest_bull, df_sensex)
+# 
+#         if bearish_blocks and df_sensex is not None:
+#             latest_bear = bearish_blocks[-1]
+#             bear_strength = vob_tracker.calculate_strength(latest_bear, df_sensex)
+# 
+#         # Display bullish block info
+#         if bull_strength:
+#             trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
+#             strength_color = "#4caf50" if bull_strength['strength_score'] >= 70 else "#ffc107" if bull_strength['strength_score'] >= 50 else "#ff5252"
+#             st.markdown(f"**🟢 Bullish VOB:** ₹{latest_bull['lower']:.2f} - ₹{latest_bull['upper']:.2f}")
+#             st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bull_strength['strength_score']}/100</span> {trend_emoji} {bull_strength['trend']}", unsafe_allow_html=True)
+#         else:
+#             st.info("No bullish VOB data available")
+# 
+#         # Display bearish block info
+#         if bear_strength:
+#             trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
+#             strength_color = "#4caf50" if bear_strength['strength_score'] >= 70 else "#ffc107" if bear_strength['strength_score'] >= 50 else "#ff5252"
+#             st.markdown(f"**🔴 Bearish VOB:** ₹{latest_bear['lower']:.2f} - ₹{latest_bear['upper']:.2f}")
+#             st.markdown(f"**Strength:** <span style='color: {strength_color}; font-weight: bold;'>{bear_strength['strength_score']}/100</span> {trend_emoji} {bear_strength['trend']}", unsafe_allow_html=True)
+#         else:
+#             st.info("No bearish VOB data available")
+#     else:
+#         st.info("VOB data loading...")
+# 
+## Add button to send VOB status to Telegram
+# st.markdown("")
+# col1, col2, col3 = st.columns([1, 1, 1])
+# with col2:
+#     if st.button("📱 Send VOB Status to Telegram", use_container_width=True):
+#         try:
+#             from indicators.vob_strength_tracker import VOBStrengthTracker
+#             vob_tracker = VOBStrengthTracker()
+# 
+#             # Prepare NIFTY VOB data
+#             nifty_vob_summary = {}
+#             if st.session_state.vob_data_nifty:
+#                 df_nifty = get_cached_chart_data('^NSEI', '1d', '1m')
+#                 if df_nifty is not None:
+#                     bullish_blocks = st.session_state.vob_data_nifty.get('bullish_blocks', [])
+#                     bearish_blocks = st.session_state.vob_data_nifty.get('bearish_blocks', [])
+# 
+#                     if bullish_blocks:
+#                         latest_bull = bullish_blocks[-1]
+#                         bull_strength = vob_tracker.calculate_strength(latest_bull, df_nifty)
+#                         nifty_vob_summary['bullish'] = {
+#                             'lower': latest_bull['lower'],
+#                             'upper': latest_bull['upper'],
+#                             'strength_score': bull_strength['strength_score'],
+#                             'trend': bull_strength['trend']
+#                         }
+# 
+#                     if bearish_blocks:
+#                         latest_bear = bearish_blocks[-1]
+#                         bear_strength = vob_tracker.calculate_strength(latest_bear, df_nifty)
+#                         nifty_vob_summary['bearish'] = {
+#                             'lower': latest_bear['lower'],
+#                             'upper': latest_bear['upper'],
+#                             'strength_score': bear_strength['strength_score'],
+#                             'trend': bear_strength['trend']
+#                         }
+# 
+#             # Prepare SENSEX VOB data
+#             sensex_vob_summary = {}
+#             if st.session_state.vob_data_sensex:
+#                 df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
+#                 if df_sensex is not None:
+#                     bullish_blocks = st.session_state.vob_data_sensex.get('bullish_blocks', [])
+#                     bearish_blocks = st.session_state.vob_data_sensex.get('bearish_blocks', [])
+# 
+#                     if bullish_blocks:
+#                         latest_bull = bullish_blocks[-1]
+#                         bull_strength = vob_tracker.calculate_strength(latest_bull, df_sensex)
+#                         sensex_vob_summary['bullish'] = {
+#                             'lower': latest_bull['lower'],
+#                             'upper': latest_bull['upper'],
+#                             'strength_score': bull_strength['strength_score'],
+#                             'trend': bull_strength['trend']
+#                         }
+# 
+#                     if bearish_blocks:
+#                         latest_bear = bearish_blocks[-1]
+#                         bear_strength = vob_tracker.calculate_strength(latest_bear, df_sensex)
+#                         sensex_vob_summary['bearish'] = {
+#                             'lower': latest_bear['lower'],
+#                             'upper': latest_bear['upper'],
+#                             'strength_score': bear_strength['strength_score'],
+#                             'trend': bear_strength['trend']
+#                         }
+# 
+#             # Send to Telegram
+#             if nifty_vob_summary or sensex_vob_summary:
+#                 telegram_bot = TelegramBot()
+#                 success = telegram_bot.send_vob_status_summary(nifty_vob_summary, sensex_vob_summary)
+#                 if success:
+#                     st.success("✅ VOB status sent to Telegram!")
+#                 else:
+#                     st.error("❌ Failed to send to Telegram. Check your Telegram credentials.")
+#             else:
+#                 st.warning("⚠️ No VOB data available to send")
+# 
+#         except Exception as e:
+#             st.error(f"❌ Error sending VOB status: {str(e)}")
+# 
+# st.divider()
+# 
+## ═══════════════════════════════════════════════════════════════════════
+## AI MARKET ANALYSIS RESULTS DISPLAY
+## ═══════════════════════════════════════════════════════════════════════
+# 
+## ═══════════════════════════════════════════════════════════════════════
+## HTF S/R TRADING SIGNALS DISPLAY
+## ═══════════════════════════════════════════════════════════════════════
+# st.markdown("### 📊 HTF Support/Resistance Signals")
+# st.markdown("**HTF S/R Based Trading | 5min, 10min, 15min Timeframes**")
+# 
+## Display VOB and HTF S/R Status Summary
+# st.markdown("#### 📊 VOB & HTF S/R Strength Status")
+# 
+# col1, col2 = st.columns(2)
+# 
+## NIFTY Summary
+# with col1:
+#     st.markdown("**NIFTY**")
+# 
+#     # VOB Status
+#     if st.session_state.vob_data_nifty:
+#         from indicators.vob_strength_tracker import VOBStrengthTracker
+#         vob_tracker = VOBStrengthTracker()
+#         df_nifty = get_cached_chart_data('^NSEI', '1d', '1m')
+# 
+#         bullish_blocks = st.session_state.vob_data_nifty.get('bullish_blocks', [])
+#         bearish_blocks = st.session_state.vob_data_nifty.get('bearish_blocks', [])
+# 
+#         if bullish_blocks and df_nifty is not None:
+#             latest_bull = bullish_blocks[-1]
+#             bull_strength = vob_tracker.calculate_strength(latest_bull, df_nifty)
+#             trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
+#             st.caption(f"**VOB Bull:** {bull_strength['strength_score']}/100 {trend_emoji} {bull_strength['trend']}")
+# 
+#         if bearish_blocks and df_nifty is not None:
+#             latest_bear = bearish_blocks[-1]
+#             bear_strength = vob_tracker.calculate_strength(latest_bear, df_nifty)
+#             trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
+#             st.caption(f"**VOB Bear:** {bear_strength['strength_score']}/100 {trend_emoji} {bear_strength['trend']}")
+# 
+#     # HTF S/R Status
+#     if st.session_state.htf_data_nifty:
+#         from indicators.htf_sr_strength_tracker import HTFSRStrengthTracker
+#         htf_tracker = HTFSRStrengthTracker()
+#         df_nifty = get_cached_chart_data('^NSEI', '7d', '1m')
+# 
+#         # Get latest support and resistance levels
+#         for timeframe, levels in st.session_state.htf_data_nifty.items():
+#             if levels and df_nifty is not None:
+#                 support = levels.get('support')
+#                 resistance = levels.get('resistance')
+# 
+#                 if support:
+#                     support_strength = htf_tracker.calculate_strength(support, 'SUPPORT', df_nifty, lookback_periods=100)
+#                     trend_emoji = "🔺" if support_strength['trend'] == "STRENGTHENING" else "🔻" if support_strength['trend'] == "WEAKENING" else "➖"
+#                     st.caption(f"**HTF Support ({timeframe}):** {support_strength['strength_score']}/100 {trend_emoji} {support_strength['trend']}")
+# 
+#                 if resistance:
+#                     resistance_strength = htf_tracker.calculate_strength(resistance, 'RESISTANCE', df_nifty, lookback_periods=100)
+#                     trend_emoji = "🔺" if resistance_strength['trend'] == "STRENGTHENING" else "🔻" if resistance_strength['trend'] == "WEAKENING" else "➖"
+#                     st.caption(f"**HTF Resistance ({timeframe}):** {resistance_strength['strength_score']}/100 {trend_emoji} {resistance_strength['trend']}")
+# 
+#                 break  # Only show one timeframe for brevity
+# 
+## SENSEX Summary
+# with col2:
+#     st.markdown("**SENSEX**")
+# 
+#     # VOB Status
+#     if st.session_state.vob_data_sensex:
+#         from indicators.vob_strength_tracker import VOBStrengthTracker
+#         vob_tracker = VOBStrengthTracker()
+#         df_sensex = get_cached_chart_data('^BSESN', '1d', '1m')
+# 
+#         bullish_blocks = st.session_state.vob_data_sensex.get('bullish_blocks', [])
+#         bearish_blocks = st.session_state.vob_data_sensex.get('bearish_blocks', [])
+# 
+#         if bullish_blocks and df_sensex is not None:
+#             latest_bull = bullish_blocks[-1]
+#             bull_strength = vob_tracker.calculate_strength(latest_bull, df_sensex)
+#             trend_emoji = "🔺" if bull_strength['trend'] == "STRENGTHENING" else "🔻" if bull_strength['trend'] == "WEAKENING" else "➖"
+#             st.caption(f"**VOB Bull:** {bull_strength['strength_score']}/100 {trend_emoji} {bull_strength['trend']}")
+# 
+#         if bearish_blocks and df_sensex is not None:
+#             latest_bear = bearish_blocks[-1]
+#             bear_strength = vob_tracker.calculate_strength(latest_bear, df_sensex)
+#             trend_emoji = "🔺" if bear_strength['trend'] == "STRENGTHENING" else "🔻" if bear_strength['trend'] == "WEAKENING" else "➖"
+#             st.caption(f"**VOB Bear:** {bear_strength['strength_score']}/100 {trend_emoji} {bear_strength['trend']}")
+# 
+#     # HTF S/R Status
+#     if st.session_state.htf_data_sensex:
+#         from indicators.htf_sr_strength_tracker import HTFSRStrengthTracker
+#         htf_tracker = HTFSRStrengthTracker()
+#         df_sensex = get_cached_chart_data('^BSESN', '7d', '1m')
+# 
+#         # Get latest support and resistance levels
+#         for timeframe, levels in st.session_state.htf_data_sensex.items():
+#             if levels and df_sensex is not None:
+#                 support = levels.get('support')
+#                 resistance = levels.get('resistance')
+# 
+#                 if support:
+#                     support_strength = htf_tracker.calculate_strength(support, 'SUPPORT', df_sensex, lookback_periods=100)
+#                     trend_emoji = "🔺" if support_strength['trend'] == "STRENGTHENING" else "🔻" if support_strength['trend'] == "WEAKENING" else "➖"
+#                     st.caption(f"**HTF Support ({timeframe}):** {support_strength['strength_score']}/100 {trend_emoji} {support_strength['trend']}")
+# 
+#                 if resistance:
+#                     resistance_strength = htf_tracker.calculate_strength(resistance, 'RESISTANCE', df_sensex, lookback_periods=100)
+#                     trend_emoji = "🔺" if resistance_strength['trend'] == "STRENGTHENING" else "🔻" if resistance_strength['trend'] == "WEAKENING" else "➖"
+#                     st.caption(f"**HTF Resistance ({timeframe}):** {resistance_strength['strength_score']}/100 {trend_emoji} {resistance_strength['trend']}")
+# 
+#                 break  # Only show one timeframe for brevity
+# 
+# st.divider()
+# 
+# if st.session_state.active_htf_sr_signals:
+#     for signal in st.session_state.active_htf_sr_signals:
+#         signal_emoji = "🟢" if signal['direction'] == 'CALL' else "🔴"
+#         direction_label = "BULLISH" if signal['direction'] == 'CALL' else "BEARISH"
+#         sentiment_color = "#26ba9f" if signal['market_sentiment'] == 'BULLISH' else "#ba2646"
+# 
+#         # Format timeframe for display
+#         timeframe_display = {
+#             '5T': '5 Min',
+#             '10T': '10 Min',
+#             '15T': '15 Min'
+#         }.get(signal.get('timeframe', ''), signal.get('timeframe', 'N/A'))
+# 
+#         # Determine level type and value
+#         if signal['direction'] == 'CALL':
+#             level_type = "Support Level"
+#             level_value = signal['support_level']
+#         else:
+#             level_type = "Resistance Level"
+#             level_value = signal.get('resistance_level', 'N/A')
+# 
+#         # Get strength data if available
+#         strength = signal.get('strength')
+#         strength_html = ""
+#         if strength:
+#             strength_score = strength.get('strength_score', 0)
+#             strength_label = strength.get('strength_label', 'UNKNOWN')
+#             trend = strength.get('trend', 'UNKNOWN')
+#             times_tested = strength.get('times_tested', 0)
+#             hold_rate = strength.get('hold_rate', 0)
+# 
+#             # Determine strength color
+#             if strength_score >= 70:
+#                 strength_color = "#4caf50"  # Green
+#             elif strength_score >= 50:
+#                 strength_color = "#ffc107"  # Yellow
+#             else:
+#                 strength_color = "#ff5252"  # Red
+# 
+#             # Trend indicator
+#             trend_emoji = "🔺" if trend == "STRENGTHENING" else "🔻" if trend == "WEAKENING" else "➖"
+# 
+#             strength_html = f"""
+#                 <hr style='margin: 10px 0;'>
+#                 <div style='background-color: rgba(0,0,0,0.05); padding: 10px; border-radius: 5px;'>
+#                     <p style='margin: 0; font-size: 14px; font-weight: bold;'>📊 Support/Resistance Strength Analysis</p>
+#                     <div style='display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px;'>
+#                         <div>
+#                             <p style='margin: 0; font-size: 11px; color: #888;'>Strength Score</p>
+#                             <p style='margin: 0; font-size: 16px; font-weight: bold; color: {strength_color};'>{strength_score}/100</p>
+#                         </div>
+#                         <div>
+#                             <p style='margin: 0; font-size: 11px; color: #888;'>Status</p>
+#                             <p style='margin: 0; font-size: 14px;'>{strength_label.replace('_', ' ')}</p>
+#                         </div>
+#                         <div>
+#                             <p style='margin: 0; font-size: 11px; color: #888;'>Trend</p>
+#                             <p style='margin: 0; font-size: 14px;'>{trend_emoji} {trend}</p>
+#                         </div>
+#                         <div>
+#                             <p style='margin: 0; font-size: 11px; color: #888;'>Tests / Hold Rate</p>
+#                             <p style='margin: 0; font-size: 14px;'>{times_tested} / {hold_rate}%</p>
+#                         </div>
+#                     </div>
+#                 </div>
+#             """
+# 
+#         with st.container():
+#             st.markdown(f"""
+#             <div style='border: 2px solid {sentiment_color}; border-radius: 10px; padding: 15px; margin: 10px 0; background-color: rgba(38, 186, 159, 0.1);'>
+#                 <h3 style='margin: 0;'>{signal_emoji} {signal['index']} {direction_label} HTF S/R ENTRY SIGNAL</h3>
+#                 <p style='margin: 5px 0;'><b>Market Sentiment:</b> {signal['market_sentiment']} | <b>Timeframe:</b> {timeframe_display}</p>
+#                 <hr style='margin: 10px 0;'>
+#                 <div style='display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;'>
+#                     <div>
+#                         <p style='margin: 0; font-size: 12px; color: #888;'>Entry Price</p>
+#                         <p style='margin: 0; font-size: 18px; font-weight: bold;'>₹{signal['entry_price']}</p>
+#                     </div>
+#                     <div>
+#                         <p style='margin: 0; font-size: 12px; color: #888;'>Stop Loss</p>
+#                         <p style='margin: 0; font-size: 18px; font-weight: bold; color: #ff5252;'>₹{signal['stop_loss']}</p>
+#                     </div>
+#                     <div>
+#                         <p style='margin: 0; font-size: 12px; color: #888;'>Target</p>
+#                         <p style='margin: 0; font-size: 18px; font-weight: bold; color: #4caf50;'>₹{signal['target']}</p>
+#                     </div>
+#                     <div>
+#                         <p style='margin: 0; font-size: 12px; color: #888;'>Risk:Reward</p>
+#                         <p style='margin: 0; font-size: 18px; font-weight: bold;'>{signal['risk_reward']}</p>
+#                     </div>
+#                 </div>
+#                 <hr style='margin: 10px 0;'>
+#                 <div style='display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;'>
+#                     <div>
+#                         <p style='margin: 0; font-size: 12px; color: #888;'>{level_type}</p>
+#                         <p style='margin: 0; font-size: 14px;'>₹{level_value}</p>
+#                     </div>
+#                     <div>
+#                         <p style='margin: 0; font-size: 12px; color: #888;'>Distance from Level</p>
+#                         <p style='margin: 0; font-size: 14px;'>{signal['distance_from_level']} points</p>
+#                     </div>
+#                     <div>
+#                         <p style='margin: 0; font-size: 12px; color: #888;'>Signal Time</p>
+#                         <p style='margin: 0; font-size: 14px;'>{signal['timestamp'].strftime('%H:%M:%S')}</p>
+#                     </div>
+#                 </div>
+#                 {strength_html}
+#             </div>
+#             """, unsafe_allow_html=True)
+# else:
+#     st.info("⏳ Monitoring market for HTF S/R entry signals... No active signals at the moment.")
+#     st.caption("Signals are generated when spot price is within 8 points of HTF Support (for bullish) or Resistance (for bearish) and aligned with overall market sentiment.")
+# 
+# st.divider()
+# 
+## ═══════════════════════════════════════════════════════════════════════
+## CENTRALIZED OPTION CHAIN DATA MANAGEMENT
+## ═══════════════════════════════════════════════════════════════════════
+# 
+## Get option chain manager
+# option_manager = get_option_chain_manager()
+# 
+## Preload option chain data on first load
+# if option_manager.is_data_stale():
+#     with st.spinner("📡 Loading option chain data for all indices..."):
+#         preload_option_chain_data()
+# 
+## Display cache status and refresh button
+# st.markdown("### 📊 Option Chain Data Status")
+# col1, col2, col3, col4, col5 = st.columns([2, 1.5, 1.5, 1.5, 1])
+# 
+# cache_status = option_manager.get_cache_status()
+# 
+# with col1:
+#     if cache_status['is_fetching']:
+#         st.info("⏳ Fetching data...")
+#     elif cache_status['last_fetch']:
+#         time_str = cache_status['last_fetch'].strftime('%I:%M:%S %p') if cache_status['last_fetch'] else 'Never'
+#         st.metric("Last Updated", time_str)
+#     else:
+#         st.warning("❌ No data loaded")
+# 
+# with col2:
+#     st.metric("Symbols Loaded", f"{cache_status['total_success']}/{len(option_manager.SYMBOLS)}")
+# 
+# with col3:
+#     status_emoji = "🟢" if not cache_status['is_stale'] else "🟡"
+#     status_text = "Fresh" if not cache_status['is_stale'] else "Stale"
+#     st.metric("Data Status", f"{status_emoji} {status_text}")
+# 
+# with col4:
+#     if cache_status['symbols_success']:
+#         st.caption("✓ " + ", ".join(cache_status['symbols_success']))
+#     else:
+#         st.caption("No data")
+# 
+# with col5:
+#     if st.button("🔄 Refresh All", use_container_width=True, type="primary"):
+#         with st.spinner("📡 Fetching latest option chain data..."):
+#             result = refresh_all_option_chain_data()
+#             success_count = sum(1 for d in result.values() if d.get('success'))
+#             if success_count > 0:
+#                 st.success(f"✅ Refreshed {success_count} indices successfully!")
+#                 st.rerun()
+#             else:
+#                 st.error("❌ Failed to refresh data. Please try again.")
+# 
+# st.markdown("---")
+# st.caption("💡 **Tip:** All tabs use the same data. Click 'Refresh All' once to update data across all analyses.")
+#
+# st.divider()
 
 # ═══════════════════════════════════════════════════════════════════════
 # TABS - USING NATIVE STREAMLIT TABS FOR BETTER UX

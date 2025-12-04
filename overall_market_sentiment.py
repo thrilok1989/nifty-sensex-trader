@@ -2002,12 +2002,9 @@ def render_overall_market_sentiment(NSE_INSTRUMENTS=None):
                     for error in errors:
                         st.error(f"  - {error}")
 
-    # Auto-refresh mechanism - sleep and rerun to trigger periodic updates
-    # This ensures the countdown timer updates and triggers refresh when it reaches zero
-    if is_within_trading_hours():
-        # Sleep for 1 second to update the countdown timer display
-        time.sleep(1)
-        st.rerun()
+    # Auto-refresh handled by the refresh logic at the top of this function
+
+    # No need for additional sleep/rerun here as it causes duplicate rendering
 
 
 # Export functions for external use

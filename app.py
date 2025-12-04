@@ -251,7 +251,6 @@ if 'performance_mode' not in st.session_state:
 def init_session_state():
     """Initialize all session state variables at once"""
     defaults = {
-        'signal_manager': lambda: SignalManager(),
         'vob_signal_generator': lambda: VOBSignalGenerator(proximity_threshold=8.0),
         'active_vob_signals': lambda: [],
         'last_vob_check_time': lambda: 0,

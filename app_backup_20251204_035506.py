@@ -18,6 +18,9 @@ import logging
 from config import *
 from market_data import *
 from market_hours_scheduler import scheduler, is_within_trading_hours, should_run_app
+from signal_manager import SignalManager
+from strike_calculator import calculate_strike, calculate_levels
+from trade_executor import TradeExecutor
 from telegram_alerts import TelegramBot, send_test_message
 from dhan_api import check_dhan_connection
 from bias_analysis import BiasAnalysisPro
@@ -35,7 +38,10 @@ from data_cache_manager import (
 )
 from vob_signal_generator import VOBSignalGenerator
 from htf_sr_signal_generator import HTFSRSignalGenerator
+from atm_zone_bias_component import render_atm_zone_bias_analysis
+from oi_winding_unwinding_component import render_oi_winding_unwinding_analysis
 from option_chain_manager import get_option_chain_manager, refresh_all_option_chain_data, preload_option_chain_data
+from intraday_momentum_component import render_intraday_momentum_analysis
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -1593,11 +1599,18 @@ st.divider()
 # ═══════════════════════════════════════════════════════════════════════
 
 # Native tabs - work seamlessly on mobile and desktop, no multiple clicks needed
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
     "🌟 Overall Market Sentiment",
+    "🎯 Trade Setup",
+    "📊 Active Signals",
+    "📈 Positions",
     "🎯 Bias Analysis Pro",
     "📊 Option Chain Analysis",
-    "📈 Advanced Chart Analysis"
+    "📈 Advanced Chart Analysis",
+    "🌐 Enhanced Market Analysis",
+    "🎯 ATM Zone Bias",
+    "🔥 OI Winding/Unwinding",
+    "📊 Intraday Momentum"
 ])
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1609,10 +1622,528 @@ with tab1:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# TAB 2: BIAS ANALYSIS PRO
+# TAB 2: TRADE SETUP
 # ═══════════════════════════════════════════════════════════════════════
 
 with tab2:
+    st.header("🎯 Create New Trade Setup")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        selected_index = st.selectbox(
+            "Select Index",
+            ["NIFTY", "SENSEX"],
+            key="setup_index"
+        )
+    
+    with col2:
+        selected_direction = st.selectbox(
+            "Select Direction",
+            ["CALL", "PUT"],
+            key="setup_direction"
+        )
+    
+    st.divider()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Safe default value handling for VOB support level
+        try:
+            default_support = max(0.0, float(nifty_data['spot_price']) - 50.0) if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 0, 'N/A'] else 25000.0
+        except (TypeError, ValueError):
+            default_support = 25000.0
+
+        vob_support = st.number_input(
+            "VOB Support Level",
+            min_value=0.0,
+            value=default_support,
+            step=10.0,
+            key="vob_support"
+        )
+
+    with col2:
+        # Safe default value handling for VOB resistance level
+        try:
+            default_resistance = max(0.0, float(nifty_data['spot_price']) + 50.0) if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 0, 'N/A'] else 25100.0
+        except (TypeError, ValueError):
+            default_resistance = 25100.0
+
+        vob_resistance = st.number_input(
+            "VOB Resistance Level",
+            min_value=0.0,
+            value=default_resistance,
+            step=10.0,
+            key="vob_resistance"
+        )
+    
+    st.divider()
+    
+    # Preview calculated levels
+    st.subheader("📋 Preview Trade Levels")
+    
+    levels = calculate_levels(
+        selected_index,
+        selected_direction,
+        vob_support,
+        vob_resistance,
+        STOP_LOSS_OFFSET
+    )
+
+    # Safe handling for spot price in strike calculation
+    safe_spot_price = 25000.0  # Default fallback value
+    if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 0, 'N/A']:
+        try:
+            safe_spot_price = float(nifty_data['spot_price'])
+        except (TypeError, ValueError):
+            safe_spot_price = 25000.0
+
+    strike_info = calculate_strike(
+        selected_index,
+        safe_spot_price,
+        selected_direction,
+        nifty_data.get('current_expiry', 'N/A')
+    )
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Entry Level", f"{levels['entry_level']:.2f}")
+    
+    with col2:
+        st.metric("Stop Loss", f"{levels['sl_level']:.2f}")
+    
+    with col3:
+        st.metric("Target", f"{levels['target_level']:.2f}")
+    
+    with col4:
+        st.metric("Risk:Reward", f"1:{levels['rr_ratio']}")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.info(f"**Strike:** {strike_info['strike']} {strike_info['option_type']} ({strike_info['strike_type']})")
+    
+    with col2:
+        lot_size = LOT_SIZES[selected_index]
+        st.info(f"**Quantity:** {lot_size} ({selected_index} lot size)")
+    
+    st.divider()
+    
+    # Create setup button
+    if st.button("✅ Create Signal Setup", type="primary", use_container_width=True):
+        signal_id = st.session_state.signal_manager.create_setup(
+            selected_index,
+            selected_direction,
+            vob_support,
+            vob_resistance
+        )
+        st.session_state.active_setup_id = signal_id
+        st.success(f"✅ Signal setup created! ID: {signal_id[:20]}...")
+        st.rerun()
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 3: ACTIVE SIGNALS
+# ═══════════════════════════════════════════════════════════════════════
+
+with tab3:
+    st.header("📊 Active Signal Setups")
+
+    active_setups = st.session_state.signal_manager.get_active_setups()
+
+    if not active_setups:
+        st.info("No active signal setups. Create one in the Trade Setup tab.")
+    else:
+        for signal_id, setup in active_setups.items():
+            with st.container():
+                st.subheader(f"{setup['index']} {setup['direction']}")
+
+                # Signal count display
+                signal_count = setup['signal_count']
+                signals_display = "⭐" * signal_count + "☆" * (3 - signal_count)
+
+                col1, col2, col3 = st.columns([2, 1, 1])
+
+                with col1:
+                    st.write(f"**Signals:** {signals_display} ({signal_count}/3)")
+                    st.write(f"**VOB Support:** {setup['vob_support']}")
+                    st.write(f"**VOB Resistance:** {setup['vob_resistance']}")
+
+                with col2:
+                    if signal_count < 3:
+                        if st.button(f"➕ Add Signal", key=f"add_{signal_id}"):
+                            st.session_state.signal_manager.add_signal(signal_id)
+
+                            # Check if ready and send Telegram
+                            updated_setup = st.session_state.signal_manager.get_setup(signal_id)
+                            if updated_setup['status'] == 'ready':
+                                # Removed telegram signal ready notifications - only send for specific indicator conditions
+                                # telegram = TelegramBot()
+                                # telegram.send_signal_ready(updated_setup)
+                                pass
+
+                            st.rerun()
+
+                    if signal_count > 0:
+                        if st.button(f"➖ Remove Signal", key=f"remove_{signal_id}"):
+                            st.session_state.signal_manager.remove_signal(signal_id)
+                            st.rerun()
+
+                with col3:
+                    if st.button(f"🗑️ Delete", key=f"delete_{signal_id}"):
+                        st.session_state.signal_manager.delete_setup(signal_id)
+                        st.rerun()
+
+                # NEW FEATURE: Trade Execution Button with Index Selection
+                if setup['status'] == 'ready' or signal_count >= 3:
+                    st.markdown("---")
+                    st.markdown("### 🚀 Execute Trade")
+
+                    # Index Selection
+                    trade_col1, trade_col2 = st.columns([1, 2])
+
+                    with trade_col1:
+                        selected_index = st.radio(
+                            "Select Index to Trade:",
+                            ["NIFTY", "SENSEX"],
+                            key=f"index_select_{signal_id}",
+                            horizontal=True
+                        )
+
+                    # Get data based on selected index
+                    if selected_index == "NIFTY":
+                        index_data = nifty_data
+                    else:
+                        index_data = get_cached_sensex_data()
+                        if not index_data:
+                            st.error("❌ SENSEX data not available")
+                            continue
+
+                    current_price = index_data['spot_price']
+
+                    # Display current market status
+                    with trade_col2:
+                        st.metric(
+                            label=f"{selected_index} Spot Price",
+                            value=f"{current_price:.2f}",
+                            delta=f"Support: {setup['vob_support']:.2f} | Resistance: {setup['vob_resistance']:.2f}"
+                        )
+
+                    # Calculate if signal conditions are met
+                    if setup['direction'] == 'CALL':
+                        vob_touched = check_vob_touch(current_price, setup['vob_support'], VOB_TOUCH_TOLERANCE)
+                        vob_type = "Support"
+                        vob_level = setup['vob_support']
+                    else:
+                        vob_touched = check_vob_touch(current_price, setup['vob_resistance'], VOB_TOUCH_TOLERANCE)
+                        vob_type = "Resistance"
+                        vob_level = setup['vob_resistance']
+
+                    # Show signal status
+                    if vob_touched:
+                        st.success(f"✅ {vob_type} LEVEL TOUCHED! Ready to execute.")
+                    else:
+                        st.info(f"⏳ Waiting for {vob_type} touch | Current: {current_price:.2f} | Target: {vob_level:.2f} | Distance: {abs(current_price - vob_level):.2f} pts")
+
+                    # Execute Button (always available when signal is ready)
+                    exec_col1, exec_col2, exec_col3 = st.columns([1, 1, 1])
+
+                    with exec_col2:
+                        if st.button(
+                            f"🚀 EXECUTE {selected_index} TRADE",
+                            key=f"execute_{signal_id}",
+                            type="primary",
+                            use_container_width=True
+                        ):
+                            with st.spinner(f"Executing {selected_index} trade..."):
+                                # Update setup with selected index
+                                trade_setup = setup.copy()
+                                trade_setup['index'] = selected_index
+
+                                executor = TradeExecutor()
+                                result = executor.execute_trade(
+                                    trade_setup,
+                                    current_price,
+                                    index_data['current_expiry']
+                                )
+
+                                if result['success']:
+                                    st.success(f"✅ {result['message']}")
+                                    st.success(f"**Order ID:** {result['order_id']}")
+
+                                    # Mark as executed
+                                    st.session_state.signal_manager.mark_executed(signal_id, result['order_id'])
+
+                                    # Store position in session state for monitoring
+                                    if 'active_positions' not in st.session_state:
+                                        st.session_state.active_positions = {}
+
+                                    details = result['order_details']
+                                    st.session_state.active_positions[result['order_id']] = {
+                                        'order_id': result['order_id'],
+                                        'index': selected_index,
+                                        'direction': setup['direction'],
+                                        'strike': details['strike'],
+                                        'option_type': details['option_type'],
+                                        'quantity': details['quantity'],
+                                        'entry': details['entry_level'],
+                                        'sl': details['sl_price'],
+                                        'target': details['target_price'],
+                                        'timestamp': get_current_time_ist().isoformat(),
+                                        'status': 'active'
+                                    }
+
+                                    # Display order details
+                                    st.write("**Order Details:**")
+                                    st.write(f"- Index: {selected_index}")
+                                    st.write(f"- Strike: {details['strike']} {details['option_type']} ({details['strike_type']})")
+                                    st.write(f"- Quantity: {details['quantity']}")
+                                    st.write(f"- Entry: {details['entry_level']:.2f}")
+                                    st.write(f"- Stop Loss: {details['sl_price']:.2f} (Support/Resistance {'-' if setup['direction'] == 'CALL' else '+'} 8 points)")
+                                    st.write(f"- Target: {details['target_price']:.2f} (Opposite level)")
+                                    st.write(f"- R:R Ratio: 1:{details['rr_ratio']}")
+
+                                    time.sleep(2)
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ {result['message']}")
+                                    if 'error' in result:
+                                        st.error(f"Error: {result['error']}")
+
+                st.divider()
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 4: POSITIONS
+# ═══════════════════════════════════════════════════════════════════════
+
+with tab4:
+    st.header("📈 Active Positions & Monitoring")
+
+    # Initialize active_positions in session state if not exists
+    if 'active_positions' not in st.session_state:
+        st.session_state.active_positions = {}
+
+    # Get current spot prices for monitoring - with safe null handling
+    nifty_spot = 0
+    if nifty_data.get('spot_price') and nifty_data['spot_price'] not in [None, 'N/A']:
+        try:
+            nifty_spot = float(nifty_data['spot_price'])
+        except (TypeError, ValueError):
+            nifty_spot = 0
+
+    sensex_data_obj = get_cached_sensex_data()
+    sensex_spot = 0
+    if sensex_data_obj and sensex_data_obj.get('spot_price') and sensex_data_obj['spot_price'] not in [None, 'N/A']:
+        try:
+            sensex_spot = float(sensex_data_obj['spot_price'])
+        except (TypeError, ValueError):
+            sensex_spot = 0
+
+    # Check for auto-exit conditions
+    positions_to_exit = []
+    for order_id, pos in st.session_state.active_positions.items():
+        if pos['status'] != 'active':
+            continue
+
+        # Get current spot price based on index
+        current_spot = nifty_spot if pos['index'] == 'NIFTY' else sensex_spot
+
+        # Check if target or SL is hit
+        if pos['direction'] == 'CALL':
+            # For CALL: Target is resistance, SL is support - 8
+            target_hit = current_spot >= pos['target']
+            sl_hit = current_spot <= pos['sl']
+        else:  # PUT
+            # For PUT: Target is support, SL is resistance + 8
+            target_hit = current_spot <= pos['target']
+            sl_hit = current_spot >= pos['sl']
+
+        if target_hit:
+            st.success(f"🎯 TARGET HIT for {pos['index']} {pos['direction']} | Order ID: {order_id}")
+            positions_to_exit.append((order_id, 'target'))
+        elif sl_hit:
+            st.error(f"🛑 STOP LOSS HIT for {pos['index']} {pos['direction']} | Order ID: {order_id}")
+            positions_to_exit.append((order_id, 'stoploss'))
+
+    # Display tracked positions
+    if not st.session_state.active_positions:
+        st.info("No active positions tracked. Execute a trade from the Active Signals tab.")
+    else:
+        active_count = sum(1 for p in st.session_state.active_positions.values() if p['status'] == 'active')
+        st.info(f"📊 Tracking {active_count} active position(s)")
+
+        for order_id, pos in st.session_state.active_positions.items():
+            if pos['status'] != 'active':
+                continue
+
+            with st.container():
+                # Position header
+                st.subheader(f"{pos['index']} {pos['direction']} - {pos['option_type']}")
+
+                # Get current spot price
+                current_spot = nifty_spot if pos['index'] == 'NIFTY' else sensex_spot
+
+                # Calculate distance to target and SL
+                if pos['direction'] == 'CALL':
+                    dist_to_target = pos['target'] - current_spot
+                    dist_to_sl = current_spot - pos['sl']
+                else:
+                    dist_to_target = current_spot - pos['target']
+                    dist_to_sl = pos['sl'] - current_spot
+
+                # Create columns for display
+                col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+
+                with col1:
+                    st.metric(
+                        label="Current Spot",
+                        value=f"{current_spot:.2f}",
+                        delta=f"Entry: {pos['entry']:.2f}"
+                    )
+                    st.write(f"**Strike:** {pos['strike']} {pos['option_type']}")
+                    st.write(f"**Quantity:** {pos['quantity']}")
+
+                with col2:
+                    target_color = "green" if dist_to_target >= 0 else "orange"
+                    st.metric(
+                        label="🎯 Target",
+                        value=f"{pos['target']:.2f}",
+                        delta=f"{dist_to_target:+.2f} pts away"
+                    )
+                    if pos['direction'] == 'CALL':
+                        st.caption("Trigger: When spot reaches resistance (VOB/HTF)")
+                    else:
+                        st.caption("Trigger: When spot reaches support (VOB/HTF)")
+
+                with col3:
+                    sl_color = "red" if dist_to_sl <= 0 else "green"
+                    st.metric(
+                        label="🛑 Stop Loss",
+                        value=f"{pos['sl']:.2f}",
+                        delta=f"{dist_to_sl:+.2f} pts away"
+                    )
+                    if pos['direction'] == 'CALL':
+                        st.caption("Support - 8 points")
+                    else:
+                        st.caption("Resistance + 8 points")
+
+                with col4:
+                    st.write("")  # Spacer
+                    st.write("")  # Spacer
+                    if st.button("❌ Exit", key=f"exit_{order_id}", type="secondary"):
+                        # Exit position
+                        if DEMO_MODE:
+                            st.session_state.active_positions[order_id]['status'] = 'closed'
+                            st.success("✅ Position exited (DEMO MODE)")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            from dhan_api import DhanAPI
+                            dhan = DhanAPI()
+                            result = dhan.exit_position(order_id)
+                            if result['success']:
+                                st.session_state.active_positions[order_id]['status'] = 'closed'
+                                st.success("✅ Position exited successfully!")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Exit failed: {result.get('error', 'Unknown error')}")
+
+                # Progress bar for position
+                entry_to_target = abs(pos['target'] - pos['entry'])
+                current_progress = abs(current_spot - pos['entry'])
+                progress = min(current_progress / entry_to_target, 1.0) if entry_to_target > 0 else 0
+
+                st.progress(progress, text=f"Progress to Target: {progress*100:.1f}%")
+
+                # Status indicators
+                status_col1, status_col2 = st.columns(2)
+                with status_col1:
+                    if dist_to_target <= 5:
+                        st.warning(f"⚠️ Near Target ({dist_to_target:.2f} pts)")
+                with status_col2:
+                    if dist_to_sl <= 5:
+                        st.error(f"⚠️ Near Stop Loss ({dist_to_sl:.2f} pts)")
+
+                st.divider()
+
+    # Auto-exit positions
+    if positions_to_exit:
+        for order_id, exit_reason in positions_to_exit:
+            st.info(f"Auto-exiting position {order_id} due to {exit_reason}...")
+
+            if not DEMO_MODE:
+                from dhan_api import DhanAPI
+                dhan = DhanAPI()
+                result = dhan.exit_position(order_id)
+
+                if result['success']:
+                    st.session_state.active_positions[order_id]['status'] = 'closed'
+                    st.success(f"✅ Position auto-exited: {exit_reason}")
+                else:
+                    st.error(f"❌ Auto-exit failed: {result.get('error')}")
+            else:
+                st.session_state.active_positions[order_id]['status'] = 'closed'
+                st.success(f"✅ Position auto-exited (DEMO): {exit_reason}")
+
+        time.sleep(2)
+        st.rerun()
+
+    # Show API positions (if not DEMO_MODE)
+    if not DEMO_MODE:
+        st.markdown("---")
+        st.subheader("📡 Live Positions from Dhan API")
+
+        from dhan_api import DhanAPI
+        try:
+            dhan = DhanAPI()
+            positions_result = dhan.get_positions()
+
+            if positions_result['success']:
+                positions = positions_result['positions']
+
+                if not positions:
+                    st.info("No live positions from API")
+                else:
+                    for idx, pos in enumerate(positions):
+                        with st.container():
+                            col1, col2, col3 = st.columns([3, 2, 1])
+
+                            with col1:
+                                st.write(f"**Symbol:** {pos.get('tradingSymbol', 'N/A')}")
+                                st.write(f"**Quantity:** {pos.get('netQty', 0)}")
+
+                            with col2:
+                                pnl = pos.get('unrealizedProfit', 0)
+                                pnl_color = "green" if pnl > 0 else "red"
+                                st.markdown(f"**P&L:** <span style='color:{pnl_color}'>₹{pnl:,.2f}</span>", unsafe_allow_html=True)
+
+                            with col3:
+                                # Use index and trading symbol for unique key to avoid duplicate key errors
+                                unique_key = f"exit_api_{idx}_{pos.get('tradingSymbol', 'pos')}"
+                                if st.button("❌ Exit", key=unique_key):
+                                    result = dhan.exit_position(pos.get('orderId'))
+                                    if result['success']:
+                                        st.success("Position exited!")
+                                        st.rerun()
+                                    else:
+                                        st.error("Exit failed")
+
+                            st.divider()
+            else:
+                st.error(f"Failed to fetch positions: {positions_result.get('error')}")
+
+        except Exception as e:
+            st.error(f"Error fetching API positions: {e}")
+    else:
+        st.info("🧪 DEMO MODE - Connect to Dhan API to see live positions")
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 5: BIAS ANALYSIS PRO
+# ═══════════════════════════════════════════════════════════════════════
+
+with tab5:
     st.header("🎯 Comprehensive Bias Analysis Pro")
     st.caption("13 Bias Indicators with Adaptive Weighted Scoring | 🔄 Auto-refreshing every 60 seconds")
 
@@ -1967,10 +2498,10 @@ with tab2:
         """)
 
 # ═══════════════════════════════════════════════════════════════════════
-# TAB 3: OPTION CHAIN ANALYSIS (Dhan API - Real-time Options Data)
+# TAB 6: OPTION CHAIN ANALYSIS (Dhan API - Real-time Options Data)
 # ═══════════════════════════════════════════════════════════════════════
 
-with tab3:
+with tab6:
     st.header("📊 Option Chain Analysis")
     st.caption("Comprehensive Option Chain Analysis using Dhan API - Real-time Bias Detection, Support/Resistance Zones, and Trade Signals")
 
@@ -2007,10 +2538,10 @@ with tab3:
         display_overall_option_chain_analysis(NSE_INSTRUMENTS)
 
 # ═══════════════════════════════════════════════════════════════════════
-# TAB 4: ADVANCED CHART ANALYSIS
+# TAB 7: ADVANCED CHART ANALYSIS
 # ═══════════════════════════════════════════════════════════════════════
 
-with tab4:
+with tab7:
     st.header("📈 Advanced Chart Analysis")
     st.caption("TradingView-style Chart with 6 Advanced Indicators: Volume Bars, Volume Order Blocks, HTF Support/Resistance (3min, 5min, 10min, 15min levels), Volume Footprint (1D timeframe, 10 bins, Dynamic POC), Ultimate RSI, OM Indicator (Order Flow & Momentum)")
 
@@ -2817,6 +3348,107 @@ with tab4:
 
         **Note:** All indicators are converted from Pine Script with high accuracy and optimized for Python/Plotly.
         """)
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 8: ENHANCED MARKET ANALYSIS
+# ═══════════════════════════════════════════════════════════════════════
+
+with tab8:
+    st.header("🌐 Enhanced Market Data Analysis")
+    st.caption("Comprehensive market data from Yahoo Finance | India VIX, Sector Rotation, Global Markets, Intermarket Data, Gamma Squeeze, Intraday Timing")
+
+    # Auto-load enhanced market data if not already loaded
+    if 'enhanced_market_data' not in st.session_state:
+        with st.spinner("Loading comprehensive market data from all sources..."):
+            try:
+                from enhanced_market_data import get_enhanced_market_data
+                enhanced_data = get_enhanced_market_data()
+                st.session_state.enhanced_market_data = enhanced_data
+            except Exception as e:
+                st.error(f"❌ Failed to auto-load enhanced data: {e}")
+                import traceback
+                st.error(traceback.format_exc())
+
+    # Button to fetch enhanced data
+    col1, col2, col3 = st.columns([2, 1, 1])
+
+    with col1:
+        if st.button("🔄 Refresh Enhanced Market Data", type="primary", use_container_width=True, key="fetch_enhanced_data_btn"):
+            with st.spinner("Refreshing comprehensive market data from all sources..."):
+                try:
+                    from enhanced_market_data import get_enhanced_market_data
+                    enhanced_data = get_enhanced_market_data()
+                    st.session_state.enhanced_market_data = enhanced_data
+                    st.success("✅ Enhanced market data refreshed successfully!")
+                except Exception as e:
+                    st.error(f"❌ Failed to refresh enhanced data: {e}")
+                    import traceback
+                    st.error(traceback.format_exc())
+
+    with col2:
+        if 'enhanced_market_data' in st.session_state:
+            if st.button("🗑️ Clear Data", use_container_width=True, key="clear_enhanced_data_btn"):
+                del st.session_state.enhanced_market_data
+                st.rerun()
+
+    with col3:
+        if 'enhanced_market_data' in st.session_state:
+            data = st.session_state.enhanced_market_data
+            # Convert timestamp to IST if it's not already timezone-aware
+            timestamp = data['timestamp']
+            if timestamp.tzinfo is None:
+                timestamp = IST.localize(timestamp)
+            else:
+                timestamp = timestamp.astimezone(IST)
+            st.caption(f"Last Updated: {timestamp.strftime('%Y-%m-%d %H:%M:%S IST')}")
+
+    # Display enhanced market data if available
+    if 'enhanced_market_data' in st.session_state:
+        try:
+            from enhanced_market_display import render_enhanced_market_data_tab
+            render_enhanced_market_data_tab(st.session_state.enhanced_market_data)
+        except Exception as e:
+            st.error(f"❌ Error displaying enhanced data: {e}")
+            import traceback
+            st.error(traceback.format_exc())
+    else:
+        st.info("""
+        📊 **Loading Enhanced Market Data...** This may take a few moments.
+
+        **Data Sources:**
+        - 🌍 **Yahoo Finance:** India VIX, Sector Indices (IT, Auto, Pharma, Metal, FMCG, Realty, Energy), Global Markets (S&P 500, Nasdaq, Dow, Nikkei, Hang Seng, etc.)
+        - 💰 **Intermarket:** USD Index, Crude Oil, Gold, USD/INR, US 10Y Treasury, Bitcoin
+
+        **Advanced Analysis:**
+        - ⚡ **India VIX Analysis:** Fear & Greed Index with sentiment scoring
+        - 🏢 **Sector Rotation Model:** Identify market leadership and rotation patterns
+        - 🎯 **Gamma Squeeze Detection:** Option market makers hedging analysis
+        - ⏰ **Intraday Seasonality:** Time-based trading recommendations
+        - 🌐 **Global Correlation:** How worldwide markets affect Indian markets
+
+        **All data is presented in comprehensive tables with bias scores and trading insights!**
+        """)
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 9: ATM ZONE BIAS ANALYSIS
+# ═══════════════════════════════════════════════════════════════════════
+
+with tab9:
+    render_atm_zone_bias_analysis()
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 10: OI WINDING & UNWINDING ANALYSIS
+# ═══════════════════════════════════════════════════════════════════════
+
+with tab10:
+    render_oi_winding_unwinding_analysis()
+
+# ═══════════════════════════════════════════════════════════════════════
+# TAB 11: INTRADAY MOMENTUM TRACKER
+# ═══════════════════════════════════════════════════════════════════════
+
+with tab11:
+    render_intraday_momentum_analysis()
 
 # ═══════════════════════════════════════════════════════════════════════
 # FOOTER

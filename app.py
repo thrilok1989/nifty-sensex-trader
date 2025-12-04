@@ -100,10 +100,10 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* Hide the Streamlit loading spinner and blur overlay */
-    .stApp > div[data-testid="stAppViewContainer"] > div:first-child {
+    /* Hide the Streamlit loading spinner and blur overlay - COMMENTED OUT TO FIX BLANK DISPLAY */
+    /* .stApp > div[data-testid="stAppViewContainer"] > div:first-child {
         display: none !important;
-    }
+    } */
 
     /* Prevent blur overlay during rerun */
     .stApp [data-testid="stAppViewContainer"] {
@@ -147,10 +147,10 @@ st.markdown("""
         transition: none !important;
     }
 
-    /* Hide loading overlay completely */
-    div[data-testid="stAppViewContainer"] > div[style*="position: absolute"] {
+    /* Hide loading overlay completely - COMMENTED OUT TO FIX BLANK DISPLAY */
+    /* div[data-testid="stAppViewContainer"] > div[style*="position: absolute"] {
         display: none !important;
-    }
+    } */
 
     /* Ensure dataframes remain visible during refresh */
     .dataframe {
